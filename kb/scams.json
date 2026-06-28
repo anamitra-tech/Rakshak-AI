@@ -1,0 +1,297 @@
+[
+  {
+    "id": "digital_arrest_001",
+    "scam_type": "digital_arrest",
+    "channel": "video_call",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "CBI/ED officer impersonation — virtual custody demand",
+    "example_messages": [
+      "This is CBI officer. Your Aadhaar number is linked to a money laundering case. You are under digital arrest. Do not disconnect.",
+      "Main ED se bol raha hoon. Aapke naam pe arrest warrant hai. Abhi video call pe aaiye warna police aayegi.",
+      "Your courier parcel contains illegal items. You must stay on this call for investigation or you will be arrested.",
+      "Customs department. A package registered under your name has been seized. Pay settlement amount to avoid arrest.",
+      "Aap digital arrest mein hain. Camera band mat karo. Kisi ko mat batao — yeh confidential investigation hai."
+    ],
+    "call_script": "Caller claims to be from CBI, ED, Customs, or Narcotics. Says victim's Aadhaar, bank account, or courier is linked to crime. Demands victim stay on video call continuously. Tells victim not to inform family. Shows fake badge, fake FIR number. Eventually demands money transfer to a 'safe RBI account' or 'Supreme Court verified account' to avoid arrest.",
+    "red_flags": [
+      "Impersonates CBI, ED, Customs, Police, or Narcotics officer",
+      "Claims Aadhaar, bank account, or parcel is linked to crime",
+      "Demands victim stay on video call and not tell family",
+      "Uses words: digital arrest, warrant, money laundering, settlement",
+      "Asks for money transfer to 'safe' or 'RBI' or 'Supreme Court' account",
+      "Creates extreme urgency and fear of immediate arrest",
+      "Shows fake government badges, fake FIR documents on screen"
+    ],
+    "what_to_do": "Disconnect immediately. No real government agency — CBI, ED, Police, Customs — ever arrests anyone over a phone or video call, or demands money to avoid arrest. Do not transfer any money. Do not share OTP, bank details, or install any app. Call your family immediately. Report on helpline 1930 or at cybercrime.gov.in.",
+    "source": {
+      "name": "I4C / MHA Advisory — Digital Arrest Scams",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "digital_arrest_002",
+    "scam_type": "digital_arrest",
+    "channel": "call",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "Supreme Court / Judge impersonation — bail payment demand",
+    "example_messages": [
+      "This is Supreme Court registry. A case has been filed against you. Pay bail amount of Rs 50,000 immediately.",
+      "Judge sahab ne aapke case mein interim relief diya hai. Processing fee bhejiye turant.",
+      "Your name appeared in a drug trafficking FIR. To get anticipatory bail, transfer the amount now.",
+      "CBI has filed chargesheet against you. To avoid public arrest pay the clearance amount within 2 hours."
+    ],
+    "call_script": "Caller claims to be a court official or CBI prosecutor. References a real-sounding case number. Says victim has 2 hours to pay bail or clearance money before arrest becomes public. May follow up with another caller pretending to be a lawyer offering to 'help settle' for a fee.",
+    "red_flags": [
+      "Claims to be from Supreme Court, High Court, or judiciary",
+      "Gives fake case numbers or FIR numbers",
+      "Demands bail or clearance payment over phone",
+      "Creates 2-hour or same-day deadline",
+      "May have a second caller posing as a helpful lawyer"
+    ],
+    "what_to_do": "No court in India contacts citizens by phone to collect bail money. Disconnect. Verify any legal matter only by visiting the actual court or contacting a registered lawyer yourself. Report to 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C / MHA Advisory — Digital Arrest Scams",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "bank_otp_001",
+    "scam_type": "bank_otp_kyc",
+    "channel": "sms",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "Bank KYC expiry — OTP/PIN demand",
+    "example_messages": [
+      "Dear customer, your SBI KYC has expired. Your account will be blocked in 24 hours. Click link to update: http://sbi-kyc-update.xyz",
+      "HDFC Alert: Your debit card will be blocked. Share OTP received on your mobile to keep account active.",
+      "Aapka account suspend ho jayega. Abhi OTP batao warna permanent block ho jayega. Urgent.",
+      "Your KYC is pending. Update now at this link or your UPI will stop working from midnight."
+    ],
+    "call_script": "SMS or call claiming bank account/KYC/UPI will be blocked unless victim shares OTP, CVV, or PIN immediately. May send a fake link that looks like the bank's website. Real message then requests OTP the victim receives.",
+    "red_flags": [
+      "Claims account/KYC/UPI/debit card will be blocked urgently",
+      "Asks you to share OTP, PIN, CVV, or net banking password",
+      "Sends a link that is NOT the official bank domain",
+      "Creates same-day or overnight urgency",
+      "Caller/SMS asks you to 'confirm' details the bank should already have"
+    ],
+    "what_to_do": "No bank ever asks for your OTP, PIN, or CVV over SMS, call, or link. Real KYC updates happen at the branch or official bank app only. Do not click any link in the SMS. Do not share any code with anyone. Call your bank's official helpline (on the back of your card) to check. Report to 1930.",
+    "source": {
+      "name": "RBI Consumer Awareness — Never Share OTP",
+      "url": "https://www.rbi.org.in/Scripts/PublicationsView.aspx?id=20572",
+      "date": "2023-2025"
+    }
+  },
+  {
+    "id": "bank_otp_002",
+    "scam_type": "bank_otp_kyc",
+    "channel": "call",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "Fake bank officer — remote access / screen share demand",
+    "example_messages": [
+      "I am calling from HDFC bank fraud department. We have detected suspicious activity on your account. Please install AnyDesk so we can help you secure it.",
+      "Sir main aapke bank ka officer hoon. Account hack ho gaya hai. Abhi screen share karo taki hum fix kar sakein.",
+      "Your account shows unauthorized login. Download TeamViewer and share the code so our tech team can block the hacker."
+    ],
+    "call_script": "Caller pretends to be bank's fraud team. Says account is under attack. Convinces victim to install remote-access software (AnyDesk, TeamViewer, QuickSupport). Once installed, caller controls phone, transfers money, collects OTPs in real time.",
+    "red_flags": [
+      "Asks you to install AnyDesk, TeamViewer, QuickSupport, or any remote app",
+      "Asks to share a 9-digit access code from that app",
+      "Claims to be fixing a security problem on your account",
+      "Stays on call while you install the app"
+    ],
+    "what_to_do": "No bank ever asks you to install remote-access software. Disconnect immediately. Uninstall any app you may have installed. Call your bank's official number immediately to check your account. Report to 1930.",
+    "source": {
+      "name": "I4C Advisory — Remote Access Fraud",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "smishing_001",
+    "scam_type": "smishing_link",
+    "channel": "sms",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "Fake delivery / parcel link scam",
+    "example_messages": [
+      "Your package from Amazon could not be delivered. Update your address: http://amz-delivery.xyz/track",
+      "DTDC: Parcel held at customs. Pay Rs 49 clearance fee: http://dtdc-customs.online/pay",
+      "India Post: Your registered parcel is on hold. Verify details within 24 hours at: http://indiapost-verify.top"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "SMS about undelivered parcel with a suspicious link",
+      "Link domain does not match official company website",
+      "Asks for small payment (Rs 49, Rs 99) via link",
+      "Creates 24-hour urgency to click",
+      "Sender number is unknown or international"
+    ],
+    "what_to_do": "Do not click the link. Real delivery companies (Amazon, India Post, DTDC) only use their official apps and official domains for tracking. Type the official website address yourself in your browser. If in doubt, call the company's official customer care number. Report suspicious SMS to 1930.",
+    "source": {
+      "name": "I4C Advisory — Smishing / Fake Delivery Scams",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "smishing_002",
+    "scam_type": "smishing_link",
+    "channel": "whatsapp",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "WhatsApp fake job / part-time work link",
+    "example_messages": [
+      "Work from home! Earn Rs 5,000 daily by liking YouTube videos. Register here: http://earn-now.xyz/join",
+      "Part time job available. No experience needed. Rs 3,000 per day. Click to apply: http://job-india.top",
+      "Aapko ghar se kaam karne ka mauka mil raha hai. Sirf 2 ghante rojana, 4000 rupaye daily. Link: http://workfromhome.cf"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Promises very high daily income for simple tasks (liking, clicking)",
+      "Sent via WhatsApp from unknown number",
+      "Link is a short URL or suspicious domain",
+      "Asks for registration fee or bank details to start",
+      "Claims no experience or qualifications needed"
+    ],
+    "what_to_do": "No legitimate job pays thousands per day for liking videos or clicking links. Do not click the link. Do not pay any registration fee. Do not share your bank account or Aadhaar. Block and report the number on WhatsApp. Report to 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C Advisory — Fake Job / Task Scams",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2025"
+    }
+  },
+  {
+    "id": "qr_fraud_001",
+    "scam_type": "qr_code_fraud",
+    "channel": "whatsapp",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "QR code payment scam — receive money trick",
+    "example_messages": [
+      "Scan this QR code to receive your cashback of Rs 2,000 from us.",
+      "I am buying your OLX item. Scan this QR to get the payment directly in your account.",
+      "Aapka refund process ho raha hai. Yeh QR scan karein aur amount receive karein.",
+      "Army officer wants to buy your product. Scan QR code to get Rs 15,000 instantly."
+    ],
+    "call_script": "Scammer contacts seller on OLX/Facebook Marketplace. Pretends to be a buyer (often claims to be army/defence officer). Sends a QR code saying 'scan this to receive payment.' Victim scans and is actually authorizing a payment OUT of their account.",
+    "red_flags": [
+      "Someone asks you to SCAN a QR code to RECEIVE money",
+      "Buyer sends QR code instead of transferring directly",
+      "Claims to be army, defence, or government employee",
+      "Found you on OLX, Facebook Marketplace, or social media",
+      "Asks you to enter UPI PIN after scanning"
+    ],
+    "what_to_do": "You NEVER need to scan a QR code or enter your UPI PIN to RECEIVE money. Scanning a QR code and entering your PIN means money goes OUT of your account, not in. If someone sends you a QR code to 'receive' payment, it is a scam. Refuse. Report to 1930.",
+    "source": {
+      "name": "I4C Advisory — QR Code Fraud",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "investment_001",
+    "scam_type": "investment_fraud",
+    "channel": "whatsapp",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "Fake stock tips / crypto doubling scheme",
+    "example_messages": [
+      "Join our SEBI-registered expert group. Guaranteed 40% monthly returns on stock tips. Limited slots.",
+      "Crypto doubling scheme — send 1000 USDT and receive 2000 within 24 hours. 100% guaranteed profit.",
+      "Our AI trading bot gives 200% returns. Invest Rs 10,000 today and withdraw Rs 30,000 next week.",
+      "Humara Telegram group mein free stock tips milte hain. Abhi tak 95% accuracy. Join karo."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Promises guaranteed or very high returns (40%+ monthly)",
+      "Asks you to join a WhatsApp or Telegram group for tips",
+      "Claims SEBI registration but cannot show proof",
+      "Asks you to invest via crypto or unofficial app",
+      "Shows fake profit screenshots as proof"
+    ],
+    "what_to_do": "No investment guarantees returns. SEBI-registered advisors never solicit through WhatsApp groups or promise guaranteed profits. Do not send money. Do not download unknown trading apps. Verify any investment advisor on SEBI's official website (sebi.gov.in). Report to 1930.",
+    "source": {
+      "name": "SEBI Investor Awareness — Fake Investment Advisors",
+      "url": "https://www.sebi.gov.in/investors.html",
+      "date": "2024-2025"
+    }
+  },
+  {
+    "id": "lottery_001",
+    "scam_type": "lottery_prize_fraud",
+    "channel": "call",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "KBC / lottery prize — processing fee demand",
+    "example_messages": [
+      "Congratulations! You have won Rs 25 lakh in KBC lucky draw. Call this number to claim your prize.",
+      "Aapka number lucky draw mein select hua hai. Rs 50 lakh ka inam jeeta hai. Processing fee Rs 5,000 bhejein.",
+      "You are selected for Amazon mega prize of Rs 15 lakh. Pay GST of Rs 2,500 to release funds.",
+      "Government scheme — aapko 10 lakh ka prize mila hai. Registration fee bhejiye."
+    ],
+    "call_script": "Caller says victim has won a lottery, KBC prize, or government scheme reward. To 'release' the prize, victim must pay a small processing fee, GST, or legal fee. Each payment leads to a new demand. Prize never arrives.",
+    "red_flags": [
+      "Claims you won a prize you never entered for",
+      "Asks for processing fee, GST, or legal fee to release prize",
+      "Uses KBC, Amazon, government scheme names",
+      "Prize amount is very large (lakhs)",
+      "Pressures you to pay quickly before prize expires"
+    ],
+    "what_to_do": "You cannot win a prize you never entered. No legitimate prize ever requires a fee to be paid before receiving it. Do not send any money. Do not share your bank details. Disconnect and report to 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C Advisory — Lottery and Prize Fraud",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "location_lure_001",
+    "scam_type": "location_lure",
+    "channel": "call",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "Physical lure — come to this location scam",
+    "example_messages": [
+      "Your loan has been approved. Come to our office at this address to collect the cheque and sign documents.",
+      "Aapka interview select hua hai. Kal is address pe aaiye. Joining letter aur cash incentive milega.",
+      "Police station mein aapki presence required hai regarding a case. Come alone, do not tell anyone.",
+      "Your prize delivery requires in-person collection. Come to this address with your Aadhaar and Rs 500 token amount."
+    ],
+    "call_script": "Victim is lured to a physical location — fake office, fake police station, or isolated address. At the location they may be robbed, further scammed, photographed for blackmail, or coerced into signing documents.",
+    "red_flags": [
+      "Asks you to come to an unofficial address to collect money or prize",
+      "Says come alone and do not tell family",
+      "Requires you to bring cash, Aadhaar, or valuables",
+      "Address is unusual — residential area, isolated location",
+      "Police asking you to come to a location via phone (real police send written summons)"
+    ],
+    "what_to_do": "Do not go alone to any unknown address for money, prize, or job collection. Real police summons come in writing, not by phone call. If asked to visit a police station, take a family member or lawyer. Verify the address is real before going. Report suspicious calls to 1930.",
+    "source": {
+      "name": "I4C Advisory — Physical Lure and Offline Fraud",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "multi_call_001",
+    "scam_type": "multi_call_escalation",
+    "channel": "call",
+    "languages": ["en", "hi", "hinglish"],
+    "title": "Multi-call coordinated pressure — escalating callers",
+    "example_messages": [
+      "First call: This is Mumbai police, a complaint has been filed against you. Second call same day: This is your lawyer, I can help settle this for Rs 20,000. Third call: This is the senior officer, your case has been escalated.",
+      "Call 1: CBI case against you. Call 2: Same day — 'I am calling from RBI, your account is frozen.' Call 3: 'Pay now or case goes to court tomorrow.'",
+      "Multiple callers, different numbers, same day — all claiming to be different authorities about the same fake case."
+    ],
+    "call_script": "Coordinated team of scammers calls the same victim multiple times in one day. Each caller plays a different role: police officer, lawyer, court official, bank officer. Each call raises pressure and urgency. Victim feels overwhelmed and surrounded by 'authorities.' Final call demands payment.",
+    "red_flags": [
+      "Multiple calls from different numbers on the same day about the same issue",
+      "Each caller plays a different authority role",
+      "Pressure builds across calls — each one more urgent than last",
+      "Callers seem to know what previous callers said (coordinated)",
+      "Final call always demands immediate money transfer"
+    ],
+    "what_to_do": "Coordinated calls from multiple 'authorities' in one day is a classic organised scam operation. Real agencies do not coordinate calls this way. Stop answering. Block all the numbers. Tell a trusted family member immediately. Report all the numbers to 1930 — they can trace the network.",
+    "source": {
+      "name": "I4C Analysis — Organised Cybercrime Call Patterns",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  }
+]
