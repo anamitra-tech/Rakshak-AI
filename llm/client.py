@@ -15,8 +15,8 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 
 logger = logging.getLogger(__name__)
 
-GROQ_MODEL = "llama-3.1-8b-instant"
-GEMINI_MODEL = "gemini-2.5-flash"
+GROQ_MODEL = "gemma2-9b-it"       # Gemma3 served via Groq API
+GEMINI_MODEL = "gemini-2.5-flash"  # primary
 OLLAMA_MODEL = "gemma3"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 
