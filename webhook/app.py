@@ -6,8 +6,9 @@ import logging
 import os
 import sys
 
-load_dotenv()
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_ROOT, ".env"))
+sys.path.insert(0, _ROOT)
 
 from bot.agent import chat
 
@@ -38,7 +39,7 @@ async def webhook(
         reply = "Kuch gadbad ho gayi. Seedha 1930 pe call karein."
 
     resp = MessagingResponse()
-    resp.message(reply.strip('"'))
+    resp.message(reply.strip('"').strip("'"))
     return str(resp)
 
 @app.get("/health")

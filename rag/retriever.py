@@ -43,7 +43,7 @@ Based on our intelligence database, this matches a known scam pattern:
 Scam type: {scam_type}
 What to do: {what_to_do}
 
-Respond in 2-3 sentences maximum. Be direct and clear.
+Respond in English only. 2-3 sentences maximum. Be direct and clear.
 Always end with: "Report to 1930 or cybercrime.gov.in"
 Do not add any information not provided above.\
 """
