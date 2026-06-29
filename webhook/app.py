@@ -38,7 +38,7 @@ async def webhook(
         reply = "Kuch gadbad ho gayi. Seedha 1930 pe call karein."
 
     resp = MessagingResponse()
-    resp.message(reply)
+    resp.message(reply.strip('"'))
     return str(resp)
 
 @app.get("/health")
