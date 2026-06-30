@@ -120,6 +120,9 @@ frontend/.next/
 
 # Generated / derived artifacts
 rag/chroma_store/
+!rag/faiss_store/
+!rag/faiss_store/*.json
+!rag/faiss_store/*.faiss
 data/raw/
 data/classified/
 data/final/
