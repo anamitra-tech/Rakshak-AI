@@ -11,6 +11,7 @@ load_dotenv(os.path.join(_ROOT, ".env"))
 sys.path.insert(0, _ROOT)
 
 from bot.agent import chat
+from graph.fraud_graph import build_fraud_graph, get_graph_summary
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
@@ -45,3 +46,11 @@ async def webhook(
 @app.get("/health")
 async def health():
     return {"status": "ok", "cards": 75}
+
+@app.get("/graph")
+async def graph_endpoint():
+    G = build_fraud_graph()
+    summary = get_graph_summary(G)
+    nodes = [{"id": n, **d} for n, d in G.nodes(data=True)]
+    edges = [{"source": u, "target": v, **d} for u, v, d in G.edges(data=True)]
+    return {"summary": summary, "nodes": nodes, "edges": edges}

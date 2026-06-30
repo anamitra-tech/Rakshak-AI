@@ -115,3 +115,76 @@ if __name__ == "__main__":
     print("Central nodes:")
     for c in res["central_nodes"]:
         print(f"  {c['id']}  pr={c['pagerank']}  role={c['role']}")
+
+
+# ---------------------------------------------------------------------------
+# Session-based fraud graph (built from live bot session history)
+# ---------------------------------------------------------------------------
+
+def build_fraud_graph(sessions=None) -> nx.Graph:
+    """Build an undirected graph linking victim sessions to scam-type clusters.
+
+    Pass `sessions` explicitly (a dict of session_id → entry list) to avoid
+    importing bot.agent — useful in tests.  When called with no arguments the
+    live _sessions dict is pulled from bot.agent at call time.
+    """
+    if sessions is None:
+        from bot.agent import _sessions  # lazy — bot.agent already loaded in webhook
+        sessions = _sessions
+
+    G = nx.Graph()
+    for session_id, entries in sessions.items():
+        scam_entries = [
+            e for e in entries
+            if e.get("scam_type") and e.get("role") == "assistant"
+        ]
+        if not scam_entries:
+            continue
+
+        scam_types = list({e["scam_type"] for e in scam_entries})
+        G.add_node(
+            session_id,
+            node_type="victim",
+            scam_types=scam_types,
+            report_count=len(scam_entries),
+            profile=entries[0].get("profile", "default"),
+        )
+
+        for st in scam_types:
+            if not G.has_node(st):
+                G.add_node(st, node_type="scam_cluster", count=0)
+            G.nodes[st]["count"] += 1
+            G.add_edge(session_id, st, weight=len(scam_entries))
+
+        for other_id, other_entries in sessions.items():
+            if other_id == session_id:
+                continue
+            other_types = {
+                e["scam_type"] for e in other_entries if e.get("scam_type")
+            }
+            shared = set(scam_types) & other_types
+            if shared:
+                G.add_edge(
+                    session_id,
+                    other_id,
+                    edge_type="shared_scam",
+                    shared_types=list(shared),
+                    weight=len(shared),
+                )
+
+    return G
+
+
+def get_graph_summary(G: nx.Graph) -> dict:
+    scam_clusters = [n for n, d in G.nodes(data=True) if d.get("node_type") == "scam_cluster"]
+    victim_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "victim"]
+    components = list(nx.connected_components(G))
+    return {
+        "total_sessions": len(victim_nodes),
+        "scam_types_seen": len(scam_clusters),
+        "connected_components": len(components),
+        "largest_cluster_size": max((len(c) for c in components), default=0),
+        "possible_coordinated_campaigns": [
+            list(c) for c in components if len(c) > 2
+        ],
+    }
