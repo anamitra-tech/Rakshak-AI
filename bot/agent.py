@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from llm.client import generate
 from rag.retriever import retrieve_and_respond
+from graph.entity_extractor import extract_all
 
 # ── Intent keyword sets ───────────────────────────────────────────────────────
 
@@ -89,15 +90,15 @@ def add_to_memory(
     content: str,
     intent: str | None = None,
     scam_type: str | None = None,
+    fingerprint: dict | None = None,
 ) -> None:
-    if session_id not in _sessions:
-        _sessions[session_id] = []
-    _sessions[session_id].append({
+    _sessions.setdefault(session_id, []).append({
         "role": role,
         "content": content,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "intent": intent,
         "scam_type": scam_type,
+        "fingerprint": fingerprint or {},
     })
 
 
@@ -324,6 +325,10 @@ def chat(session_id: str, message: str) -> dict:
             prior_scam = prior_scam_hist[-1]["scam_type"]
         result = retrieve_and_respond(message, prior_scam_type=prior_scam)
 
+        if result.get("scam_type"):
+            fingerprint = extract_all(message)
+            result["fingerprint"] = fingerprint
+
         # pattern detection
         pattern_note = compare_with_history(session_id, result)
         if pattern_note:
@@ -346,6 +351,7 @@ def chat(session_id: str, message: str) -> dict:
         "assistant",
         result["answer"],
         scam_type=result.get("scam_type"),
+        fingerprint=result.get("fingerprint"),
     )
 
     result["intent"] = intent

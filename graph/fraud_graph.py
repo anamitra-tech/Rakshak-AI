@@ -188,3 +188,197 @@ def get_graph_summary(G: nx.Graph) -> dict:
             list(c) for c in components if len(c) > 2
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Signal weights — higher = stronger evidence of same operator/ring
+# entity=10, device=9, script=8, linguistic=7, sig=6,
+# voip=5, bg=4, timing=3
+# ---------------------------------------------------------------------------
+
+LINK_WEIGHTS = {
+    "entity": 10,
+    "device": 9,
+    "script": 8,
+    "linguistic": 7,
+    "sig": 6,
+    "voip": 5,
+    "bg": 4,
+    "timing": 3,
+}
+
+
+def build_entity_index(sessions=None) -> dict:
+    """Index all fingerprint signals → list of session IDs that share them."""
+    if sessions is None:
+        from bot.agent import _sessions  # noqa: PLC0415
+        sessions = _sessions
+
+    index: dict[str, list] = {}
+
+    for session_id, entries in sessions.items():
+        for entry in entries:
+            fp = entry.get("fingerprint", {})
+
+            if fp:
+                # 1. Hard entities (phone, UPI, URL, account)
+                for entity_type, values in fp.get("hard_entities", {}).items():
+                    for val in (values or []):
+                        if val and len(str(val)) > 3:
+                            key = f"entity:{entity_type}:{val}"
+                            index.setdefault(key, [])
+                            if session_id not in index[key]:
+                                index[key].append(session_id)
+
+                # 2. Script verbatim phrases
+                for phrase in fp.get("script_fingerprint", []):
+                    key = f"script:{phrase}"
+                    index.setdefault(key, [])
+                    if session_id not in index[key]:
+                        index[key].append(session_id)
+
+                # 3. Scammer behavioral signature
+                for sig_type, matches in fp.get("scammer_signature", {}).items():
+                    for match in matches:
+                        key = f"sig:{sig_type}:{match}"
+                        index.setdefault(key, [])
+                        if session_id not in index[key]:
+                            index[key].append(session_id)
+
+                # 4. Background acoustic signals
+                for signal in fp.get("background_signals", []):
+                    key = f"bg:{signal}"
+                    index.setdefault(key, [])
+                    if session_id not in index[key]:
+                        index[key].append(session_id)
+
+                # 5. Timing / call-sequence signals
+                for signal in fp.get("timing_signals", []):
+                    key = f"timing:{signal}"
+                    index.setdefault(key, [])
+                    if session_id not in index[key]:
+                        index[key].append(session_id)
+
+                # 6. Device / remote-access signals (ADDITION 1)
+                for signal in fp.get("device_signals", []):
+                    key = f"device:{signal}"
+                    index.setdefault(key, [])
+                    if session_id not in index[key]:
+                        index[key].append(session_id)
+
+                # 7. Linguistic fingerprint (ADDITION 2)
+                for tell_type, matches in fp.get("linguistic_fingerprint", {}).items():
+                    for match in matches:
+                        key = f"linguistic:{tell_type}:{match}"
+                        index.setdefault(key, [])
+                        if session_id not in index[key]:
+                            index[key].append(session_id)
+
+            # 8. VoIP/Twilio geo metadata — present even without fingerprint (ADDITION 3)
+            twilio = entry.get("twilio_metadata", {})
+            if twilio:
+                country = twilio.get("from_country", "")
+                if country:
+                    key = f"voip:country:{country}"
+                    index.setdefault(key, [])
+                    if session_id not in index[key]:
+                        index[key].append(session_id)
+
+    return index
+
+
+def build_fraud_graph_with_entities(sessions=None) -> nx.Graph:
+    """Combines scam-type graph with cross-session signal linkage."""
+    G = build_fraud_graph(sessions)
+    index = build_entity_index(sessions)
+
+    for signal_key, sessions_list in index.items():
+        if len(sessions_list) < 2:
+            continue
+
+        prefix = signal_key.split(":")[0]
+        weight = LINK_WEIGHTS.get(prefix, 2)
+
+        G.add_node(
+            signal_key,
+            node_type="signal",
+            signal_type=prefix,
+            value=signal_key,
+            linked_sessions=len(sessions_list),
+            weight=weight,
+        )
+
+        for sess in sessions_list:
+            if G.has_node(sess):
+                G.add_edge(sess, signal_key, edge_type=prefix, weight=weight)
+
+        # Direct session-session edges only for high-confidence signals
+        if weight >= 6:
+            for i in range(len(sessions_list)):
+                for j in range(i + 1, len(sessions_list)):
+                    existing = G.get_edge_data(sessions_list[i], sessions_list[j])
+                    if existing is not None:
+                        existing["weight"] += weight
+                    else:
+                        G.add_edge(
+                            sessions_list[i],
+                            sessions_list[j],
+                            edge_type="confirmed_link",
+                            via=signal_key,
+                            weight=weight,
+                        )
+
+    return G
+
+
+def get_hard_links(G: nx.Graph) -> list:
+    """Returns all shared signals seen in 2+ sessions with weight >= 6."""
+    hard_links = []
+    for node, data in G.nodes(data=True):
+        if data.get("node_type") == "signal":
+            n_sessions = data.get("linked_sessions", 0)
+            weight = data.get("weight", 0)
+            if n_sessions >= 2 and weight >= 6:
+                hard_links.append({
+                    "signal_type": data["signal_type"],
+                    "value": data["value"],
+                    "linked_sessions": n_sessions,
+                    "confidence": "HIGH" if weight >= 8 else "MEDIUM",
+                    "alert": (
+                        f"[{data['signal_type'].upper()}] "
+                        f"Same signal in {n_sessions} reports "
+                        f"— possible same fraud ring"
+                    ),
+                })
+    return sorted(hard_links, key=lambda x: x["linked_sessions"], reverse=True)
+
+
+def get_ring_clusters(G: nx.Graph) -> list:
+    """Returns probable fraud rings — groups of 2+ sessions linked by confirmed signals."""
+    rings = []
+    for component in nx.connected_components(G):
+        sessions = [n for n in component if G.nodes[n].get("node_type") == "victim"]
+        if len(sessions) < 2:
+            continue
+
+        signals = [
+            n for n in component
+            if G.nodes[n].get("node_type") == "signal"
+            and G.nodes[n].get("weight", 0) >= 6
+        ]
+        if not signals:
+            continue
+
+        rings.append({
+            "sessions": sessions,
+            "victim_count": len(sessions),
+            "confirmed_signals": len(signals),
+            "ring_confidence": (
+                "HIGH" if len(signals) >= 3
+                else "MEDIUM" if len(signals) >= 2
+                else "LOW"
+            ),
+            "signal_types": list({G.nodes[s]["signal_type"] for s in signals}),
+        })
+
+    return sorted(rings, key=lambda x: x["victim_count"], reverse=True)

@@ -10,8 +10,13 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(_ROOT, ".env"))
 sys.path.insert(0, _ROOT)
 
-from bot.agent import chat
-from graph.fraud_graph import build_fraud_graph, get_graph_summary
+from bot.agent import chat, _sessions
+from graph.fraud_graph import (
+    build_fraud_graph_with_entities,
+    get_graph_summary,
+    get_hard_links,
+    get_ring_clusters,
+)
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
@@ -20,7 +25,10 @@ app = FastAPI()
 async def webhook(
     request: Request,
     Body: str = Form(default=""),
-    From: str = Form(default="")
+    From: str = Form(default=""),
+    FromCountry: str = Form(default=""),
+    FromCity: str = Form(default=""),
+    NumMedia: str = Form(default="0"),
 ):
     try:
         if not Body.strip():
@@ -29,6 +37,17 @@ async def webhook(
             session_id = From.replace("whatsapp:", "")
             result = chat(session_id, Body.strip())
             reply = result["answer"]
+
+            # ADDITION 3 — store Twilio geo metadata for graph indexing
+            twilio_metadata = {
+                "from_country": FromCountry,
+                "from_city": FromCity,
+                "num_media": NumMedia,
+            }
+            result["twilio_metadata"] = twilio_metadata
+            if session_id in _sessions and _sessions[session_id]:
+                _sessions[session_id][-1]["twilio_metadata"] = twilio_metadata
+
             logging.info(
                 f"session={session_id} | "
                 f"scam={result.get('scam_type')} | "
@@ -49,8 +68,23 @@ async def health():
 
 @app.get("/graph")
 async def graph_endpoint():
-    G = build_fraud_graph()
+    G = build_fraud_graph_with_entities()
     summary = get_graph_summary(G)
-    nodes = [{"id": n, **d} for n, d in G.nodes(data=True)]
-    edges = [{"source": u, "target": v, **d} for u, v, d in G.edges(data=True)]
-    return {"summary": summary, "nodes": nodes, "edges": edges}
+    hard_links = get_hard_links(G)
+    rings = get_ring_clusters(G)
+    return {
+        "summary": summary,
+        "hard_links": hard_links,
+        "fraud_rings": rings,
+        "nodes": [{"id": n, **d} for n, d in G.nodes(data=True)],
+        "edges": [{"source": u, "target": v, **d} for u, v, d in G.edges(data=True)],
+        "intelligence": {
+            "confirmed_links": len(hard_links),
+            "probable_rings": len(rings),
+            "highest_confidence_ring": rings[0] if rings else None,
+            "alert": (
+                f"{len(rings)} probable fraud rings detected "
+                f"across {sum(r['victim_count'] for r in rings)} victim reports"
+            ) if rings else "Insufficient data for ring detection",
+        },
+    }
