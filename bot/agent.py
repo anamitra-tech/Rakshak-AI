@@ -209,6 +209,27 @@ def is_pushback(message: str, session_id: str) -> bool:
     return has_pushback and len(prior_scam) > 0
 
 
+# ── Verification lure detection ───────────────────────────────────────────────
+
+VERIFICATION_LURE_KW = {
+    "come verify", "come to office", "in person",
+    "is it safe to go", "should i go", "they said come",
+    "verify in person", "this floor", "this building",
+    "real building", "real office",
+}
+
+_VERIFICATION_LURE_WARNING = (
+    "IMPORTANT: Being asked to verify in person during a call "
+    "is itself a scam tactic — real government agencies never "
+    "require this. Do not travel anywhere right now."
+)
+
+
+def is_verification_lure(message: str) -> bool:
+    m = message.lower()
+    return any(kw in m for kw in VERIFICATION_LURE_KW)
+
+
 # ── Intent detection ──────────────────────────────────────────────────────────
 
 def detect_intent(message: str) -> str:
@@ -265,7 +286,8 @@ def chat(session_id: str, message: str) -> dict:
         result["history_length"] = len(_sessions.get(session_id, []))
         return result
 
-    intent = detect_intent(message)
+    lure_detected = is_verification_lure(message)
+    intent = "scam_report" if lure_detected else detect_intent(message)
     add_to_memory(session_id, "user", message, intent=intent)
 
     if intent == "greeting":
@@ -313,6 +335,9 @@ def chat(session_id: str, message: str) -> dict:
             result["answer"] = format_elderly(result)
         elif profile == "farmer" and result.get("scam_type"):
             result["answer"] = format_farmer(result)
+
+        if lure_detected:
+            result["answer"] = _VERIFICATION_LURE_WARNING + "\n\n" + result["answer"]
 
         result["profile"] = profile
 
