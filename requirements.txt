@@ -17,8 +17,8 @@ google-genai>=1.0
 groq>=0.9
 
 # RAG / vector store
-chromadb>=0.5
-sentence-transformers>=3.0
+faiss-cpu
+FlagEmbedding
 
 # Scraping / parsing
 beautifulsoup4>=4.12

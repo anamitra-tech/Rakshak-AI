@@ -2,6 +2,14 @@ import logging
 import os
 import time
 
+# torch, FlagEmbedding, and faiss must load before gRPC on Windows to avoid DLL conflict
+try:
+    import torch as _torch  # noqa: F401
+    from FlagEmbedding import BGEM3FlagModel as _BGE  # noqa: F401
+    import faiss as _faiss  # noqa: F401
+except ImportError:
+    pass
+
 import requests
 from google import genai as google_genai
 from dotenv import load_dotenv
