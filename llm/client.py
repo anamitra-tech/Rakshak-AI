@@ -2,7 +2,16 @@ import logging
 import os
 import time
 
+# torch, FlagEmbedding, and faiss must load before gRPC on Windows to avoid DLL conflict
+try:
+    import torch as _torch  # noqa: F401
+    from FlagEmbedding import BGEM3FlagModel as _BGE  # noqa: F401
+    import faiss as _faiss  # noqa: F401
+except ImportError:
+    pass
+
 import requests
+from google import genai as google_genai
 from dotenv import load_dotenv
 
 try:
@@ -15,8 +24,11 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 logger = logging.getLogger(__name__)
 
 GROQ_MODEL = "llama-3.1-8b-instant"
+GEMINI_MODEL = "gemini-2.5-flash"  # primary
 OLLAMA_MODEL = "gemma3"
 OLLAMA_URL = "http://localhost:11434/api/generate"
+
+_gemini_client = google_genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 class LLMResponse:
@@ -41,8 +53,7 @@ def _groq_generate(prompt: str) -> LLMResponse:
         messages=[{"role": "user", "content": prompt}],
         timeout=10,
     )
-    text = response.choices[0].message.content
-    return LLMResponse(text=text, engine="groq")
+    return LLMResponse(text=response.choices[0].message.content, engine="groq")
 
 
 def _fallback_generate(prompt: str) -> LLMResponse:
@@ -52,19 +63,25 @@ def _fallback_generate(prompt: str) -> LLMResponse:
         timeout=120,
     )
     response.raise_for_status()
-    text = response.json()["response"]
-    return LLMResponse(text=text, engine="ollama")
+    return LLMResponse(text=response.json()["response"], engine="ollama")
 
 
 def generate(prompt: str, retries: int = 3) -> LLMResponse:
     for attempt in range(retries):
         try:
-            response = _groq_generate(prompt)
-            if response and len(response.text.strip()) > 10:
-                logger.info("Engine: Groq (%s)", GROQ_MODEL)
-                return response
+            response = _gemini_client.models.generate_content(
+                model=GEMINI_MODEL, contents=prompt
+            )
+            if response.text and len(response.text.strip()) > 10:
+                logger.info("Engine: Gemini (%s)", GEMINI_MODEL)
+                return LLMResponse(text=response.text, engine="gemini")
         except Exception as e:
-            logger.warning("Groq attempt %d failed: %s", attempt + 1, e)
+            logger.warning("Gemini attempt %d failed: %s", attempt + 1, e)
             time.sleep(1)
-    logger.warning("Groq failed after %d attempts — falling back to Ollama/%s", retries, OLLAMA_MODEL)
-    return _fallback_generate(prompt)
+
+    logger.warning("Gemini failed after %d attempts — falling back to Groq", retries)
+    try:
+        return _groq_generate(prompt)
+    except Exception as exc:
+        logger.warning("Groq fallback failed (%s) — falling back to Ollama", exc)
+        return _fallback_generate(prompt)

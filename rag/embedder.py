@@ -1,14 +1,13 @@
-import requests
+from FlagEmbedding import BGEM3FlagModel
 
-OLLAMA_EMBED_URL = "http://localhost:11434/api/embed"
-EMBED_MODEL = "nomic-embed-text"
+_embed_model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=True)
 
 
-def embed(text: str) -> list:
-    response = requests.post(
-        OLLAMA_EMBED_URL,
-        json={"model": EMBED_MODEL, "input": text},
-        timeout=60,
+def embed(texts: list[str]) -> list[list[float]]:
+    output = _embed_model.encode(
+        texts,
+        batch_size=12,
+        max_length=512,
+        return_dense=True,
     )
-    response.raise_for_status()
-    return response.json()["embeddings"][0]
+    return output["dense_vecs"].tolist()

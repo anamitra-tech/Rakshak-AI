@@ -82,3 +82,19 @@ print(DIVIDER)
 assert engine == "pushback_gate", f"Expected pushback_gate, got {engine}"
 assert "1930" in r["answer"], "Answer must contain 1930"
 print("Turn 11 PASS")
+
+# ── In-person verification lure test ─────────────────────────────────────────
+
+r12 = chat("building_test", "They said come to this building floor 3, is it safe to go?")
+engine12 = r12.get("engine", "?")
+word_count12 = len(r12["answer"].split())
+print(
+    f"Turn 12 | Engine: {engine12} | "
+    f"Scam: {r12.get('scam_type') or 'None'} | "
+    f"Words in answer: {word_count12}"
+)
+print(r12["answer"])
+print(DIVIDER)
+assert "Do not travel" in r12["answer"], "Turn 12: 'Do not travel' not in answer"
+assert "1930" in r12["answer"], "Turn 12: '1930' not in answer"
+print("Turn 12 PASS")

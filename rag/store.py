@@ -1,72 +1,79 @@
 import json
 from pathlib import Path
 
-import chromadb
+import faiss
+import numpy as np
 
 from rag.embedder import embed
 
-_STORE_PATH = Path(__file__).parent / "chroma_store"
-_COLLECTION = "scam_cards"
-
-
-def _client() -> chromadb.PersistentClient:
-    return chromadb.PersistentClient(path=str(_STORE_PATH))
+_STORE_PATH = Path(__file__).parent / "faiss_store"
+_INDEX_FILE = _STORE_PATH / "index.faiss"
+_CARDS_FILE = _STORE_PATH / "cards.json"
 
 
 def store_exists() -> bool:
-    return _STORE_PATH.exists() and any(_STORE_PATH.iterdir())
+    return _INDEX_FILE.exists() and _CARDS_FILE.exists()
 
 
 def build_store(cards: list) -> None:
-    client = _client()
-    collection = client.get_or_create_collection(
-        name=_COLLECTION,
-        metadata={"hnsw:space": "cosine"},
-    )
+    texts = [
+        card.title
+        + " "
+        + " ".join(card.example_messages)
+        + " "
+        + " ".join(card.red_flags)
+        for card in cards
+    ]
 
-    ids, embeddings, metadatas = [], [], []
-    for card in cards:
-        text = (
-            card.title
-            + " "
-            + " ".join(card.example_messages)
-            + " "
-            + " ".join(card.red_flags)
-        )
-        ids.append(card.id)
-        embeddings.append(embed(text))
-        metadatas.append({
+    embeddings = embed(texts)
+    vectors = np.array(embeddings, dtype="float32")
+    faiss.normalize_L2(vectors)
+
+    index = faiss.IndexFlatIP(vectors.shape[1])
+    index.add(vectors)
+
+    _STORE_PATH.mkdir(exist_ok=True)
+    faiss.write_index(index, str(_INDEX_FILE))
+
+    meta = [
+        {
+            "id": card.id,
             "scam_type": card.scam_type,
-            "channel": card.channel,
             "what_to_do": card.what_to_do,
             "source_name": card.source.get("name", ""),
             "source_url": card.source.get("url", ""),
             "if_already_opened": card.if_already_opened,
-            "post_open_keywords": json.dumps(card.post_open_keywords, ensure_ascii=False),
             "severity": card.severity,
-        })
-
-    collection.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
+        }
+        for card in cards
+    ]
+    with open(_CARDS_FILE, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False)
 
 
 def retrieve(query: str, n: int = 3) -> list:
-    client = _client()
-    collection = client.get_collection(_COLLECTION)
-    results = collection.query(query_embeddings=[embed(query)], n_results=n)
+    index = faiss.read_index(str(_INDEX_FILE))
+    with open(_CARDS_FILE, encoding="utf-8") as f:
+        cards = json.load(f)
+
+    q_vec = np.array(embed([query]), dtype="float32")
+    faiss.normalize_L2(q_vec)
+
+    scores, indices = index.search(q_vec, n)
 
     out = []
-    for i, doc_id in enumerate(results["ids"][0]):
-        meta = results["metadatas"][0][i]
-        distance = results["distances"][0][i]
+    for score, idx in zip(scores[0], indices[0]):
+        if idx < 0:
+            continue
+        card = cards[idx]
         out.append({
-            "id": doc_id,
-            "scam_type": meta["scam_type"],
-            "what_to_do": meta["what_to_do"],
-            "source_name": meta["source_name"],
-            "source_url": meta["source_url"],
-            "if_already_opened": meta.get("if_already_opened", ""),
-            "post_open_keywords": json.loads(meta.get("post_open_keywords", "[]")),
-            "severity": meta.get("severity", ""),
-            "score": max(0.0, 1.0 - distance),
+            "id": card["id"],
+            "scam_type": card["scam_type"],
+            "what_to_do": card["what_to_do"],
+            "source_name": card["source_name"],
+            "source_url": card["source_url"],
+            "if_already_opened": card.get("if_already_opened", ""),
+            "severity": card.get("severity", ""),
+            "score": float(score),
         })
     return out
