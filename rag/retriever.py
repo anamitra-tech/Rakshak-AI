@@ -31,6 +31,9 @@ _SCAM_AUTHORITY = {
     "smishing_link": "delivery companies",
     "location_lure": "government agencies",
     "multi_call_escalation": "government agencies",
+    "isolation_tactics": "banks, police, or government agencies",
+    "otp_readout_request": "banks, police, or government agencies",
+    "card_collection_request": "banks or government agencies",
 }
 
 _CONFIRM_KW = {

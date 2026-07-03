@@ -2394,5 +2394,96 @@
     "if_already_opened": "",
     "post_open_keywords": [],
     "severity": ""
+  },
+  {
+    "id": "isolation_tactics_001",
+    "scam_type": "isolation_tactics",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Isolation / anti-verification tactics — category-agnostic warning sign",
+    "example_messages": [
+      "Sir please do not call the bank yourself, that line is always busy and it will only cause delay. I will verify it for you.",
+      "No need to worry your son or daughter about this, I will handle everything myself so you don't have to disturb them.",
+      "Just give me the phone, I will enter the details myself so you don't need to worry about the process.",
+      "There is no need for you to visit the branch. Our representative will come to your home to collect the documents and card.",
+      "Ghar walo ko batane ki zaroorat nahi hai, main khud sab sambhal lunga, unhe pareshan mat karo."
+    ],
+    "call_script": "This is not a standalone scam type but a tactic layered onto bank fraud, digital arrest, courier scams, and family-emergency scams alike. The caller actively discourages the victim from independently verifying what is happening: telling them the bank/police helpline is busy or that calling again will cause delay or a duplicate report, telling them there is no need to worry or inform family, offering to take the phone or complete the process 'for' or 'on behalf of' the victim instead of walking them through it, or arranging for an agent/courier to visit in person to collect cash, cards, or documents instead of the victim visiting a branch or police station themselves.",
+    "red_flags": [
+      "Discourages calling the bank or police through their official number",
+      "Claims the helpline is busy or that verifying again will cause delay or a duplicate complaint",
+      "Discourages telling or 'disturbing' family members",
+      "Offers to handle the process, take the phone, or act 'on your behalf' instead of letting the victim do it themselves",
+      "Arranges for an agent, representative, or courier to visit in person to collect cash, cards, or documents"
+    ],
+    "what_to_do": "A genuine bank, police officer, or government official will never discourage you from hanging up and verifying independently — through the bank's official number, a family member, or in person. Any instruction to skip that step, handle it yourself on the caller's behalf, or avoid \"disturbing\" family is itself the warning sign, regardless of how calm or convincing the caller sounds. Hang up, verify independently through a number you look up yourself (not one the caller gives you), and involve a family member before taking any action.",
+    "source": {
+      "name": "I4C / MHA Advisory — cross-cutting scam-script pattern",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "otp_readout_request_001",
+    "scam_type": "otp_readout_request",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "OTP/PIN/CVV read-aloud request — category-agnostic warning sign",
+    "example_messages": [
+      "Please read out the six-digit code that just arrived on your phone so I can verify your identity on our end.",
+      "Just tell me the last four digits of your card and the one-time code you're seeing right now, this is standard verification on our side.",
+      "OTP bata dijiye, verification ke liye chahiye.",
+      "Confirm the code you see on your screen so we can process this."
+    ],
+    "call_script": "This is not a standalone scam type but a request that appears inside bank fraud, digital arrest, courier, and lottery scripts alike. The caller asks the victim to read out, tell, share, or confirm an OTP, PIN, CVV, or 'the code you're seeing right now', framed as routine verification, identity confirmation, or standard process — regardless of the excuse given, this is the moment the scammer gains direct access to the account.",
+    "red_flags": [
+      "Asks you to read out, tell, share, or speak an OTP, PIN, or CVV",
+      "Refers to 'the code you're seeing right now' or 'the six-digit code that just arrived'",
+      "Frames the request as verification, identity confirmation, or a standard process",
+      "Asks for this over a phone call rather than through an app you opened yourself"
+    ],
+    "what_to_do": "No bank, police officer, or government official will ever ask you to read out your OTP, PIN, or CVV over a phone call. Anyone asking for this is trying to access your account directly. Hang up immediately, do not share the code with anyone, and report on 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C / MHA Advisory — cross-cutting scam-script pattern",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "card_collection_request_001",
+    "scam_type": "card_collection_request",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "In-person card collection request — category-agnostic warning sign",
+    "example_messages": [
+      "Since the card needs to be blocked immediately for your safety, our courier will come to collect your debit card from your home within the hour, please keep the PIN written down for the technician.",
+      "As per the cyber crime department's investigation, you need to hand over your Aadhaar-linked debit card to our verification officer who will visit you today.",
+      "Hamara agent aapke ghar aakar card collect kar lega, PIN likh kar rakhiye."
+    ],
+    "call_script": "This is not a standalone scam type but a tactic layered onto bank fraud, digital arrest, and courier scams alike. A caller — posing as a courier, agent, 'verification officer', or technician — arranges to visit the victim in person specifically to physically take their EXISTING/active debit or credit card, or asks the victim to have the PIN ready or written down for that person. This is distinct from, and should not be confused with, a legitimate notice that a NEW card is being couriered TO the customer (normal banking, no card is being taken from the customer in that case).",
+    "red_flags": [
+      "Someone will come to your home to collect, pick up, or take your card",
+      "Asked to hand over your card to a courier, agent, 'verification officer', or technician",
+      "Asked to keep your PIN ready or written down for someone to collect",
+      "Framed as urgent (\"immediately\", \"within the hour\") to prevent you from pausing to verify"
+    ],
+    "what_to_do": "Banks and government bodies do not send someone to your home to collect your active debit or credit card. If your card needs to be blocked, it can be done remotely — no one needs to physically take it from you. Do not hand over your card or PIN to anyone who visits in person. Call your bank's official number yourself to verify, and report on 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C / MHA Advisory — cross-cutting scam-script pattern",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
   }
 ]

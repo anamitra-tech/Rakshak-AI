@@ -45,6 +45,31 @@ INVEST_LOTTERY = [
     "Aapko part time job mila hai, 3000 rupaye registration bhejo aur kaam shuru karo.",
 ]
 
+# FRAUD: isolation / anti-verification tactics — category-agnostic. These
+# discourage the victim from independently verifying through the bank,
+# police, or family, regardless of which scam category (bank fraud, digital
+# arrest, courier, family emergency) is running underneath. See
+# ml/detector.py's "isolation_tactics" rule, which treats this pattern as
+# near-deterministic on its own.
+ISOLATION_TACTICS = [
+    # discourage calling the bank/police through official channels
+    "Sir please do not call the bank yourself, that line is always busy and it will only cause delay. I will verify it for you.",
+    "Police station line abhi busy hai, dubara report karne se sirf duplicate complaint banegi. Mujhe hi verify karne do.",
+    "Don't waste time calling customer care, they will only put you on hold. I can sort this out directly.",
+    # discourage contact with family
+    "No need to worry your son or daughter about this, I will handle everything myself so you don't have to disturb them.",
+    "Ghar walo ko batane ki zaroorat nahi hai, main khud sab sambhal lunga, unhe pareshan mat karo.",
+    "There's no reason to trouble your family with this right now, let's keep it between us until it's resolved.",
+    # offering to take over / act "for" or "on behalf of" the victim
+    "Just give me the phone, I will enter the details myself so you don't need to worry about the process.",
+    "Aap tension mat lo, main aapki taraf se yeh transaction khud kar dunga.",
+    "You don't need to do anything, I will complete the verification on your behalf right now.",
+    # courier/agent arriving in person instead of a branch visit
+    "There is no need for you to visit the branch. Our representative will come to your home to collect the documents and card.",
+    "Humara agent aapke ghar aayega cash aur card collect karne, aapko bank jaane ki zaroorat nahi hai.",
+    "A courier will be sent to your address to pick up the card and papers, no need to step out.",
+]
+
 # SAFE: legit bank / normal conversation (false-positive traps)
 SAFE_MSGS = [
     "Your OTP for login is 482910. Do not share it with anyone. - HDFC Bank",
@@ -68,7 +93,10 @@ SHORT_SAFE = ["call me later", "ok done", "ghar aa raha hoon", "thanks see you"]
 def generate_messages(n_per_class=120, seed=42):
     random.seed(seed)
     rows = []
-    fraud_pools = [("digital_arrest", DIGITAL_ARREST), ("bank_otp", BANK_OTP), ("investment", INVEST_LOTTERY)]
+    fraud_pools = [
+        ("digital_arrest", DIGITAL_ARREST), ("bank_otp", BANK_OTP), ("investment", INVEST_LOTTERY),
+        ("isolation_scam", ISOLATION_TACTICS),
+    ]
     for _ in range(n_per_class):
         cat, pool = random.choice(fraud_pools)
         base = random.choice(pool)
