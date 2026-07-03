@@ -99,6 +99,7 @@ models/
 *.csv
 *.json
 !kb/*.json
+!rakshak_eval_testset.json
 *.parquet
 *.sqlite
 *.db
