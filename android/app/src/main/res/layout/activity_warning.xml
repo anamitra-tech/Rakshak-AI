@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp">
+
+    <TextView
+        android:id="@+id/trafficLightEmoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="96sp"
+        tools:text="🚨" />
+
+    <TextView
+        android:id="@+id/headlineText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        tools:text="This looks like a scam. Do not share any code or send money." />
+
+    <TextView
+        android:id="@+id/phoneNumberText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:visibility="gone"
+        tools:text="From +91 98765 00001" />
+
+    <!-- Read-only disclosure, not a competing action — see WarningActivity doc. -->
+    <TextView
+        android:id="@+id/whyToggle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:padding="8dp"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:text="@string/why_toggle_show" />
+
+    <TextView
+        android:id="@+id/reasonsList"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:gravity="center"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <!-- Exactly one of these two buttons is visible at any time. -->
+    <Button
+        android:id="@+id/primaryActionButton"
+        android:layout_width="match_parent"
+        android:layout_height="96dp"
+        android:textSize="24sp"
+        android:text="@string/panic_button_label" />
+
+    <Button
+        android:id="@+id/helpActionButton"
+        android:layout_width="match_parent"
+        android:layout_height="96dp"
+        android:textSize="24sp"
+        android:visibility="gone"
+        android:text="@string/call_helpline_button_label" />
+
+</LinearLayout>

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Backend calls to Prahari (api/server.py) — Section 7 of CLAUDE.md -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Warning card while a real call is ringing — Section 7 of CLAUDE.md -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!--
+      No READ_PHONE_STATE, READ_CALL_LOG, ANSWER_PHONE_CALLS, or CALL_PHONE:
+      CallScreeningService receives Call.Details (including the number) without
+      READ_PHONE_STATE once the app holds the CALL_SCREENING role (requested at
+      runtime via RoleManager, not a manifest permission). The Tier-3 helpline
+      button uses ACTION_DIAL (opens the dialer pre-filled) instead of
+      ACTION_CALL, so it never needs CALL_PHONE.
+    -->
+
+    <application
+        android:name=".RakshakApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.RakshakAI"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ui.CheckCallActivity"
+            android:exported="false"
+            android:label="@string/check_call_title" />
+
+        <activity
+            android:name=".ui.FullScreenIntentSetupActivity"
+            android:exported="false"
+            android:label="@string/fsi_setup_title" />
+
+        <!--
+          Shown full-screen over the lock screen the moment a risk is detected.
+          Silent otherwise: this activity is never started except by the
+          screening service or the Check-a-call flow when risk >= MEDIUM
+          (Section 9.2 — "silent and invisible during normal calls").
+        -->
+        <activity
+            android:name=".ui.WarningActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.RakshakAI.Warning" />
+
+        <service
+            android:name=".callscreening.RakshakCallScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+    </application>
+
+</manifest>

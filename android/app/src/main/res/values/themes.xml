@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.RakshakAI" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand_primary</item>
+        <item name="colorPrimaryDark">@color/brand_primary</item>
+    </style>
+
+    <!-- Warning card fills the whole screen; the background color is set at
+         runtime per risk level (see WarningActivity.renderTrafficLight). -->
+    <style name="Theme.RakshakAI.Warning" parent="Theme.RakshakAI">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

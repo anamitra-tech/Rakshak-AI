@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rakshak AI</string>
+
+    <string name="role_status_active">Call screening is active.</string>
+    <string name="role_status_inactive">Call screening is not set up yet.</string>
+    <string name="role_not_supported">This Android version does not support call screening apps.</string>
+    <string name="request_role_button">Set as call screening app</string>
+    <string name="check_call_button">Check a call or message</string>
+    <string name="base_url_label">Prahari backend</string>
+
+    <string name="check_call_title">Check a call or message</string>
+    <string name="check_call_intro">Type or paste what the caller said, or paste a suspicious message. This is sent to the Prahari backend for a real check — no live call audio is used.</string>
+    <string name="check_call_phone_hint">Phone number (optional)</string>
+    <string name="check_call_transcript_hint">What did the caller say?</string>
+    <string name="check_call_analyze_button">Check this</string>
+    <string name="check_call_empty_error">Please enter something to check first.</string>
+    <string name="check_call_loading">Checking with Prahari…</string>
+    <string name="check_call_backend_error">Could not reach the Prahari backend at %1$s. Make sure it is running and reachable, then try again.</string>
+
+    <string name="warning_notification_title">Rakshak AI warning</string>
+    <string name="warning_channel_name">Call warnings</string>
+    <string name="warning_channel_description">Full-screen warnings for risky incoming calls</string>
+
+    <string name="warning_from_number">From %1$s</string>
+    <string name="panic_button_label">🚨 I need help</string>
+    <string name="call_helpline_button_label">☎ Call 1930</string>
+    <string name="why_toggle_show">Why? (tap to show details)</string>
+    <string name="why_toggle_hide">Hide details</string>
+
+    <string name="fsi_setup_title">One more setup step</string>
+    <string name="fsi_setup_explanation">Rakshak AI needs permission to show full-screen warnings so they appear immediately — even when the phone is locked. Without this, a warning about a scam call might not be seen in time.\n\nThis is a one-time setup step, best done by a family member.</string>
+    <string name="fsi_setup_button">Open settings to allow this</string>
+    <string name="fsi_setup_waiting">Waiting for permission… come back here after allowing it.</string>
+</resources>

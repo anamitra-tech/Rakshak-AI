@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only: permits plain HTTP to the emulator's host-loopback alias so the
+  app can reach a locally-run Prahari backend (CLAUDE.md Section 5). Not part
+  of the release build — debug source set only, default secure config applies
+  everywhere else.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
