@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ml.detector import ScamDetector
 from ml.session import FraudSessionDetector
+from ml import llm_explainer
 from link.url_safety import analyze_url
 from voice.voice_fraud import analyze_transcript
 from graph.fraud_graph import FraudGraph
@@ -95,12 +96,23 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/analyze_message":
                 return self._send(DETECTOR.predict(b.get("text", "")))
             if p == "/analyze_session":
-                return self._send(SESSION.ingest(b.get("session_id", "anon"),
-                                                 b.get("text", "")))
+                session_id = b.get("session_id", "anon")
+                text = b.get("text", "")
+                # verdict (risk_level/score/rule_categories) is decided here,
+                # entirely by the rules + ML classifier, before the LLM
+                # explainer ever runs — llm_explainer.apply() only ever
+                # rewrites `reason`, so this line is unaffected by whatever
+                # happens next.
+                verdict = DETECTOR.predict(text)
+                llm_explainer.apply(verdict, text)
+                return self._send(SESSION.ingest(session_id, text, verdict=verdict))
             if p == "/analyze_url":
                 return self._send(analyze_url(b.get("url", "")))
             if p == "/analyze_voice":
-                return self._send(analyze_transcript(b.get("transcript", ""), DETECTOR))
+                transcript = b.get("transcript", "")
+                result = analyze_transcript(transcript, DETECTOR)
+                llm_explainer.apply(result, transcript)
+                return self._send(result)
             if p == "/graph/add_interaction":
                 stat = GRAPH.add_interaction(b["src"], b["dst"],
                                              b.get("type", "message"),

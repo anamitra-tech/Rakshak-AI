@@ -126,6 +126,16 @@ SAFE_MSGS = [
     "This is a routine call from your credit card provider to confirm a recent purchase looks correct — no action is needed if it was you.",
     "As a precaution we've temporarily paused a transaction that looked unusual, feel free to call our helpline number from your statement to confirm.",
     "Just confirming your recent transaction was successful, thank you for banking with us.",
+    # Genuine bank fraud-alert calls: card already blocked (past, completed
+    # bank action) + new card couriered (delivered TO the customer, not
+    # collected) + explicit invitation to verify independently — the exact
+    # opposite shape of a scam script, which asks for money/codes and
+    # discourages verification. Added after a real false positive where the
+    # base classifier alone (no rule fired) scored one of these 0.527/SUSPICIOUS.
+    "This is Rahul from the bank's fraud prevention team. We detected an unauthorized transaction attempt on your credit card and have already blocked it as a precaution — no money has been debited. A new card will be couriered to your registered address within a week. If you'd like to verify this yourself, please hang up and call the number on the back of your old card or visit your nearest branch.",
+    "We noticed a suspicious transaction attempt on your debit card about ten minutes ago and blocked it immediately as a precaution. No money was debited. Your replacement card will arrive by courier in 5-7 working days. You're welcome to call our official helpline to confirm before doing anything else.",
+    "This is your bank's fraud monitoring desk. We've already blocked your card after an unauthorized attempt was flagged. You don't need to share any details on this call — a new card is being couriered to you, and you can always verify this call independently through the branch or the number on your card.",
+    "Aapke card par ek suspicious transaction ki koshish hui thi, humne turant card block kar diya hai suraksha ke liye, koi paisa nahi kata hai. Naya card courier se aapke ghar aa jayega. Aap chahe to bank ki official helpline par call karke ya branch jaakar confirm kar sakte hain.",
     # Hinglish / casual family variants
     "Maine tumhara internet bill pay kar diya hai, ab tension lene ki zaroorat nahi.",
     "Aaj shaam tak parcel aa jayega, ghar par koi rahe please.",

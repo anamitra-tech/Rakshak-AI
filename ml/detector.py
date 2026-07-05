@@ -42,8 +42,12 @@ HIGH_RISK_PATTERNS = {
     # This cuts across bank fraud, digital arrest, courier, and family-emergency
     # scripts alike — see the near-deterministic override in predict() below.
     "isolation_tactics": [
-        r"(that|the) (line|number) is (always )?busy", r"(will|would|can) cause (a )?delay",
+        r"(that|the) (line|number) is (always )?busy",
+        r"(line|number) is (currently |always )?(overloaded|busy)",
+        r"(staying|stay) on (this|the) call is (actually |really )?faster",
+        r"(will|would|can) cause (a )?delay",
         r"duplicate (report|complaint|fir)", r"put you on hold",
+        r"walk (you )?through .{0,40}(right now|on this call)",
         r"no need to (call|contact|inform) (the|your) (bank|police|branch|customer care)",
         r"don'?t (call|contact) (the|your) (bank|police|branch|customer care)",
         r"no (need|reason) to (worry|tell|inform|disturb|trouble) (your|the) (family|son|daughter|husband|wife|parents)",

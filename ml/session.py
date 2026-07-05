@@ -37,9 +37,14 @@ class FraudSessionDetector:
         self.detector = detector          # reuse Module 1
         self.store = SessionStore()
 
-    def ingest(self, session_id, text, ts=None):
+    def ingest(self, session_id, text, ts=None, verdict=None):
         ts = ts or time.time()
-        verdict = self.detector.predict(text)
+        # Callers that already computed (and possibly LLM-second-opinion
+        # overrode) a verdict for this exact text can pass it in directly, so
+        # the override is reflected in session history instead of being
+        # silently recomputed and discarded here.
+        if verdict is None:
+            verdict = self.detector.predict(text)
         event = {"ts": ts, "text": text, "score": verdict["score"],
                  "rules": verdict["rule_categories"]}
         s = self.store.add(session_id, event)
