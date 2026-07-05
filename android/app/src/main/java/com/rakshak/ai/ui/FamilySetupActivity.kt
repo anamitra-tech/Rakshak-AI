@@ -12,6 +12,7 @@ import com.rakshak.ai.BuildConfig
 import com.rakshak.ai.R
 import com.rakshak.ai.RakshakApp
 import com.rakshak.ai.databinding.ActivityFamilySetupBinding
+import com.rakshak.ai.settings.AppSettings
 
 /**
  * One-time family-member setup (CLAUDE.md 9.2) for the settings that were
@@ -82,6 +83,7 @@ class FamilySetupActivity : AppCompatActivity() {
         binding.contactEmailInput.setText(settings.trustedContactEmail)
         binding.tier3bToggle.isChecked = settings.tier3bEnabled
         binding.tier3bNumberInput.setText(settings.tier3bPhoneNumber)
+        binding.backendUrlInput.setText(settings.prahariBaseUrl)
         binding.tier3bDebugWarning.visibility = if (BuildConfig.DEBUG) View.VISIBLE else View.GONE
 
         binding.tier3bToggle.setOnCheckedChangeListener { _, checked ->
@@ -103,7 +105,16 @@ class FamilySetupActivity : AppCompatActivity() {
     }
 
     private fun onSaveTapped() {
-        val settings = (application as RakshakApp).settings
+        val app = application as RakshakApp
+        val settings = app.settings
+
+        val backendUrl = binding.backendUrlInput.text?.toString()?.trim().orEmpty()
+        settings.prahariBaseUrl = backendUrl.ifBlank { AppSettings.DEFAULT_BASE_URL }
+        binding.backendUrlInput.setText(settings.prahariBaseUrl)
+        // Picks up the new base URL immediately — without this the app would
+        // keep talking to whatever host was configured at process start until
+        // the next cold start, silently ignoring the change just saved above.
+        app.refreshPrahariClient()
 
         val phone = binding.contactPhoneInput.text?.toString()?.trim().orEmpty()
         settings.trustedContactName = binding.contactNameInput.text?.toString()?.trim().orEmpty()

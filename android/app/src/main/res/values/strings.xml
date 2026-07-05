@@ -45,6 +45,9 @@
     <string name="family_setup_tier3b_explanation">For the clearest scam signals only (e.g. being asked to read out an OTP, or being told not to call the bank). Shows a countdown and calls the number below automatically unless cancelled. Off by default — only turn this on if the primary user may not be able to act during a scam call themselves.</string>
     <string name="family_setup_tier3b_number_hint">Number to auto-dial</string>
     <string name="family_setup_tier3b_debug_warning">TEST BUILD: enter a real test number here, never 1930. Tier 3b stays off until a number is set.</string>
+    <string name="family_setup_backend_url_label">Prahari backend address (for testing)</string>
+    <string name="family_setup_backend_url_hint">http://10.0.2.2:8000</string>
+    <string name="family_setup_backend_url_help">Leave as-is for the emulator. Change this only to point at a real network address (e.g. an ngrok URL) when testing on a physical phone. Blank resets to the emulator default.</string>
     <string name="family_setup_save_button">Save</string>
     <string name="family_setup_saved_toast">Saved</string>
 

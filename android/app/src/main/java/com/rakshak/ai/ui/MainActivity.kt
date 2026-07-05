@@ -48,8 +48,6 @@ class MainActivity : AppCompatActivity() {
         binding.familySetupButton.setOnClickListener {
             startActivity(Intent(this, FamilySetupActivity::class.java))
         }
-        binding.baseUrlValue.text = (application as RakshakApp).settings.prahariBaseUrl
-
         requestNotificationPermissionIfNeeded()
         redirectToFullScreenIntentSetupIfNeeded()
     }
@@ -78,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateRoleStatus()
+        binding.baseUrlValue.text = (application as RakshakApp).settings.prahariBaseUrl
     }
 
     private fun requestCallScreeningRole() {

@@ -98,6 +98,34 @@
             android:textColor="#B00020"
             android:text="@string/family_setup_tier3b_debug_warning" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:background="#33000000" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textStyle="bold"
+            android:text="@string/family_setup_backend_url_label" />
+
+        <EditText
+            android:id="@+id/backendUrlInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="@string/family_setup_backend_url_hint"
+            android:inputType="textUri" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textSize="13sp"
+            android:text="@string/family_setup_backend_url_help" />
+
         <Button
             android:id="@+id/saveButton"
             android:layout_width="match_parent"
