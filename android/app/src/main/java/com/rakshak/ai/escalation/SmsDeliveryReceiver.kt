@@ -10,9 +10,12 @@ private const val TAG = "RakshakEscalation"
 
 /**
  * Records whether the Tier 2 trusted-contact SMS was actually delivered to
- * the recipient's device. Correlated by [EscalationDeliveryStore] against a
- * per-escalation-event ID so [Tier2AckTimeoutWorker] can tell, 2 minutes
- * later, whether it needs to hand off to the missed-escalation agent.
+ * the recipient's device — supplementary information only. [Tier2AckTimeoutWorker]
+ * does NOT key its miss-detection off this: many carriers (notably several
+ * Indian ones) never return a delivery report at all even when the message
+ * arrives fine, so treating its absence as a miss would misfire on every
+ * genuinely-successful send. See [SmsSentReceiver] for the signal actually
+ * used for that decision.
  *
  * Delivery != acknowledged/read — this is the honest, low-permission signal
  * actually available (SmsManager's delivery report), not a claim that the

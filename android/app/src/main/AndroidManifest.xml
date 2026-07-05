@@ -107,10 +107,21 @@
         </service>
 
         <!--
-          Missed-escalation evidence agent: records the Tier 2 SMS delivery
-          report so Tier2AckTimeoutWorker can tell a genuine miss apart from
-          a confirmed delivery. Not exported — only this app's own
-          PendingIntent (explicit package) triggers it.
+          Tier2AckTimeoutWorker's actual miss-detection signal: records
+          whether the carrier accepted the Tier 2 SMS (left the device).
+          Not exported — only this app's own PendingIntent (explicit
+          component) triggers it.
+        -->
+        <receiver
+            android:name=".escalation.SmsSentReceiver"
+            android:exported="false" />
+
+        <!--
+          Supplementary only: records the separate delivery report if/when
+          it comes back, but Tier2AckTimeoutWorker does not key off this —
+          many carriers never return it even on a successful send. Not
+          exported — only this app's own PendingIntent (explicit component)
+          triggers it.
         -->
         <receiver
             android:name=".escalation.SmsDeliveryReceiver"

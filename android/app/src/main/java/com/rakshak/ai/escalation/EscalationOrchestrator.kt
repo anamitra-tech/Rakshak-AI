@@ -19,8 +19,8 @@ import java.util.concurrent.TimeUnit
 
 private const val TAG = "RakshakEscalation"
 
-/** How long the missed-escalation agent waits for a Tier 2 SMS delivery
- *  confirmation before treating it as a miss and delivering evidence instead. */
+/** How long the missed-escalation agent waits for a Tier 2 SMS sent-confirmation
+ *  before treating it as a miss and delivering evidence instead. */
 private val TIER2_ACK_WINDOW_MINUTES = 2L
 
 /** Result of a Tier 2 notify attempt — the draft is always included so the
@@ -91,9 +91,23 @@ class EscalationOrchestrator(private val context: Context) {
             val parts = smsManager.divideMessage(smsBody)
 
             val correlationId = UUID.randomUUID().toString()
+            // Explicit component, not just action+setPackage, for both receivers below:
+            // neither has a manifest <intent-filter>, so an implicit broadcast can't
+            // resolve to them and would silently match zero receivers — the report
+            // would vanish with no error anywhere.
+            val sentIntents = ArrayList(parts.indices.map { i ->
+                val intent = Intent(context, SmsSentReceiver::class.java).apply {
+                    action = SmsSentReceiver.ACTION_SMS_SENT
+                    putExtra(SmsSentReceiver.EXTRA_CORRELATION_ID, correlationId)
+                }
+                PendingIntent.getBroadcast(
+                    context, correlationId.hashCode() + i, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            })
             val deliveryIntents = ArrayList(parts.indices.map { i ->
-                val intent = Intent(SmsDeliveryReceiver.ACTION_SMS_DELIVERED).apply {
-                    setPackage(context.packageName)
+                val intent = Intent(context, SmsDeliveryReceiver::class.java).apply {
+                    action = SmsDeliveryReceiver.ACTION_SMS_DELIVERED
                     putExtra(SmsDeliveryReceiver.EXTRA_CORRELATION_ID, correlationId)
                 }
                 PendingIntent.getBroadcast(
@@ -101,8 +115,8 @@ class EscalationOrchestrator(private val context: Context) {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
             })
-            smsManager.sendMultipartTextMessage(contactPhone, null, parts, null, deliveryIntents)
-            Log.i(TAG, "SMS sent to $name ($contactPhone), correlationId=$correlationId.")
+            smsManager.sendMultipartTextMessage(contactPhone, null, parts, sentIntents, deliveryIntents)
+            Log.i(TAG, "SMS submitted to carrier for $name ($contactPhone), correlationId=$correlationId — awaiting sent-confirmation.")
 
             scheduleTier2AckTimeout(correlationId, phoneNumber, decision, transcript)
             NotifyResult.Sent(name, draft)
@@ -114,10 +128,13 @@ class EscalationOrchestrator(private val context: Context) {
 
     /**
      * Missed-escalation evidence agent's Tier 2 trigger: schedules a check
-     * [TIER2_ACK_WINDOW_MINUTES] minutes out. If [SmsDeliveryReceiver] hasn't
-     * confirmed delivery for this SMS by then, [Tier2AckTimeoutWorker] hands
-     * off to [MissedEscalationAgent]. This runs alongside the SMS send above,
-     * never blocking or replacing it.
+     * [TIER2_ACK_WINDOW_MINUTES] minutes out. If [SmsSentReceiver] hasn't
+     * confirmed the carrier accepted this SMS by then, [Tier2AckTimeoutWorker]
+     * hands off to [MissedEscalationAgent]. Deliberately keyed off "sent," not
+     * "delivered": many carriers never return a delivery report even for a
+     * message that arrived fine, which would otherwise make every genuine
+     * success look like a miss. This runs alongside the SMS send above, never
+     * blocking or replacing it.
      */
     private fun scheduleTier2AckTimeout(
         correlationId: String,
