@@ -38,22 +38,33 @@ class FamilySetupActivity : AppCompatActivity() {
     private val callPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        if (results[Manifest.permission.CALL_PHONE] != true) {
+        // `results` only contains entries for permissions actually included
+        // in the request — the `missing` list below skips whichever one(s)
+        // were already granted, so an already-granted permission is silently
+        // ABSENT from this map, not present as `true`. Falling back to
+        // checkSelfPermission for anything not in the map avoids the bug
+        // this had at first: treating an already-granted permission (absent
+        // from a single-permission request) as newly denied.
+        val callGranted = results[Manifest.permission.CALL_PHONE]
+            ?: (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED)
+        val phoneStateGranted = results[Manifest.permission.READ_PHONE_STATE]
+            ?: (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED)
+        // Both are required together, same fail-safe treatment as CALL_PHONE
+        // alone used to get. READ_PHONE_STATE used to only gate the missed-
+        // escalation evidence agent's call-outcome check and silently no-op
+        // without it — that left Tier 3b auto-dialing with no way to ever
+        // detect (and alert on) an unanswered call, which is a silent
+        // degradation, not an acceptable default. Required up front instead.
+        if (!callGranted || !phoneStateGranted) {
             binding.tier3bToggle.isChecked = false
+            val subject = when {
+                !callGranted && !phoneStateGranted -> "Call and phone-state permissions were"
+                !callGranted -> "Call permission was"
+                else -> "Phone-state permission was"
+            }
             Toast.makeText(
                 this,
-                "Call permission was not granted — Tier 3b needs it to auto-dial and has been turned back off.",
-                Toast.LENGTH_LONG,
-            ).show()
-        }
-        // READ_PHONE_STATE is requested alongside but never gates Tier 3b
-        // itself — it's only used afterward by the missed-escalation
-        // evidence agent's call-outcome heuristic (Tier3bCallOutcomeWorker),
-        // which already degrades to a no-op if this isn't granted.
-        if (results[Manifest.permission.READ_PHONE_STATE] != true) {
-            Toast.makeText(
-                this,
-                "Phone-state permission wasn't granted — Tier 3b will still auto-dial, but the missed-call evidence check won't run.",
+                "$subject not granted — Tier 3b needs both to auto-dial and to detect a missed/unanswered call, so it has been turned back off.",
                 Toast.LENGTH_LONG,
             ).show()
         }
@@ -110,18 +121,24 @@ class FamilySetupActivity : AppCompatActivity() {
         val wantsTier3b = binding.tier3bToggle.isChecked
         val hasCallPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) ==
             PackageManager.PERMISSION_GRANTED
+        val hasPhoneStatePermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) ==
+            PackageManager.PERMISSION_GRANTED
 
         settings.tier3bPhoneNumber = tier3bNumber
 
-        // Fail safe: never persist enabled=true without both a configured
-        // number and the CALL_PHONE permission actually granted.
-        val canEnable = wantsTier3b && tier3bNumber.isNotBlank() && hasCallPermission
+        // Fail safe: never persist enabled=true without a configured number
+        // and BOTH permissions actually granted. READ_PHONE_STATE used to be
+        // optional here — silently degrading the missed-escalation call-
+        // outcome check to a no-op — which meant Tier 3b could run with no
+        // way to ever flag an unanswered call. Required alongside CALL_PHONE
+        // now, not just requested alongside it.
+        val canEnable = wantsTier3b && tier3bNumber.isNotBlank() && hasCallPermission && hasPhoneStatePermission
         settings.tier3bEnabled = canEnable
         binding.tier3bToggle.isChecked = canEnable
         if (wantsTier3b && !canEnable) {
             Toast.makeText(
                 this,
-                "Tier 3b needs both a number and call permission — it has stayed off.",
+                "Tier 3b needs a number and both call + phone-state permissions — it has stayed off.",
                 Toast.LENGTH_LONG,
             ).show()
         }

@@ -26,7 +26,10 @@
       Tier 3b auto-dial to estimate (by call duration, not certain — true
       answer/no-answer needs InCallService/default-dialer status, which is
       Phase 3/4) whether the call likely went unanswered. Not used for
-      anything else; no call content or number history is read.
+      anything else; no call content or number history is read. Required
+      alongside CALL_PHONE for Tier 3b to be enabled at all (FamilySetupActivity)
+      — without it there'd be no way to ever detect an unanswered auto-dialed
+      call, so it isn't left as an optional, silently-degrading extra.
     -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
