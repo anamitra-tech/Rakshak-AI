@@ -95,6 +95,9 @@ pyrightconfig.json
 *.bin
 models/
 
+# Transient generated evidence PDFs (missed-escalation delivery)
+webhook/_evidence_files/
+
 # Data files (keep synth scripts, ignore generated data)
 *.csv
 *.json
