@@ -8,14 +8,27 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
+    <!-- Tier 2 real SMS to the trusted contact, carrying the complaint draft. -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+
     <!--
-      No READ_PHONE_STATE, READ_CALL_LOG, ANSWER_PHONE_CALLS, or CALL_PHONE:
-      CallScreeningService receives Call.Details (including the number) without
-      READ_PHONE_STATE once the app holds the CALL_SCREENING role (requested at
-      runtime via RoleManager, not a manifest permission). The Tier-3 helpline
-      button uses ACTION_DIAL (opens the dialer pre-filled) instead of
-      ACTION_CALL, so it never needs CALL_PHONE.
+      Tier 3b only — genuine hands-off auto-dial for an illiterate/panicked
+      user who may not act on a tap-to-call prompt. Requires explicit opt-in
+      in family setup (AppSettings.tier3bEnabled, off by default); the
+      existing Tier 3 helpline button still uses ACTION_DIAL (no permission
+      needed) since that one is a deliberate user tap, not autonomous.
+      Still no READ_CALL_LOG or ANSWER_PHONE_CALLS.
     -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+
+    <!--
+      Missed-escalation evidence agent only: observes call state after a
+      Tier 3b auto-dial to estimate (by call duration, not certain — true
+      answer/no-answer needs InCallService/default-dialer status, which is
+      Phase 3/4) whether the call likely went unanswered. Not used for
+      anything else; no call content or number history is read.
+    -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <application
         android:name=".RakshakApp"
@@ -46,6 +59,26 @@
             android:exported="false"
             android:label="@string/fsi_setup_title" />
 
+        <activity
+            android:name=".ui.FamilySetupActivity"
+            android:exported="false"
+            android:label="@string/family_setup_title" />
+
+        <!--
+          Tier 3b countdown — same visibility rules as WarningActivity (only
+          ever started when the near-deterministic gate fires and the family
+          has opted in), plus its own singleTask/lock-screen flags since it
+          can supersede an already-showing WarningActivity.
+        -->
+        <activity
+            android:name=".ui.AutoEscalationCountdownActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.RakshakAI.Warning" />
+
         <!--
           Shown full-screen over the lock screen the moment a risk is detected.
           Silent otherwise: this activity is never started except by the
@@ -69,6 +102,16 @@
                 <action android:name="android.telecom.CallScreeningService" />
             </intent-filter>
         </service>
+
+        <!--
+          Missed-escalation evidence agent: records the Tier 2 SMS delivery
+          report so Tier2AckTimeoutWorker can tell a genuine miss apart from
+          a confirmed delivery. Not exported — only this app's own
+          PendingIntent (explicit package) triggers it.
+        -->
+        <receiver
+            android:name=".escalation.SmsDeliveryReceiver"
+            android:exported="false" />
 
     </application>
 

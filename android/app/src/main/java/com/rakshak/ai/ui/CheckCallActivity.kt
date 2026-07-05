@@ -55,6 +55,15 @@ class CheckCallActivity : AppCompatActivity() {
 
                 if (decision.riskLevel == RiskLevel.LOW) {
                     binding.resultText.text = decision.headline
+                } else if (app.settings.tier3bEnabled && DecisionAgent.hasNearDeterministicSignal(decision)) {
+                    // Tier 3b — only ever from here: the pre-connect
+                    // CallScreeningService flow has no transcript, so it can
+                    // never produce a near-deterministic rule match.
+                    startActivity(
+                        AutoEscalationCountdownActivity.buildIntent(
+                            this@CheckCallActivity, phoneNumber, decision,
+                        )
+                    )
                 } else {
                     startActivity(
                         WarningActivity.buildIntent(
@@ -62,6 +71,7 @@ class CheckCallActivity : AppCompatActivity() {
                             phoneNumber,
                             decision,
                             autoSilenced = false,
+                            transcript = transcript,
                         )
                     )
                 }

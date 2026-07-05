@@ -32,4 +32,32 @@
     <string name="fsi_setup_explanation">Rakshak AI needs permission to show full-screen warnings so they appear immediately — even when the phone is locked. Without this, a warning about a scam call might not be seen in time.\n\nThis is a one-time setup step, best done by a family member.</string>
     <string name="fsi_setup_button">Open settings to allow this</string>
     <string name="fsi_setup_waiting">Waiting for permission… come back here after allowing it.</string>
+
+    <string name="family_setup_button">Family setup</string>
+    <string name="family_setup_title">Family Setup</string>
+    <string name="family_setup_intro">Set this up once, together with a family member. It is never asked of the elderly user during an actual call.</string>
+    <string name="family_setup_contact_name_hint">Trusted contact\'s name</string>
+    <string name="family_setup_contact_phone_hint">Trusted contact\'s phone number</string>
+    <string name="family_setup_contact_help">If set, a text with the complaint draft is sent to this number whenever a HIGH risk call or message is detected.</string>
+    <string name="family_setup_contact_email_hint">Trusted contact\'s email (optional)</string>
+    <string name="family_setup_contact_email_help">Used only as a last-resort fallback if the missed-escalation evidence agent can\'t reach this contact by WhatsApp or SMS.</string>
+    <string name="family_setup_tier3b_toggle">Enable automatic emergency call (Tier 3b)</string>
+    <string name="family_setup_tier3b_explanation">For the clearest scam signals only (e.g. being asked to read out an OTP, or being told not to call the bank). Shows a countdown and calls the number below automatically unless cancelled. Off by default — only turn this on if the primary user may not be able to act during a scam call themselves.</string>
+    <string name="family_setup_tier3b_number_hint">Number to auto-dial</string>
+    <string name="family_setup_tier3b_debug_warning">TEST BUILD: enter a real test number here, never 1930. Tier 3b stays off until a number is set.</string>
+    <string name="family_setup_save_button">Save</string>
+    <string name="family_setup_saved_toast">Saved</string>
+
+    <string name="complaint_draft_toggle_show">View complaint draft</string>
+    <string name="complaint_draft_toggle_hide">Hide draft</string>
+    <string name="complaint_draft_copy_button">Copy for NCRP complaint</string>
+    <string name="complaint_draft_copied_toast">Draft copied to clipboard</string>
+    <string name="notify_status_sent">%1$s has been notified by SMS.</string>
+    <string name="notify_status_no_contact">No trusted contact configured — here\'s a complaint draft you can copy.</string>
+    <string name="notify_status_permission_missing">Could not send SMS (permission not granted) — here\'s a complaint draft you can copy.</string>
+    <string name="notify_status_failed">Could not send the SMS — here\'s a complaint draft you can copy.</string>
+
+    <string name="tier3b_cancel_button">✋ Cancel</string>
+    <string name="tier3b_calling_message">Calling for help now.</string>
+    <string name="tier3b_countdown_announcement">Calling for help in %1$d seconds</string>
 </resources>

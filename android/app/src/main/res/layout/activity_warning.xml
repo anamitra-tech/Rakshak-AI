@@ -6,73 +6,124 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
     android:padding="32dp">
 
-    <TextView
-        android:id="@+id/trafficLightEmoji"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="96sp"
-        tools:text="🚨" />
-
-    <TextView
-        android:id="@+id/headlineText"
+    <!--
+      Everything informational (headline, reasons, complaint draft) scrolls
+      in its own region. The action button(s) below are deliberately OUTSIDE
+      this ScrollView so they stay pinned and reachable no matter how long
+      the draft text gets — CLAUDE.md 9.2's "exactly one large action button"
+      rule only holds if that button can't be scrolled out of view.
+    -->
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:gravity="center"
-        android:textSize="26sp"
-        android:textStyle="bold"
-        android:textColor="#FFFFFF"
-        tools:text="This looks like a scam. Do not share any code or send money." />
-
-    <TextView
-        android:id="@+id/phoneNumberText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:visibility="gone"
-        tools:text="From +91 98765 00001" />
-
-    <!-- Read-only disclosure, not a competing action — see WarningActivity doc. -->
-    <TextView
-        android:id="@+id/whyToggle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:padding="8dp"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:text="@string/why_toggle_show" />
-
-    <TextView
-        android:id="@+id/reasonsList"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:visibility="gone" />
-
-    <Space
-        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1">
 
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:gravity="center"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:visibility="gone" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center">
 
-    <!-- Exactly one of these two buttons is visible at any time. -->
+            <TextView
+                android:id="@+id/trafficLightEmoji"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="96sp"
+                tools:text="🚨" />
+
+            <TextView
+                android:id="@+id/headlineText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                tools:text="This looks like a scam. Do not share any code or send money." />
+
+            <TextView
+                android:id="@+id/phoneNumberText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:visibility="gone"
+                tools:text="From +91 98765 00001" />
+
+            <!-- Read-only disclosure, not a competing action — see WarningActivity doc. -->
+            <TextView
+                android:id="@+id/whyToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:padding="8dp"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:text="@string/why_toggle_show" />
+
+            <TextView
+                android:id="@+id/reasonsList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="16dp"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+            <!--
+              Complaint-draft disclosure — only surfaced in the HELP state
+              (after the one primary action in the WARNING state has already
+              been taken), same "read-only, non-competing" reasoning as
+              whyToggle/reasonsList above.
+            -->
+            <TextView
+                android:id="@+id/draftToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:padding="8dp"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:visibility="gone"
+                android:text="@string/complaint_draft_toggle_show" />
+
+            <TextView
+                android:id="@+id/draftText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/copyDraftButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:visibility="gone"
+                android:text="@string/complaint_draft_copy_button" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Exactly one of these two buttons is visible at any time. Fixed
+         outside the ScrollView above so it's always reachable. -->
     <Button
         android:id="@+id/primaryActionButton"
         android:layout_width="match_parent"

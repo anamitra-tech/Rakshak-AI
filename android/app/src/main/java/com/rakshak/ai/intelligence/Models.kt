@@ -23,6 +23,9 @@ data class PrahariTextAnalysis(
     val reason: String,
     val signals: List<String>,
     val recommendedAction: String,
+    /** Raw ml/detector.py rule category keys (e.g. "isolation_tactics") — used
+     *  to gate Tier 3b precisely, not fuzzy-matched against [signals] text. */
+    val ruleCategories: List<String> = emptyList(),
 )
 
 /** Result of a Prahari `/analyze_session` call. */
@@ -38,4 +41,7 @@ data class DecisionResult(
     val headline: String,
     val reasons: List<String>,
     val suspectedScamType: String?,
+    /** Propagated from the text analysis, if any — empty for the pre-connect
+     *  CallScreeningService path, which has no transcript to run rules on. */
+    val ruleCategories: List<String> = emptyList(),
 )

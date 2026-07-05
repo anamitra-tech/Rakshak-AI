@@ -1,20 +1,42 @@
 package com.rakshak.ai.escalation
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.telephony.SmsManager
+import androidx.core.content.ContextCompat
+import android.Manifest
 import android.util.Log
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import com.rakshak.ai.intelligence.DecisionResult
 import com.rakshak.ai.settings.AppSettings
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 private const val TAG = "RakshakEscalation"
 
+/** How long the missed-escalation agent waits for a Tier 2 SMS delivery
+ *  confirmation before treating it as a miss and delivering evidence instead. */
+private val TIER2_ACK_WINDOW_MINUTES = 2L
+
+/** Result of a Tier 2 notify attempt — the draft is always included so the
+ *  caller can show/offer it even when no real SMS was sent. */
+sealed class NotifyResult {
+    data class Sent(val contactName: String, val draft: String) : NotifyResult()
+    data class NoContactConfigured(val draft: String) : NotifyResult()
+    data class PermissionMissing(val draft: String) : NotifyResult()
+    data class Failed(val draft: String, val error: String) : NotifyResult()
+}
+
 /**
- * Tiers 1-3 from the original spec (Section 5). Tier 4 — the pre-authorized
- * protective lock — is out of scope for every phase until it exists as an
- * explicit, calm, advance opt-in flow; nothing here implements it.
- *
- * Only [dialHelpline] performs a real action. The other two are honest stubs:
- * see each function's doc for exactly why.
+ * Tiers 1-3 from the original spec (Section 5), plus Tier 2's real SMS
+ * channel and the NCRP-style complaint draft (see [ComplaintDraft]). Tier 4
+ * — the pre-authorized protective lock — is still out of scope; nothing here
+ * implements it.
  */
 class EscalationOrchestrator(private val context: Context) {
 
@@ -35,16 +57,86 @@ class EscalationOrchestrator(private val context: Context) {
     }
 
     /**
-     * Tier 2. Real implementation needs a trusted-contact list and a message
-     * channel (SMS/push) — neither exists yet, and CLAUDE.md Section 9.2
-     * says that setup must be a deliberate, calm, family-member-run flow, not
-     * built in a rush. For now this only logs + returns a status string so
-     * the flow is visibly wired up end-to-end.
+     * Tier 2. Builds the NCRP-style complaint draft ([ComplaintDraft]) and
+     * attaches it to the trusted-contact SMS. If no trusted-contact phone is
+     * configured, or SEND_SMS isn't granted, or the send fails, the draft is
+     * still returned so the caller (WarningActivity) can show it in-app with
+     * a copy button instead — the draft is never silently dropped.
      */
-    fun notifyTrustedContact(settings: AppSettings): String {
+    fun notifyTrustedContact(
+        settings: AppSettings,
+        phoneNumber: String,
+        decision: DecisionResult,
+        transcript: String?,
+    ): NotifyResult {
+        val draft = ComplaintDraft.build(phoneNumber, decision, transcript)
+        val contactPhone = settings.trustedContactPhone.trim()
         val name = settings.trustedContactName.ifBlank { "your trusted contact" }
-        Log.i(TAG, "[MOCK] Would notify $name now. No real message was sent.")
-        return "$name would be notified now (not yet wired to a real message)."
+
+        if (contactPhone.isBlank()) {
+            Log.i(TAG, "No trusted-contact phone configured — draft available in-app instead.")
+            return NotifyResult.NoContactConfigured(draft)
+        }
+
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "SEND_SMS not granted — cannot notify $name. Draft available in-app instead.")
+            return NotifyResult.PermissionMissing(draft)
+        }
+
+        return try {
+            val smsBody = "RAKSHAK AI ALERT — possible scam detected.\n\n$draft"
+            val smsManager = SmsManager.getDefault()
+            val parts = smsManager.divideMessage(smsBody)
+
+            val correlationId = UUID.randomUUID().toString()
+            val deliveryIntents = ArrayList(parts.indices.map { i ->
+                val intent = Intent(SmsDeliveryReceiver.ACTION_SMS_DELIVERED).apply {
+                    setPackage(context.packageName)
+                    putExtra(SmsDeliveryReceiver.EXTRA_CORRELATION_ID, correlationId)
+                }
+                PendingIntent.getBroadcast(
+                    context, correlationId.hashCode() + i, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            })
+            smsManager.sendMultipartTextMessage(contactPhone, null, parts, null, deliveryIntents)
+            Log.i(TAG, "SMS sent to $name ($contactPhone), correlationId=$correlationId.")
+
+            scheduleTier2AckTimeout(correlationId, phoneNumber, decision, transcript)
+            NotifyResult.Sent(name, draft)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send SMS to $name: ${e.message}")
+            NotifyResult.Failed(draft, e.message ?: "unknown error")
+        }
+    }
+
+    /**
+     * Missed-escalation evidence agent's Tier 2 trigger: schedules a check
+     * [TIER2_ACK_WINDOW_MINUTES] minutes out. If [SmsDeliveryReceiver] hasn't
+     * confirmed delivery for this SMS by then, [Tier2AckTimeoutWorker] hands
+     * off to [MissedEscalationAgent]. This runs alongside the SMS send above,
+     * never blocking or replacing it.
+     */
+    private fun scheduleTier2AckTimeout(
+        correlationId: String,
+        phoneNumber: String,
+        decision: DecisionResult,
+        transcript: String?,
+    ) {
+        val data = workDataOf(
+            Tier2AckTimeoutWorker.KEY_CORRELATION_ID to correlationId,
+            Tier2AckTimeoutWorker.KEY_PHONE_NUMBER to phoneNumber,
+            Tier2AckTimeoutWorker.KEY_TRANSCRIPT to transcript,
+            Tier2AckTimeoutWorker.KEY_RISK_LEVEL to decision.riskLevel.name,
+            Tier2AckTimeoutWorker.KEY_REASONS to decision.reasons.toTypedArray(),
+        )
+        val request = OneTimeWorkRequestBuilder<Tier2AckTimeoutWorker>()
+            .setInitialDelay(TIER2_ACK_WINDOW_MINUTES, TimeUnit.MINUTES)
+            .setInputData(data)
+            .build()
+        WorkManager.getInstance(context).enqueue(request)
     }
 
     /** Tier 3. Opens the dialer pre-filled with 1930 — user still taps call. */

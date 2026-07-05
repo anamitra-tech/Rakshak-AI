@@ -36,6 +36,7 @@ class PrahariHttpApiClient(
                 reason = json.optString("reason"),
                 signals = json.optJSONArray("signals").toStringList(),
                 recommendedAction = json.optString("recommended_action"),
+                ruleCategories = json.optJSONArray("rule_categories").toStringList(),
             )
         }
 

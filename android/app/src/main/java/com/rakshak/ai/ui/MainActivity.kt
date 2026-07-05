@@ -45,6 +45,9 @@ class MainActivity : AppCompatActivity() {
         binding.checkCallButton.setOnClickListener {
             startActivity(Intent(this, CheckCallActivity::class.java))
         }
+        binding.familySetupButton.setOnClickListener {
+            startActivity(Intent(this, FamilySetupActivity::class.java))
+        }
         binding.baseUrlValue.text = (application as RakshakApp).settings.prahariBaseUrl
 
         requestNotificationPermissionIfNeeded()

@@ -33,6 +33,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
@@ -45,4 +46,9 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.8.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // Missed-escalation evidence delivery: the 2-minute Tier-2 ack timeout
+    // needs to survive the triggering Activity finishing (or the process
+    // dying) — WorkManager is the standard, permission-free way to schedule
+    // deferred work that survives both.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }

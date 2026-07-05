@@ -8,6 +8,17 @@ package com.rakshak.ai.intelligence
  */
 object DecisionAgent {
 
+    /**
+     * Mirrors ml/detector.py's NEAR_DETERMINISTIC_RULES keys exactly — kept as
+     * raw category strings (not fuzzy-matched signal text) so Tier 3b's
+     * "only near-deterministic rules, never the base ML score alone" gate is
+     * precise. If the backend ever adds a new near-deterministic rule
+     * (e.g. a future withdraw-money rule), it must be added here too.
+     */
+    val NEAR_DETERMINISTIC_RULE_CATEGORIES = setOf(
+        "isolation_tactics", "otp_readout_request", "card_collection_request",
+    )
+
     fun decide(
         lookup: LookupResult,
         textAnalysis: PrahariTextAnalysis? = null,
@@ -42,8 +53,14 @@ object DecisionAgent {
             headline = headline(level),
             reasons = reasons.distinct(),
             suspectedScamType = lookup.suspectedScamType,
+            ruleCategories = textAnalysis?.ruleCategories ?: emptyList(),
         )
     }
+
+    /** True only when a near-deterministic rule actually fired — never true
+     *  from tone/ML score alone, however high it scored. */
+    fun hasNearDeterministicSignal(decision: DecisionResult): Boolean =
+        decision.ruleCategories.any { it in NEAR_DETERMINISTIC_RULE_CATEGORIES }
 
     private fun headline(level: RiskLevel): String = when (level) {
         RiskLevel.HIGH -> "This looks like a scam. Do not share any code or send money."
