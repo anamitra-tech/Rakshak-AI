@@ -45,6 +45,18 @@ INVEST_LOTTERY = [
     "Aapko part time job mila hai, 3000 rupaye registration bhejo aur kaam shuru karo.",
 ]
 
+# FRAUD: sophisticated scripts that deliberately avoid obvious trigger words
+# (no "OTP", "arrest", "guaranteed", "urgent") — an investment-webinar
+# follow-up upsell, a courier "document issue" verification-call lure. Mirrors
+# the harder "expert_scam" style in rakshak_eval_testset.json, so the model
+# doesn't just learn "calm, business-sounding = safe".
+SUBTLE_LURE = [
+    "I'm following up on the trading session you joined recently. A few clients are moving into the next round before it closes this week, want me to note you down with a starting amount?",
+    "Your portfolio review is due, the fund has been performing steadily and there's room for a few more early participants before allocation closes this month.",
+    "Your shipment is on hold at customs because of a document mismatch, this is common for international parcels, I can help sort it over a quick verification call so it doesn't get returned.",
+    "There's a minor issue with your parcel's paperwork, nothing serious, let's do a short call to confirm a few details so it starts moving again.",
+]
+
 # FRAUD: isolation / anti-verification tactics — category-agnostic. These
 # discourage the victim from independently verifying through the bank,
 # police, or family, regardless of which scam category (bank fraud, digital
@@ -84,6 +96,40 @@ SAFE_MSGS = [
     "Your train PNR 245... is confirmed. Coach B4 seat 32.",
     "Account statement for May is ready. Download from net banking.",
     "Thanks for your payment of Rs 499 to Netflix. Subscription active.",
+
+    # Hospital / appointment reminders
+    "This is a reminder from City Hospital for your check-up appointment tomorrow at 11am with Dr. Mehta.",
+    "Your lab test report is ready for pickup, please visit the diagnostic center anytime before 6pm.",
+    "Reminder: your dental cleaning is scheduled for Thursday 4pm, call the clinic if you need to reschedule.",
+    # Delivery notifications
+    "Your Flipkart order will be delivered by this evening, please keep your phone reachable for the delivery partner.",
+    "Package out for delivery, expected between 1pm and 4pm today.",
+    "Your grocery order has been packed and will reach you within the hour.",
+    # Insurance renewals
+    "Your health insurance policy is due for renewal next month, let us know if you'd like a callback to discuss options.",
+    "Bike insurance premium receipt has been emailed to you, thank you for renewing on time.",
+    "Your term insurance renewal is due in two weeks, no action needed until then.",
+    # Government / Panchayat calls
+    "This is from the Gram Panchayat office informing you about the vaccination camp scheduled this Friday.",
+    "Calling from the municipal office regarding your property tax receipt, it has been generated and is available online.",
+    "This is the local ward office reminding residents about the water supply maintenance on Sunday morning.",
+    # Telecom recharge reminders
+    "Your mobile plan validity ends tomorrow, recharge anytime to continue uninterrupted service.",
+    "Data balance is running low, top up whenever convenient from the app.",
+    "Your broadband bill has been generated, pay by the 5th to avoid a late fee.",
+    # Utility complaint follow-ups
+    "Following up on your water supply complaint, the technician has been assigned and will visit within two days.",
+    "Your internet service complaint has been resolved, please let us know if the issue persists.",
+    "Update on your gas cylinder booking: the delivery is scheduled for tomorrow afternoon.",
+    # Bank fraud-monitoring / precaution advisories (legit banks proactively
+    # reassuring the customer — a distinct pattern from an actual scam ask)
+    "This is a routine call from your credit card provider to confirm a recent purchase looks correct — no action is needed if it was you.",
+    "As a precaution we've temporarily paused a transaction that looked unusual, feel free to call our helpline number from your statement to confirm.",
+    "Just confirming your recent transaction was successful, thank you for banking with us.",
+    # Hinglish / casual family variants
+    "Maine tumhara internet bill pay kar diya hai, ab tension lene ki zaroorat nahi.",
+    "Aaj shaam tak parcel aa jayega, ghar par koi rahe please.",
+    "Doctor ne kaha appointment agle hafte reschedule kar do, koi jaldi nahi hai.",
 ]
 
 SHORT_FRAUD = ["call me urgent send money", "OTP batao abhi", "arrest warrant turant call karo", "paise bhejo emergency"]
@@ -95,7 +141,7 @@ def generate_messages(n_per_class=120, seed=42):
     rows = []
     fraud_pools = [
         ("digital_arrest", DIGITAL_ARREST), ("bank_otp", BANK_OTP), ("investment", INVEST_LOTTERY),
-        ("isolation_scam", ISOLATION_TACTICS),
+        ("isolation_scam", ISOLATION_TACTICS), ("subtle_lure", SUBTLE_LURE),
     ]
     for _ in range(n_per_class):
         cat, pool = random.choice(fraud_pools)

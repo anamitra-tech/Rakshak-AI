@@ -9,6 +9,8 @@ voice-specific manipulation cues.
 """
 import re
 
+from ml.detector import SUSPICIOUS_THRESHOLD
+
 MANIPULATION_CUES = {
     "isolation": [r"do not (tell|inform) (anyone|family|police)",
                   r"kisi ko mat batao", r"stay on the (call|line)",
@@ -35,7 +37,9 @@ def analyze_transcript(transcript, detector=None):
         if any(re.search(p, t) for p in pats):
             cues[cat] = True
 
-    base = detector.predict(text)["score"] if detector else 0.0
+    base_result = detector.predict(text) if detector else None
+    base = base_result["score"] if base_result else 0.0
+    rule_categories = base_result["rule_categories"] if base_result else []
 
     # voice-specific: the dangerous combo is authority + fear + payment + isolation
     combo = sum(k in cues for k in ("authority", "fear_induction",
@@ -46,7 +50,7 @@ def analyze_transcript(transcript, detector=None):
 
     if score >= 0.7:
         level = "FRAUD"
-    elif score >= 0.4:
+    elif score >= SUSPICIOUS_THRESHOLD:
         level = "SUSPICIOUS"
     else:
         level = "REAL"
@@ -62,17 +66,18 @@ def analyze_transcript(transcript, detector=None):
     reason = (f"{level}: call exhibits {len(signals)} manipulation pattern(s) — "
               + "; ".join(signals) + ".") if signals else \
              "No scam-script manipulation patterns detected."
-    return _fmt(level, round(score, 3), reason, signals)
+    return _fmt(level, round(score, 3), reason, signals, rule_categories)
 
 
-def _fmt(level, score, reason, signals):
+def _fmt(level, score, reason, signals, rule_categories=None):
     action = {
         "FRAUD": "Hang up. No real officer arrests over a call/UPI. Report to 1930.",
         "SUSPICIOUS": "Be cautious. End call and verify via official department number.",
         "REAL": "No manipulation detected. Stay alert anyway.",
     }[level]
     return {"risk_level": level, "score": score, "reason": reason,
-            "signals": signals, "recommended_action": action}
+            "signals": signals, "recommended_action": action,
+            "rule_categories": rule_categories or []}
 
 
 if __name__ == "__main__":
