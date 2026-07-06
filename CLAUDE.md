@@ -152,6 +152,57 @@ this to anyone who might assume "ML-trained" means "trained on real incident dat
    annotated Hindi or code-mixed corpus. This is a real gap against the target user base (elderly/
    rural users are at least as likely to receive scam messages in Devanagari as in Hinglish).
 
+### 6.3 Rule-category coverage is cross-referenced against Sanchar Saathi/Chakshu's official taxonomy
+
+`ml/detector.py::HIGH_RISK_PATTERNS` category set (2026-07-07 addition: `relative_impersonation`,
+`telecom_impersonation`, `extortion_threat`) was chosen by cross-referencing the fraud categories
+Sanchar Saathi's Chakshu facility actually tracks for citizen reports (impersonation of
+police/CBI/customs/UIDAI/RBI, KYC/payment fraud, telecom-connection/SIM misuse, job/lottery/loan
+offers — see `data/scraper.py::scrape_sanchar_saathi`'s FAQ scrape for the same list), not invented
+ad hoc. The three additions filled gaps against that list that no existing category covered:
+family-member-in-distress impersonation, DoT/TRAI/telecom-operator impersonation specifically (as
+opposed to police/CBI/ED, already covered by `authority_impersonation`), and blackmail/sextortion
+(threat of exposure + payment demand, a category Chakshu tracks separately from bank/authority
+fraud). Chakshu itself remains a one-way citizen-report portal with no public read API or feed — see
+the note on this in the Section 1 table — this cross-reference is against its published category
+taxonomy, not a data feed.
+
+Same process as the 2026-07-06 batch-expansion: candidate phrasings were LLM-drafted offline (no
+separate tool — this conversation's model, prompted to paraphrase each category's script into
+English/Hinglish/Devanagari variants), then hand-consolidated into regex requiring the *combination*
+of signals a real script actually needs (e.g. `relative_impersonation` requires a distress/new-number
+claim co-occurring with a money-transfer verb, not bare presence of "beta"/"mom" — see the code
+comment above that category for the false-positive case this was tuned against). `extortion_threat`
+is deliberately structural rather than script-based: every pattern requires a threat clause and a
+payment clause together, so a single hit already carries the weight of two independent categories
+(see the score bump in `predict()`).
+
+Gated the same way: `rakshak_eval_testset.json` grew from 36 to 52 cases (3 scam + 2 false-positive-
+bait per new category, symmetrically for all three, not just telecom, plus one deliberately-failing
+case — see below), and both `eval_testset.py` (phone-app path, with and without the LLM explanation
+layer) and `eval_rag_testset.py` (WhatsApp bot's RAG path) were re-run before these patterns were
+considered promoted: 100% recall across every category including the three new ones, 0%
+false_positive_bait FPR on every case except the one intentional exception, no regression on the
+pre-existing 36 cases.
+
+One drafted false-positive-bait case — a benign "beta, I've sent your college fees" message
+(`"Beta, maine tumhare college fees ke liye 20000 rupaye tumhare account mein transfer kar diye
+hain, check kar lena aur confirm karna."`) — tripped the pre-existing ML baseline at 0.512
+(SUSPICIOUS, not FRAUD), independent of any new rule pattern (`rule_categories: []`). Feature-
+attribution analysis confirmed the base ~31-template classifier (prototype-grade training data,
+item 1 above) associates `account`/`transfer`/`rupaye`/4-5-digit amounts with FRAUD regardless of
+tense or family context — it can't tell "I already sent you money" from "send me money now." A
+reworded, passing variant was kept as `fp18`; the original failing text was deliberately kept too,
+as `fp24`, flagged `"known_failing": true` with a `"known_failing_note"` explaining why — a real,
+pre-identified target for Day 2's gated retraining pipeline to validate against once it exists.
+`eval_testset.py` will report `fp24` as a false positive on every run until that pipeline lands; this
+is expected and documented in the JSON's own top-level `notes`, not a regression to chase.
+
+None of the three new categories were added to `NEAR_DETERMINISTIC_RULES` — that override is mirrored
+in Android's `DecisionAgent.NEAR_DETERMINISTIC_RULE_CATEGORIES` for Tier 3b auto-escalation gating,
+and deciding whether any of these three should eventually gate Tier 3b is a separate, deliberate
+cross-platform decision, not a byproduct of this expansion.
+
 ---
 
 ## 7. New Android permission implied by this revision

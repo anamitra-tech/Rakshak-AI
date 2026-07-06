@@ -157,6 +157,66 @@ HIGH_RISK_PATTERNS = {
         r"कार्ड.{0,15}(लेने आएगा|लेने आएंगे|सुपुर्द|जमा|दें)",
         r"पिन.{0,10}(नोट कर|लिख)",
     ],
+    # Added 2026-07-07, cross-referenced against Sanchar Saathi/Chakshu's
+    # official fraud-report categories (see CLAUDE.md Section 6.3) — three
+    # gaps not previously covered by any HIGH_RISK_PATTERNS category:
+    #
+    # Caller claims to BE a relative/friend in sudden distress (accident,
+    # arrest, lost phone/new number) and asks the victim to send money —
+    # the "digital arrest"-adjacent family-emergency script. Deliberately
+    # requires the distress claim to co-occur with a money-transfer verb (or
+    # the secrecy framing) within one message, not bare presence of a
+    # relative word — "beta"/"mom" alone is ordinary family chat (see fp10).
+    # The secrecy variant ("don't tell dad") is intentionally narrower than
+    # isolation_tactics' generic "don't tell family" patterns: this ties the
+    # secrecy explicitly to the distress/money ask, so the two categories
+    # reinforce rather than duplicate each other when they co-occur (see the
+    # explicit score bump in predict() below).
+    "relative_impersonation": [
+        r"(trouble|musibat|mushkil|accident|emergency|problem).{0,100}(transfer|send money|bhej(o)?|jama karo|paisa|paise|chahiye|money|urgently need)",
+        r"(transfer|send money|bhej(o)?|jama karo|paisa|paise|chahiye|money|urgently need).{0,100}(trouble|musibat|mushkil|accident|emergency|problem)",
+        r"(lost my phone|phone kho gaya|this is (a friend'?s|my new) number|naya number hai).{0,100}(transfer|send|bhej|paisa|paise|money|urgent(ly)?)",
+        r"(don'?t tell (dad|papa|mom|mummy|anyone|family)|kisi ko mat batana|mat batana).{0,100}(trouble|transfer|send|bhej|paise|money)",
+        r"(trouble|transfer|send|bhej|paise|money).{0,100}(don'?t tell (dad|papa|mom|mummy|anyone|family)|kisi ko mat batana|mat batana)",
+        r"(friend|dost|colleague).{0,60}(call|contact|milega|baat karega).{0,80}(send|bhej|transfer|paise|money|kuch bhejne)",
+    ],
+    # A specific variant of authority_impersonation: caller poses as
+    # DoT/TRAI/the telecom operator itself rather than police/CBI/ED —
+    # "your SIM/number will be disconnected", "unauthorized documents were
+    # used to issue a connection in your name" (real Sanchar Saathi SIM-swap
+    # / fraudulent-connection advisory categories). Kept as its own category
+    # rather than folded into authority_impersonation so the two can be
+    # told apart in signals/telemetry, but treated identically to
+    # authority_impersonation in the critical-combo check below. The
+    # disconnect pattern requires an explicit sim/mobile/telecom qualifier —
+    # bare "connection" alone also matches ordinary electricity/gas
+    # disconnection notices (caught against es8 in rakshak_eval_testset.json
+    # during manual testing before this was tightened).
+    "telecom_impersonation": [
+        r"\btrai\b",
+        r"department of telecommunications",
+        r"\bdot\b.{0,30}(notice|department|officer)",
+        r"(sim( card)?|mobile number|telecom (number|connection)|mobile connection).{0,40}(band|disconnect(ed)?|block(ed)?|deactivat(ed|e)?|suspend(ed)?)",
+        r"(unauthorized|fraudulent|illegal).{0,30}(sim|document|connection).{0,30}(your name|aapke naam|issued|activate)",
+    ],
+    # Structural, not script-based by design: fires only when a threat of
+    # exposure/leak (video/photo/recording) co-occurs with a payment demand
+    # in the same message — the sextortion/blackmail category Sanchar
+    # Saathi/Chakshu tracks separately from bank/authority impersonation.
+    # Each pattern requires both the threat clause and the demand clause
+    # together (either order); no legitimate context pairs "we'll leak your
+    # video" with "pay now", so this stays a plain contributing category
+    # rather than NEAR_DETERMINISTIC_RULES for now — that override is also
+    # mirrored in Android's DecisionAgent.NEAR_DETERMINISTIC_RULE_CATEGORIES
+    # for Tier 3b gating, and extending that cross-platform contract wasn't
+    # part of this change.
+    "extortion_threat": [
+        r"(leak|expose|share|send|upload|release|publish|viral)\w*.{0,60}(video|photo|picture|recording|screenshot|clip|image).{0,80}(pay|transfer|send (money|payment)|bitcoin|crypto|\bupi\b)",
+        r"(pay|transfer|send (money|payment)|bitcoin|crypto|\bupi\b).{0,80}(otherwise|warna|or (we|i) will|nahi to).{0,40}(leak|expose|share|send|upload|release|publish|viral)\w*.{0,20}(video|photo|picture|recording|screenshot|clip|image)",
+        r"(video|photo|tasveer(ein)?).{0,60}(viral|leak|bhej denge|share kar denge|de denge).{0,80}(paisa|paise|payment|rupya|bhugtan|upi)",
+        r"(video|photo|tasveer(ein)?).{0,80}(payment|paisa|paise|rupya|bhugtan|upi).{0,80}(bhej denge|share kar denge|de denge|viral|leak)",
+        r"(recorded|record kar liya|access to your (device|phone|camera)|hacked your).{0,80}(pay|transfer|bitcoin|paisa|paise|payment|upi)",
+    ],
 }
 
 # Surfaced verbatim to the user when the matching near-deterministic rule
@@ -296,11 +356,29 @@ class ScamDetector:
             score = max(score, 0.55)
         score = min(1.0, score + 0.05 * rule_weight)
 
-        # Critical combo: authority impersonation + (money OR credential) = digital arrest
-        if "authority_impersonation" in rules and (
+        # Critical combo: authority impersonation + (money OR credential) = digital arrest.
+        # telecom_impersonation is a specific variant of authority_impersonation
+        # (DoT/TRAI posing rather than police/CBI/ED posing) — same combo,
+        # same elevation.
+        if ("authority_impersonation" in rules or "telecom_impersonation" in rules) and (
             "money_demand" in rules or "credential_request" in rules
         ):
             score = max(score, 0.95)
+
+        # relative_impersonation + isolation_tactics co-occurrence: the
+        # family-emergency script's distress/money ask combined with an
+        # explicit "don't tell/verify" instruction is the same reinforcing
+        # pattern as the authority-impersonation combo above.
+        if "relative_impersonation" in rules and "isolation_tactics" in rules:
+            score = max(score, 0.95)
+
+        # extortion_threat is structural by construction — every pattern in
+        # that category already requires a threat clause AND a payment
+        # clause together, so a single hit here carries the same weight as
+        # two independent categories elsewhere (see rule_categories >= 2
+        # above).
+        if "extortion_threat" in rules:
+            score = max(score, 0.85)
 
         # Near-deterministic overrides (isolation tactics, OTP/PIN readout
         # requests, in-person card collection) — each is near-certain scam on
@@ -330,6 +408,9 @@ class ScamDetector:
             "isolation_tactics": "Discourages independent verification (bank/police/family)",
             "otp_readout_request": "Asks you to read out your OTP/PIN/CVV over the call",
             "card_collection_request": "Arranges in-person collection of your card, or asks you to keep the PIN ready",
+            "relative_impersonation": "Claims to be a family member/friend in sudden distress asking for urgent money",
+            "telecom_impersonation": "Impersonates DoT/TRAI/your telecom operator, threatening SIM/number disconnection",
+            "extortion_threat": "Threatens to leak private content unless paid (blackmail/sextortion framing)",
         }
         return [label[k] for k in rules]
 
