@@ -233,11 +233,17 @@ def is_verification_lure(message: str) -> bool:
 
 # ── Intent detection ──────────────────────────────────────────────────────────
 
+_GREETING_REMAINDER_MAX_LEN = 15
+
+
 def detect_intent(message: str) -> str:
     msg = message.strip().lower()
 
-    if any(msg == kw or msg.startswith(kw) for kw in _GREET_KW):
-        return "greeting"
+    greet_kw = next((kw for kw in _GREET_KW if msg == kw or msg.startswith(kw)), None)
+    if greet_kw is not None:
+        remainder = msg[len(greet_kw):].strip(" ,.!-")
+        if len(remainder) <= _GREETING_REMAINDER_MAX_LEN:
+            return "greeting"
 
     if any(kw in msg for kw in _ABOUT_KW):
         return "about"
