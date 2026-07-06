@@ -82,7 +82,16 @@ HIGH_RISK_PATTERNS = {
         r"on (your |my |our )?behalf", r"give me the phone,? i (will|'ll)",
         r"khud (kar dunga|sambhal lunga|karne do)",
         r"(agent|representative|executive|courier) will (come|visit|be sent)",
-        r"(come|visit|aayega) (to|at)? ?(your|the|aapke) (home|house|residence|ghar)",
+        # Tightened 2026-07-06: the bare "visiting your home" clause used to
+        # fire on its own — matched a technician appointment, a courier
+        # delivery, a scheduled inspection, etc. Now requires the visit be
+        # tied to collecting something sensitive (card/documents/cash/PIN),
+        # in either clause order, not just any mention of someone coming home.
+        r"((come|visit|aayega) (to|at)? ?(your|the|aapke) (home|house|residence|ghar).{0,60}"
+        r"(collect|take|le jaane|lene|surrender|hand over).{0,20}(card|documents?|papers?|cash|pin|cheque))"
+        r"|"
+        r"((collect|take|le jaane|lene|surrender|hand over).{0,20}(card|documents?|papers?|cash|pin|cheque).{0,60}"
+        r"(come|visit|aayega) (to|at)? ?(your|the|aapke) (home|house|residence|ghar))",
         r"no need to (visit|go to) the (bank|branch)", r"bank jaane ki zaroorat nahi",
         r"someone will come (to )?collect", r"collect karne",
         # Batch-expanded 2026-07-06: near-deterministic override category —
