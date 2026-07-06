@@ -1,15 +1,24 @@
+import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeoutError
+
 from llm.client import generate
+from ml.detector import ScamDetector
 from rag.store import retrieve
 
-_UNCERTAIN_ANSWER = (
-    "I'm not certain about this one. Some signals match known scam patterns "
-    "but not strongly enough for me to confirm.\n\n"
-    "Do NOT share OTP, Aadhaar, or make any payment until you verify independently.\n\n"
-    "To verify a real bank call: hang up and call the number on the back of your card.\n"
-    "To verify a real government notice: visit the official portal directly — "
-    "no real CBI/ED case is communicated via WhatsApp or phone.\n\n"
-    "If anything feels wrong, call 1930."
-)
+logger = logging.getLogger(__name__)
+
+# Single source of truth for risk_level/score — the same classifier proven at
+# 0% FPR / 100% recall on the phone app's pipeline (see eval_testset.py).
+# FAISS retrieval below is used ONLY to pull the most relevant kb/scams.json
+# card(s) to ground the LLM's explanation text; it no longer decides SCAM/SAFE
+# on its own.
+_DETECTOR = ScamDetector()
+
+# Bounds how long we wait for the LLM explanation chain (Gemini -> Groq ->
+# Ollama) before falling back to the classifier's own built-in reason text —
+# mirrors ml/llm_explainer.py's timeout pattern for the phone-app pipeline.
+_LLM_TIMEOUT_SECONDS = 6.0
+_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="rag-explainer")
 
 _REFUSAL_ANSWER = (
     "This doesn't match any scam pattern I know.\n\n"
@@ -46,7 +55,7 @@ _PROMPT_TEMPLATE = """\
 You are Rakshak, a public safety assistant for Indian citizens.
 A citizen has sent this message: "{user_message}"
 
-Based on our intelligence database, this matches a known scam pattern:
+Our fraud classifier has already assessed this as {risk_level} risk, matching a known scam pattern:
 Scam type: {scam_type}
 What to do: {what_to_do}
 
@@ -97,61 +106,82 @@ def retrieve_and_respond(
         }
 
     post_open = _is_post_open(user_message)
-    results = retrieve(user_message, n=3)
-    score = results[0]["score"] if results else 0.0
+    det = _DETECTOR.predict(user_message)
+    risk_level = det["risk_level"]
 
-    if score < 0.35:
+    if risk_level == "SAFE":
         return {
             "answer": _REFUSAL_ANSWER,
             "source_name": "National Cybercrime Helpline",
             "source_url": "https://cybercrime.gov.in",
             "scam_type": None,
-            "confidence": score,
-            "engine": "refusal_gate",
+            "confidence": det["score"],
+            "engine": "classifier_safe",
             "severity": "",
         }
 
-    if score < 0.5:
-        return {
-            "answer": _UNCERTAIN_ANSWER,
-            "source_name": "National Cybercrime Helpline",
-            "source_url": "https://cybercrime.gov.in",
-            "scam_type": None,
-            "confidence": score,
-            "engine": "uncertain_gate",
-            "severity": "",
-        }
+    results = retrieve(user_message, n=3)
+    top = results[0] if results else None
+    scam_type = top["scam_type"] if top else None
+    what_to_do = top["what_to_do"] if top else det["recommended_action"]
+    source_name = top["source_name"] if top else "National Cybercrime Helpline"
+    source_url = top["source_url"] if top else "https://cybercrime.gov.in"
+    severity = top.get("severity", "") if top else ""
 
-    top = results[0]
-
-    if post_open and top["scam_type"] == "corporate_malware_bec":
+    if post_open and top and top["scam_type"] == "corporate_malware_bec":
         return {
             "answer": top["if_already_opened"],
-            "source_name": top["source_name"],
-            "source_url": top["source_url"],
-            "scam_type": top["scam_type"],
-            "confidence": top["score"],
+            "source_name": source_name,
+            "source_url": source_url,
+            "scam_type": scam_type,
+            "confidence": det["score"],
             "engine": "post_open_gate",
             "severity": "CRITICAL",
         }
 
-    prompt = _PROMPT_TEMPLATE.format(
-        user_message=user_message,
-        scam_type=top["scam_type"],
-        what_to_do=top["what_to_do"],
-    )
-    llm_response = generate(prompt)
-    answer = llm_response.text
+    answer, engine = _explain(user_message, risk_level, scam_type, what_to_do, det)
 
     if post_open:
         answer += _POST_OPEN_APPEND
 
     return {
         "answer": answer,
-        "source_name": top["source_name"],
-        "source_url": top["source_url"],
-        "scam_type": top["scam_type"],
-        "confidence": top["score"],
-        "engine": llm_response.engine,
-        "severity": top.get("severity", ""),
+        "source_name": source_name,
+        "source_url": source_url,
+        "scam_type": scam_type,
+        "confidence": det["score"],
+        "engine": engine,
+        "severity": severity,
     }
+
+
+def _explain(
+    user_message: str,
+    risk_level: str,
+    scam_type: str | None,
+    what_to_do: str,
+    det: dict,
+) -> tuple[str, str]:
+    """Ask the LLM chain to narrate the classifier's already-final verdict,
+    grounded in the retrieved kb card. Never influences risk_level/scam_type —
+    on failure or timeout, falls back to the classifier's own built-in reason
+    text (self._build_reason()), same as the phone-app pipeline."""
+    prompt = _PROMPT_TEMPLATE.format(
+        user_message=user_message,
+        risk_level=risk_level,
+        scam_type=scam_type or "suspicious activity",
+        what_to_do=what_to_do,
+    )
+    future = _executor.submit(generate, prompt, retries=1)
+    try:
+        llm_response = future.result(timeout=_LLM_TIMEOUT_SECONDS)
+        return llm_response.text, llm_response.engine
+    except _FutureTimeoutError:
+        logger.warning(
+            "RAG explanation TIMED OUT after %.1fs — falling back to classifier reason.",
+            _LLM_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        logger.warning("RAG explanation FAILED (%s) — falling back to classifier reason.", exc)
+
+    return f"{det['reason']}\n\n{det['recommended_action']}", "classifier_reason_fallback"
