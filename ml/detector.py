@@ -20,10 +20,25 @@ HIGH_RISK_PATTERNS = {
         r"\bcbi\b", r"\bed\b", r"enforcement directorate", r"\bcustoms\b",
         r"narcotics", r"police\s*(case|arrest)", r"arrest\s*warrant", r"digital\s*arrest",
         r"money\s*laundering",
+        # Batch-expanded 2026-07-06 (see HIGH_RISK_PATTERNS expansion notes):
+        # legal-jeopardy framing that doesn't use the literal cbi/ed/police words.
+        r"case (has been |is )?registered against (you|tumhe|aapko)",
+        r"investigat(ing|ion).{0,20}(your|aapke|aapka) case",
+        r"court (appearance|mein sunwai|sunwaayi)",
+        r"arrest (ki )?notification",
     ],
     "credential_request": [
         r"\botp\b", r"\bcvv\b", r"\bpin\b", r"\bupi\s*pin\b", r"share.*(otp|pin|cvv)",
         r"kyc.*(update|pending|expire)",
+        # Batch-expanded 2026-07-06: soft-signal category (only counts combined
+        # with another category — see SOFT_SIGNAL_CATEGORIES), so covering
+        # synonyms for otp/pin/cvv liberally here is low-risk.
+        r"(security|verification|authentication|transaction) (code|password|number|pin)",
+        r"one-?time (password|security number|key)",
+        r"kyc.{0,20}(confirm|complete|karna|jaankari|details|प्रक्रिया|विवरण)",
+        r"(सुरक्षा|सत्यापन|गोपनीय|गुप्त) (कोड|नंबर|संख्या)",
+        r"(अपना|आपका) .{0,15}(पासवर्ड|कोड|पिन|नंबर|संख्या) .{0,15}(बताएं|दें|डालिए|बताइए)",
+        r"कार्ड.{0,10}पीछे.{0,15}(अंक|नंबर)",
     ],
     "urgency_coercion": [
         r"immediately", r"turant", r"abhi", r"urgent", r"do not (disconnect|tell|cut)",
@@ -32,6 +47,16 @@ HIGH_RISK_PATTERNS = {
     "money_demand": [
         r"send money", r"paise\s*(bhej|transfer)", r"transfer.*now", r"pay.*fee",
         r"processing fee", r"settlement", r"safe (rbi|bank) account",
+        # Batch-expanded 2026-07-06: kept demand-framed (imperative/mandatory)
+        # AND tied to a vague/unusual destination, not bare finance nouns —
+        # "clear pending charges", "pay the processing/service charge", and
+        # "transfer the required amount" (alone) were tried and dropped: all
+        # three false-flagged ordinary gym/passport/loan-EMI fee language in
+        # manual testing before the eval run.
+        r"(deposit|remit|credit|disburse|allocate|forward|transfer) the (required|necessary|mentioned|entire) (sum|amount|funds?|balance) to (this|the (provided|designated|given)|our)",
+        r"(amount|paisa|fund|balance) ko (deposit|pay|bhej|daalo|shift) (karo|karna|kijiye|do)",
+        r"(राशि|धन|फंड) (जमा करें|हस्तांतरण करें|ट्रांसफर करें)",
+        r"(शुल्क|सेवा शुल्क) (जमा करें|भुगतान करना होगा)",
     ],
     "reward_bait": [
         r"lottery", r"kbc", r"won \d+", r"cashback", r"double.*(scheme|profit|24)",
@@ -60,6 +85,20 @@ HIGH_RISK_PATTERNS = {
         r"(come|visit|aayega) (to|at)? ?(your|the|aapke) (home|house|residence|ghar)",
         r"no need to (visit|go to) the (bank|branch)", r"bank jaane ki zaroorat nahi",
         r"someone will come (to )?collect", r"collect karne",
+        # Batch-expanded 2026-07-06: near-deterministic override category —
+        # kept each pattern tied to an explicit discouragement/self-handling
+        # framing, not bare topic words, to avoid flagging ordinary chatter.
+        r"(don'?t|do not) hang up", r"stay on the line",
+        r"disconnect.{0,20}(reset|invalidate|restart)",
+        r"(shouldn'?t|should not|don'?t|avoid).{0,15}(involve|discuss|contact).{0,15}(third part|anyone else|others)",
+        r"(main|hum) (khud |sab (kuch )?)?(kar dunga|karwa dunga|kar lunga|dekh lunga|manage kar (lenge|lunga))",
+        r"(call cut|phone rakh(a|o)|disconnect kiya) (kiya |toh)",
+        r"(parivaar|family) ko.{0,15}mat (laiye|batao|bataiye)",
+        r"kisi (ko|se).{0,20}mat (kariyega|karna|bolna|batana)",
+        r"(sensitive|confidential|gopniya|गोपनीय) (mamla|matter|मामला)",
+        r"batane ki (zaroorat|permission) nahi",
+        r"(kahin|police station|thane) jane ki (koi )?zar[ou]rat nahi",
+        r"contact karne ki (koi )?need nahi",
     ],
     # Reading an OTP/PIN/CVV/one-time code aloud over a call, under any
     # framing ("for verification", "to confirm your identity"). Near-100%
@@ -73,6 +112,17 @@ HIGH_RISK_PATTERNS = {
         r"confirm\s+the\s+(six|four|\d+)[- ]?digit",
         r"(otp|pin|cvv|code)\s+(bata|bol)(o|iye|na|do)?",
         r"(bata|bol)(o|iye|do)\s+(mujhe\s+)?(the\s+)?(otp|pin|cvv|code)",
+        # Batch-expanded 2026-07-06: paraphrased readout requests that avoid
+        # the literal otp/pin/cvv words. Each pattern requires an explicit
+        # request/reference verb (provide/give/showing/displaying/bataen),
+        # not a bare code/number word, since this category overrides the
+        # score to 0.95 on its own — see NEAR_DETERMINISTIC_RULES below.
+        r"(provide|give|share|state|relay|pass on) (us |me )?(the |your )?(otp|one-time password|verification code|security code|authentication code|one-time key)",
+        r"(code|digits|number|figures|password|key) (that |which )?(is |are )?(showing|displaying|received|got so far|came|mila)",
+        r"what('s| is) the (code|number|digits|figures) (that |you )?(received|got|showing|displaying)",
+        r"(aapke|aapka) (mobile|phone|number) par (aaya|aayi|mila) hua",
+        r"(chh|chaar|char)-?ankiya (number|pin|code)",
+        r"ओटीपी.{0,12}(बताएं|बताइए|दें|सूचित करें|चाहिए)",
     ],
     # Someone arriving in person to physically take an EXISTING/active card
     # (or asking the PIN be kept ready/written down for them) — as opposed to
@@ -84,6 +134,19 @@ HIGH_RISK_PATTERNS = {
         r"give\s+.{0,10}(your|the) card to",
         r"keep\s+(the|your) pin (ready|written down)",
         r"card\s+(collect|le)\s+karne", r"pin\s+likh\s+kar\s+rakho",
+        # Batch-expanded 2026-07-06: broader verbs/roles for the same
+        # in-person-card-collection intent, plus PIN-note-down phrasing not
+        # already covered by "keep the pin ready/written down".
+        r"(representative|executive|agent|associate|staff member|individual).{0,20}(collect|receive|obtain|acquire|procure).{0,15}card",
+        r"(dispatch|send|bhej rahe).{0,15}(executive|agent|representative|banda|aadmi|ladka|kisi ko).{0,20}card",
+        r"surrender (your |the )?.{0,15}card",
+        r"present your card to",
+        r"card.{0,10}(jama|deposit|surrender).{0,10}(karna|karana) hoga",
+        r"(hamara|humara) (banda|aadmi) .{0,15}card",
+        r"pin.{0,15}(jot(ted)? down|note(d)? (down|on)|likh (lo|lena|kar))",
+        r"pin.{0,10}(kagaz|paper|diary) par",
+        r"कार्ड.{0,15}(लेने आएगा|लेने आएंगे|सुपुर्द|जमा|दें)",
+        r"पिन.{0,10}(नोट कर|लिख)",
     ],
 }
 
@@ -140,6 +203,11 @@ BENIGN_CONTEXT = [
     r"do not share (it|this|your otp)", r"never share", r"(will )?never ask",
     r"otp (is|for).*\d{4,}", r"debited from a/c", r"credited to your",
     r"- ?(hdfc|icici|sbi|axis|kotak|bank)", r"not you\??\s*call",
+    # Devanagari counterpart, added alongside the 2026-07-06 Hindi-script
+    # otp_readout_request patterns above — a real bank SMS warning the user
+    # not to share their OTP in Hindi must be exempted the same way the
+    # English "do not share" phrasing already is.
+    r"किसी को (मत|न) (बताएं|बोलना|बताना)",
 ]
 
 # credential_request and urgency_coercion match on common, individually
