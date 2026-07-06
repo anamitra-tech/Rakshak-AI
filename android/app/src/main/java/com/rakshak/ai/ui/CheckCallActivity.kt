@@ -39,7 +39,14 @@ class CheckCallActivity : AppCompatActivity() {
             return
         }
         val phoneNumber = binding.phoneInput.text?.toString().orEmpty().trim()
-        val sessionId = phoneNumber.ifBlank { "manual-check" }
+        // A fixed fallback id here would let unrelated anonymous checks share
+        // server-side session history (see /analyze_session in ml/session.py,
+        // which accumulates events per session_id with no TTL) — a scam text
+        // checked hours ago would then flag an unrelated, unnamed message
+        // tested later as a "repeated"/"sustained" session. Only a real phone
+        // number identifies a genuine recurring caller worth tracking across
+        // checks; every anonymous check gets its own one-shot id instead.
+        val sessionId = phoneNumber.ifBlank { "anon-${java.util.UUID.randomUUID()}" }
 
         binding.resultText.visibility = View.VISIBLE
         binding.resultText.text = getString(R.string.check_call_loading)
