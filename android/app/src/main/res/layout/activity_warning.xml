@@ -74,6 +74,56 @@
                 android:textSize="16sp"
                 android:visibility="gone" />
 
+            <!--
+              Feedback disclosure — same "read-only until tapped, doesn't
+              compete with primaryActionButton/helpActionButton" reasoning as
+              whyToggle above: tapping this only reveals two more buttons in
+              this scrollable region, it never becomes a second pinned action.
+            -->
+            <TextView
+                android:id="@+id/feedbackToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:padding="8dp"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:text="@string/feedback_toggle_label" />
+
+            <LinearLayout
+                android:id="@+id/feedbackButtons"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <Button
+                    android:id="@+id/feedbackPositiveButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/feedback_positive_button" />
+
+                <Button
+                    android:id="@+id/feedbackNegativeButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    tools:text="@string/feedback_negative_not_scam_button" />
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/feedbackThanksText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:visibility="gone"
+                android:text="@string/feedback_thanks" />
+
             <TextView
                 android:id="@+id/statusText"
                 android:layout_width="match_parent"

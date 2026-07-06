@@ -20,6 +20,9 @@ import feedparser
 import httpx
 from bs4 import BeautifulSoup
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from feedback.store import log_advisory_ingestion
+
 sys.stdout.reconfigure(encoding="utf-8")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -375,6 +378,22 @@ def scrape_sanchar_saathi(client: httpx.Client) -> list:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _log_ingestions(source: str, cards: list) -> None:
+    """Append-only ingestion-event log, separate from kb/scams.json (which
+    holds the curated/classified merged output) — see feedback/store.py."""
+    for card in cards:
+        try:
+            log_advisory_ingestion(
+                source=source,
+                card_id=card["id"],
+                title=card["title"],
+                source_url=card.get("source_url"),
+                scam_type=card.get("scam_type"),
+            )
+        except Exception as exc:
+            log.warning("feedback ingestion log failed for %s: %s", card.get("id"), exc)
+
+
 if __name__ == "__main__":
     with httpx.Client(headers=HEADERS) as client:
         csk = scrape_csk(client)
@@ -382,6 +401,10 @@ if __name__ == "__main__":
         pib = scrape_pib(client)
         time.sleep(DELAY)
         ss = scrape_sanchar_saathi(client)
+
+    _log_ingestions("CSK", csk)
+    _log_ingestions("PIB", pib)
+    _log_ingestions("Sanchar Saathi", ss)
 
     (RAW_DIR / "csk_cards.json").write_text(
         json.dumps(csk, indent=2, ensure_ascii=False), encoding="utf-8"

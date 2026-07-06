@@ -54,6 +54,7 @@ object DecisionAgent {
             reasons = reasons.distinct(),
             suspectedScamType = lookup.suspectedScamType,
             ruleCategories = textAnalysis?.ruleCategories ?: emptyList(),
+            rawLabel = textAnalysis?.rawLabel,
         )
     }
 

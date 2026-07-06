@@ -14,6 +14,7 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.rakshak.ai.R
 import com.rakshak.ai.RakshakApp
 import com.rakshak.ai.databinding.ActivityWarningBinding
@@ -21,6 +22,7 @@ import com.rakshak.ai.escalation.EscalationOrchestrator
 import com.rakshak.ai.escalation.NotifyResult
 import com.rakshak.ai.intelligence.DecisionResult
 import com.rakshak.ai.intelligence.RiskLevel
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
@@ -53,6 +55,8 @@ class WarningActivity : AppCompatActivity() {
     private var reasons: List<String> = emptyList()
     private var phoneNumber: String = ""
     private var transcript: String? = null
+    private var ruleCategories: List<String> = emptyList()
+    private var rawLabel: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,11 +72,14 @@ class WarningActivity : AppCompatActivity() {
         phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER).orEmpty()
         transcript = intent.getStringExtra(EXTRA_TRANSCRIPT)
         autoSilenced = intent.getBooleanExtra(EXTRA_AUTO_SILENCED, false)
+        ruleCategories = intent.getStringArrayListExtra(EXTRA_RULE_CATEGORIES).orEmpty()
+        rawLabel = intent.getStringExtra(EXTRA_RAW_LABEL)
 
         renderTrafficLight(riskLevel, headline)
         renderPhoneNumber(phoneNumber)
         renderReasons(reasons)
         showWarningState()
+        setUpFeedback()
 
         // Fires for every path that reaches this Activity — the manual
         // "check a message" flow (CheckCallActivity) and the automatic
@@ -184,6 +191,46 @@ class WarningActivity : AppCompatActivity() {
         binding.whyToggle.visibility = if (reasons.isEmpty()) View.GONE else View.VISIBLE
     }
 
+    /**
+     * "Was this right?" — read-only disclosure until tapped, same posture as
+     * whyToggle (CLAUDE.md 9.2: doesn't compete with the single primary
+     * action button). The negative-button label is chosen from the verdict
+     * itself: a HIGH/MEDIUM verdict only needs "this wasn't a scam" as the
+     * correction, a LOW verdict only needs "this should have been flagged" —
+     * the direction of the correction is implied by what was shown, so one
+     * button covers it instead of a generic thumbs-down.
+     */
+    private fun setUpFeedback() {
+        binding.feedbackToggle.setOnClickListener {
+            binding.feedbackToggle.visibility = View.GONE
+            binding.feedbackButtons.visibility = View.VISIBLE
+        }
+        binding.feedbackNegativeButton.text = getString(
+            if (riskLevel == RiskLevel.LOW) R.string.feedback_negative_should_flag_button
+            else R.string.feedback_negative_not_scam_button
+        )
+        binding.feedbackPositiveButton.setOnClickListener { recordFeedback("confirmed_correct") }
+        binding.feedbackNegativeButton.setOnClickListener {
+            recordFeedback(if (riskLevel == RiskLevel.LOW) "should_have_been_flagged" else "not_a_scam")
+        }
+    }
+
+    private fun recordFeedback(userCorrection: String) {
+        binding.feedbackButtons.visibility = View.GONE
+        binding.feedbackThanksText.visibility = View.VISIBLE
+        val app = application as RakshakApp
+        lifecycleScope.launch {
+            app.prahariApiClient.submitFeedback(
+                channel = "android_warning",
+                originalText = transcript ?: phoneNumber,
+                verdict = rawLabel ?: riskLevel.name,
+                ruleCategories = ruleCategories,
+                userCorrection = userCorrection,
+                sessionId = phoneNumber.ifBlank { null },
+            )
+        }
+    }
+
     private fun showWarningState() {
         binding.primaryActionButton.visibility = View.VISIBLE
         binding.helpActionButton.visibility = View.GONE
@@ -254,6 +301,8 @@ class WarningActivity : AppCompatActivity() {
         private const val EXTRA_PHONE_NUMBER = "phone_number"
         private const val EXTRA_AUTO_SILENCED = "auto_silenced"
         private const val EXTRA_TRANSCRIPT = "transcript"
+        private const val EXTRA_RULE_CATEGORIES = "rule_categories"
+        private const val EXTRA_RAW_LABEL = "raw_label"
 
         fun buildIntent(
             context: Context,
@@ -269,6 +318,8 @@ class WarningActivity : AppCompatActivity() {
             putExtra(EXTRA_PHONE_NUMBER, phoneNumber)
             putExtra(EXTRA_AUTO_SILENCED, autoSilenced)
             putExtra(EXTRA_TRANSCRIPT, transcript)
+            putStringArrayListExtra(EXTRA_RULE_CATEGORIES, ArrayList(decision.ruleCategories))
+            putExtra(EXTRA_RAW_LABEL, decision.rawLabel)
         }
     }
 }

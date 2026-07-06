@@ -54,6 +54,32 @@ class PrahariHttpApiClient(
             )
         }
 
+    override suspend fun submitFeedback(
+        channel: String,
+        originalText: String,
+        verdict: String,
+        ruleCategories: List<String>,
+        userCorrection: String,
+        sessionId: String?,
+    ) {
+        withContext(Dispatchers.IO) {
+            try {
+                val body = JSONObject()
+                    .put("channel", channel)
+                    .put("original_text", originalText)
+                    .put("verdict", verdict)
+                    .put("rule_categories", org.json.JSONArray(ruleCategories))
+                    .put("user_correction", userCorrection)
+                    .apply { sessionId?.let { put("session_id", it) } }
+                    .toString()
+                post("/feedback", body)
+            } catch (e: PrahariUnavailableException) {
+                // Best-effort, log-only path — never let this surface as an
+                // error in the UI (see interface doc).
+            }
+        }
+    }
+
     private fun post(path: String, jsonBody: String): JSONObject {
         val request = Request.Builder()
             .url(baseUrl.trimEnd('/') + path)

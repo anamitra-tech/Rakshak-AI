@@ -29,6 +29,7 @@ from graph.fraud_graph import (
 from ml.detector import ScamDetector
 from ml.session import FraudSessionDetector
 from voice.voice_fraud import analyze_transcript
+from feedback.store import log_correction
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
@@ -77,6 +78,29 @@ _LANG_COMMANDS = {
     "hindi": "hi", "hi": "hi", "hindi mein": "hi",
     "both": "both", "donon": "both", "दोनों": "both",
 }
+
+# In-memory per-number "last verdict shown" — same no-DB-layer pattern as
+# _lang_prefs above. Holds just enough to log a correction if the very next
+# message is feedback on it; never read by any classification path.
+_last_verdict: dict[str, dict] = {}
+
+_FEEDBACK_POSITIVE = {"👍", "correct", "right", "sahi", "sahi hai", "yes correct"}
+_FEEDBACK_NEGATIVE = {
+    "👎", "wrong", "incorrect", "galat", "galat hai",
+    "not a scam", "this wasn't a scam", "this wasn't actually a scam",
+    "should have been flagged", "missed this", "yeh scam nahi tha",
+}
+
+
+def _resolve_feedback(text: str) -> bool | None:
+    """None if `text` isn't a feedback reply; else True (confirmed correct)
+    or False (user is correcting the verdict)."""
+    stripped = text.strip().lower()
+    if stripped in _FEEDBACK_POSITIVE:
+        return True
+    if stripped in _FEEDBACK_NEGATIVE:
+        return False
+    return None
 
 
 def _resolve_language(session_id: str, text: str) -> str:
@@ -137,6 +161,15 @@ def _build_reply(decision: dict, lang: str) -> str:
         lines.append(action_en)
         lines.append(action_hi)
 
+    lines.append("")
+    if lang == "hi":
+        lines.append("क्या यह सही था? 👍 सही / 👎 गलत")
+    elif lang == "both":
+        lines.append("Was this right? 👍 correct / 👎 wrong")
+        lines.append("क्या यह सही था? 👍 सही / 👎 गलत")
+    else:
+        lines.append("Was this right? Reply 👍 correct / 👎 wrong")
+
     return "\n".join(lines)
 
 
@@ -152,10 +185,48 @@ async def whatsapp_webhook(
             return Response(content="", media_type="application/xml")
 
         lang = _resolve_language(session_id, text)
+
+        # Feedback on the verdict shown for the *previous* message, not a new
+        # thing to classify — log it and stop, don't run it through the
+        # classifier as if it were caller text.
+        feedback = _resolve_feedback(text)
+        pending = _last_verdict.get(session_id)
+        if feedback is not None and pending is not None:
+            verdict = pending["verdict"]
+            if feedback:
+                user_correction = "confirmed_correct"
+            elif verdict != "REAL":
+                user_correction = "not_a_scam"
+            else:
+                user_correction = "should_have_been_flagged"
+
+            log_correction(
+                channel="whatsapp",
+                original_text=pending["original_text"],
+                verdict=verdict,
+                rule_categories=pending["rule_categories"],
+                user_correction=user_correction,
+                session_id=session_id,
+            )
+            del _last_verdict[session_id]
+
+            thanks = "Thanks — recorded." if lang != "hi" else "धन्यवाद — दर्ज कर लिया गया।"
+            if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+                client = TwilioRestClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+                client.messages.create(from_=TWILIO_WHATSAPP_FROM, to=From, body=thanks)
+            logging.info(f"whatsapp session={session_id} | feedback logged | correction={user_correction}")
+            return Response(content="", media_type="application/xml")
+
         text_analysis = analyze_transcript(text, DETECTOR)
         session_analysis = SESSION.ingest(session_id, text)
         decision = _decide(text_analysis, session_analysis)
         reply = _build_reply(decision, lang)
+
+        _last_verdict[session_id] = {
+            "original_text": text,
+            "verdict": decision["risk_level"],
+            "rule_categories": text_analysis.get("rule_categories", []),
+        }
 
         logging.info(
             f"whatsapp session={session_id} | risk={decision['risk_level']} | "
@@ -176,6 +247,31 @@ async def whatsapp_webhook(
     # Acknowledge the webhook itself; the actual reply (if any) was already
     # sent above via the Twilio REST API, not via this TwiML response.
     return Response(content="", media_type="application/xml")
+
+
+class FeedbackRequest(BaseModel):
+    channel: str
+    original_text: str
+    verdict: str
+    rule_categories: list[str] = []
+    user_correction: str
+    session_id: str | None = None
+
+
+@app.post("/feedback")
+async def feedback(req: FeedbackRequest):
+    """Log-only — see feedback/store.py. Exposed on this process too (not
+    just api/server.py:8000) so the same endpoint shape is reachable and
+    testable regardless of which Prahari process a client is pointed at."""
+    row_id = log_correction(
+        channel=req.channel,
+        original_text=req.original_text,
+        verdict=req.verdict,
+        rule_categories=req.rule_categories,
+        user_correction=req.user_correction,
+        session_id=req.session_id,
+    )
+    return {"ok": True, "id": row_id}
 
 # ── Missed-escalation evidence delivery ──────────────────────────────────
 # Separate agent from the fixed Tier 1-4 sequence: Android detects a Tier 2

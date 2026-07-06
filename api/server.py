@@ -19,6 +19,9 @@ Endpoints
   GET  /geo/analyze
   POST /geo/seed
   POST /case/generate         {text?, transcript?, url?, session_id?, subject?}
+  POST /feedback              {channel, original_text, verdict, rule_categories?,
+                                user_correction, session_id?} -> log only, no
+                                effect on any live decision (see feedback/store.py)
 """
 import json
 import os
@@ -36,6 +39,7 @@ from graph.fraud_graph import FraudGraph
 from geo.geo_fraud import GeoFraudLayer, demo_points
 from casefile.case_generator import generate_case
 from data.synth import generate_fraud_graph
+from feedback.store import log_correction
 
 print("Loading models...", file=sys.stderr)
 DETECTOR = ScamDetector()
@@ -124,6 +128,16 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/geo/seed":
                 GEO.bulk_add(demo_points())
                 return self._send({"ok": True, "seeded": True})
+            if p == "/feedback":
+                row_id = log_correction(
+                    channel=b["channel"],
+                    original_text=b["original_text"],
+                    verdict=b["verdict"],
+                    rule_categories=b.get("rule_categories", []),
+                    user_correction=b["user_correction"],
+                    session_id=b.get("session_id"),
+                )
+                return self._send({"ok": True, "id": row_id})
             if p == "/case/generate":
                 mr = DETECTOR.predict(b["text"]) if b.get("text") else None
                 vr = analyze_transcript(b["transcript"], DETECTOR) if b.get("transcript") else None

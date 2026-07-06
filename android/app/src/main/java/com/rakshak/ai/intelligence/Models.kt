@@ -44,4 +44,9 @@ data class DecisionResult(
     /** Propagated from the text analysis, if any — empty for the pre-connect
      *  CallScreeningService path, which has no transcript to run rules on. */
     val ruleCategories: List<String> = emptyList(),
+    /** Prahari's own SAFE/SUSPICIOUS/FRAUD label when a text analysis ran;
+     *  null for the lookup-only pre-connect path, which has no such label.
+     *  Used for feedback logging so the recorded verdict matches server
+     *  vocabulary, not just the coarser local RiskLevel. */
+    val rawLabel: String? = null,
 )
