@@ -132,6 +132,17 @@ HIGH_RISK_PATTERNS = {
         r"(aapke|aapka) (mobile|phone|number) par (aaya|aayi|mila) hua",
         r"(chh|chaar|char)-?ankiya (number|pin|code)",
         r"ओटीपी.{0,12}(बताएं|बताइए|दें|सूचित करें|चाहिए)",
+        # Added: "confirm the verification code" / "confirm the code on your
+        # screen" style phrasing — a "confirm" framing rather than the
+        # read/tell/share verbs above, and with no digit-count word, which
+        # let it slip past every existing pattern (see the "case file ...
+        # confirm the verification code" trace this was found from). This is
+        # a common real-world readout framing: the caller isn't asking you to
+        # "read out" anything by name, just to "confirm" what's already on
+        # your screen — but the effect (getting the code spoken aloud) is
+        # identical.
+        r"confirm\s+the\s+(verification|security|authentication|transaction)\s+code",
+        r"confirm\s+the\s+code\s+(that'?s\s+|currently\s+|showing\s+)?on\s+(your|the)\s+screen",
     ],
     # Someone arriving in person to physically take an EXISTING/active card
     # (or asking the PIN be kept ready/written down for them) — as opposed to
@@ -394,11 +405,11 @@ class ScamDetector:
         else:
             level = "SAFE"
 
-        signals = self._build_signals(rules)
-        reason = self._build_reason(level, rules, ml_fraud)
+        signals = self.build_signals(rules)
+        reason = self.build_reason(level, rules, ml_fraud)
         return self._format(level, round(score, 3), reason, signals, rules)
 
-    def _build_signals(self, rules):
+    def build_signals(self, rules):
         label = {
             "authority_impersonation": "Impersonates law-enforcement / govt authority",
             "credential_request": "Requests OTP/PIN/CVV/KYC credentials",
@@ -414,7 +425,12 @@ class ScamDetector:
         }
         return [label[k] for k in rules]
 
-    def _build_reason(self, level, rules, ml):
+    def build_reason(self, level, rules, ml):
+        """Single source of truth for the user-facing explanation, shared by
+        every caller (message path here, voice/voice_fraud.py's
+        analyze_transcript(), rag/retriever.py's fallback) so the displayed
+        reason always traces back to the same rule_categories that drove the
+        score — never an independently-matched, unsynchronized signal set."""
         if not rules:
             if level == "SAFE":
                 return "No fraud patterns detected; language consistent with legitimate messaging."
@@ -422,7 +438,7 @@ class ScamDetector:
         deterministic_hits = [k for k in NEAR_DETERMINISTIC_RULES if k in rules]
         if deterministic_hits:
             return " ".join(NEAR_DETERMINISTIC_RULES[k] for k in deterministic_hits)
-        parts = self._build_signals(rules)
+        parts = self.build_signals(rules)
         return f"{level}: detected {len(parts)} risk signal(s) — " + "; ".join(parts) + "."
 
     def _format(self, level, score, reason, signals, rules):

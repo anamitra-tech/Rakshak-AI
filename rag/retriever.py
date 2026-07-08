@@ -165,7 +165,7 @@ def _explain(
     """Ask the LLM chain to narrate the classifier's already-final verdict,
     grounded in the retrieved kb card. Never influences risk_level/scam_type —
     on failure or timeout, falls back to the classifier's own built-in reason
-    text (self._build_reason()), same as the phone-app pipeline."""
+    text (self.build_reason()), same as the phone-app pipeline."""
     prompt = _PROMPT_TEMPLATE.format(
         user_message=user_message,
         risk_level=risk_level,
