@@ -14,6 +14,7 @@ import com.rakshak.ai.RakshakApp
 import com.rakshak.ai.intelligence.DecisionAgent
 import com.rakshak.ai.intelligence.DecisionResult
 import com.rakshak.ai.intelligence.RiskLevel
+import com.rakshak.ai.intelligence.normalizePhoneNumber
 import com.rakshak.ai.ui.WarningActivity
 import kotlinx.coroutines.runBlocking
 
@@ -33,7 +34,10 @@ class RakshakCallScreeningService : CallScreeningService() {
         val app = application as RakshakApp
 
         val lookup = runBlocking { app.callerLookupSource.lookup(number) }
-        val decision = DecisionAgent.decide(lookup)
+        val isTrustedContact = number.isNotBlank() &&
+            app.settings.trustedContactPhone.isNotBlank() &&
+            normalizePhoneNumber(number) == normalizePhoneNumber(app.settings.trustedContactPhone)
+        val decision = DecisionAgent.decide(lookup, isTrustedContact = isTrustedContact)
 
         val autoSilenced = decision.riskLevel == RiskLevel.HIGH
         val response = CallResponse.Builder()

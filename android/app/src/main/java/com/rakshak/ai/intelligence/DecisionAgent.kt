@@ -9,11 +9,14 @@ package com.rakshak.ai.intelligence
 object DecisionAgent {
 
     /**
-     * Mirrors ml/detector.py's NEAR_DETERMINISTIC_RULES keys exactly — kept as
-     * raw category strings (not fuzzy-matched signal text) so Tier 3b's
-     * "only near-deterministic rules, never the base ML score alone" gate is
-     * precise. If the backend ever adds a new near-deterministic rule
-     * (e.g. a future withdraw-money rule), it must be added here too.
+     * Mirrors ml/detector.py's NEAR_DETERMINISTIC_RULES keys exactly — raw
+     * category strings, not fuzzy-matched signal text. No longer wired into
+     * Tier 3b's trigger condition (CheckCallActivity now fires on any HIGH
+     * verdict, see AutoEscalationCountdownActivity's doc comment) — kept as
+     * the documented cross-platform mirror of the backend's rule set in case
+     * a future, more targeted gate is reintroduced. If the backend ever adds
+     * a new near-deterministic rule, it must still be added here too so the
+     * two stay in sync.
      */
     val NEAR_DETERMINISTIC_RULE_CATEGORIES = setOf(
         "isolation_tactics", "otp_readout_request", "card_collection_request",
@@ -23,6 +26,7 @@ object DecisionAgent {
         lookup: LookupResult,
         textAnalysis: PrahariTextAnalysis? = null,
         sessionAnalysis: PrahariSessionAnalysis? = null,
+        isTrustedContact: Boolean = false,
     ): DecisionResult {
         var level = lookup.tier
         val reasons = mutableListOf<String>()
@@ -46,6 +50,18 @@ object DecisionAgent {
             }
         }
 
+        // Weighted, not bypassed: a match against the family's configured
+        // trusted contact (AppSettings.trustedContactPhone — never a broader
+        // contacts/call-log scan, see CLAUDE.md's no-PII-harvesting rule)
+        // steps the risk down one level rather than clearing it, so a
+        // spoofed/compromised trusted-contact number still surfaces a
+        // warning instead of being silently waved through.
+        if (isTrustedContact && level != RiskLevel.LOW) {
+            reasons += "Number matches your configured trusted contact, so the risk shown here has " +
+                "been lowered — it hasn't been cleared. Verify independently if anything still feels off."
+            level = stepDown(level)
+        }
+
         if (reasons.isEmpty()) reasons += defaultReason(level)
 
         return DecisionResult(
@@ -56,6 +72,12 @@ object DecisionAgent {
             ruleCategories = textAnalysis?.ruleCategories ?: emptyList(),
             rawLabel = textAnalysis?.rawLabel,
         )
+    }
+
+    private fun stepDown(level: RiskLevel): RiskLevel = when (level) {
+        RiskLevel.HIGH -> RiskLevel.MEDIUM
+        RiskLevel.MEDIUM -> RiskLevel.LOW
+        RiskLevel.LOW -> RiskLevel.LOW
     }
 
     /** True only when a near-deterministic rule actually fired — never true

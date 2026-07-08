@@ -27,13 +27,18 @@ private const val TAG = "RakshakTier3b"
 private const val COUNTDOWN_SECONDS = 10
 
 /**
- * Tier 3b — autonomous escalation. Only ever launched when BOTH:
- *  1. the family has explicitly opted in (AppSettings.tier3bEnabled), and
- *  2. a near-deterministic rule fired (DecisionAgent.hasNearDeterministicSignal)
- * — never from the base ML score alone, however high it scored (see
- * CheckCallActivity, the only place that can launch this: the pre-connect
- * CallScreeningService flow has no transcript, so it can never produce a
- * near-deterministic rule match in the first place).
+ * Tier 3b — autonomous escalation. Launched for any HIGH-risk verdict from
+ * the manual "Check a call/message" screen (CheckCallActivity is the only
+ * place that can launch this — the pre-connect CallScreeningService flow has
+ * no transcript, so it never reaches a HIGH verdict from text analysis at
+ * all). Deliberately **not** gated behind AppSettings.tier3bEnabled or
+ * DecisionAgent.hasNearDeterministicSignal — a product decision to trigger
+ * on any HIGH verdict, including the base ML score alone, accepting the
+ * known false-positive risk documented against the base classifier (see
+ * CLAUDE.md §6, head.md). [triggerAutoEscalation] still falls back to the
+ * plain warning card if no number is configured or CALL_PHONE was never
+ * granted — that safety net is unchanged, it just no longer decides whether
+ * this screen is shown in the first place.
  *
  * No reading required to understand what's happening — [ShrinkingCircleView]
  * plus a spoken countdown carry the same information the on-screen text

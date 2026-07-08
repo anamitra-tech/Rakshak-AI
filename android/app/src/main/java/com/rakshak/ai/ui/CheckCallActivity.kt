@@ -15,6 +15,7 @@ import com.rakshak.ai.intelligence.DecisionAgent
 import com.rakshak.ai.intelligence.DecisionResult
 import com.rakshak.ai.intelligence.PrahariUnavailableException
 import com.rakshak.ai.intelligence.RiskLevel
+import com.rakshak.ai.intelligence.normalizePhoneNumber
 import com.rakshak.ai.stt.VoiceInputHelper
 import kotlinx.coroutines.launch
 
@@ -169,15 +170,24 @@ class CheckCallActivity : AppCompatActivity() {
                 val textAnalysis = app.prahariApiClient.analyzeVoice(transcript)
                 val sessionAnalysis = app.prahariApiClient.analyzeSession(sessionId, transcript)
                 val lookup = app.callerLookupSource.lookup(phoneNumber)
-                val decision = DecisionAgent.decide(lookup, textAnalysis, sessionAnalysis)
+                val isTrustedContact = phoneNumber.isNotBlank() &&
+                    app.settings.trustedContactPhone.isNotBlank() &&
+                    normalizePhoneNumber(phoneNumber) == normalizePhoneNumber(app.settings.trustedContactPhone)
+                val decision = DecisionAgent.decide(lookup, textAnalysis, sessionAnalysis, isTrustedContact)
 
                 if (decision.riskLevel == RiskLevel.LOW) {
                     binding.resultText.text = decision.headline
                     setUpFeedback(transcript, phoneNumber, decision)
-                } else if (app.settings.tier3bEnabled && DecisionAgent.hasNearDeterministicSignal(decision)) {
-                    // Tier 3b — only ever from here: the pre-connect
-                    // CallScreeningService flow has no transcript, so it can
-                    // never produce a near-deterministic rule match.
+                } else if (decision.riskLevel == RiskLevel.HIGH) {
+                    // Auto-dial + Tier-2 SMS alert together, after a
+                    // cancellable countdown — fires for any HIGH verdict from
+                    // this screen now, not gated behind the family's Tier 3b
+                    // opt-in or a near-deterministic rule match (deliberate
+                    // product decision; see head.md for the tradeoff this
+                    // accepts). AutoEscalationCountdownActivity still falls
+                    // back to the plain WarningActivity on its own if no
+                    // number is configured or CALL_PHONE was never granted —
+                    // that fallback is unchanged.
                     startActivity(
                         AutoEscalationCountdownActivity.buildIntent(
                             this@CheckCallActivity, phoneNumber, decision,

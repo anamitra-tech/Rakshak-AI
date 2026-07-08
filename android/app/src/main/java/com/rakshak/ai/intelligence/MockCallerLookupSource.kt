@@ -21,31 +21,31 @@ class MockCallerLookupSource : CallerLookupSource {
 
     private val knownNumbers: Map<String, Entry> = mapOf(
         // Known-good: official bank / government helplines (Sanchar Saathi-style trusted registry)
-        normalize("1800111109") to Entry(
+        normalizePhoneNumber("1800111109") to Entry(
             tier = RiskLevel.LOW,
             label = "State Bank of India — official toll-free helpline",
             reason = "Verified against the trusted-contact registry.",
         ),
-        normalize("1930") to Entry(
+        normalizePhoneNumber("1930") to Entry(
             tier = RiskLevel.LOW,
             label = "National Cybercrime Helpline (1930)",
             reason = "Verified official government helpline.",
         ),
 
         // Known-scam: reported numbers, tagged with a suspected scam type
-        normalize("+911204567890") to Entry(
+        normalizePhoneNumber("+911204567890") to Entry(
             tier = RiskLevel.HIGH,
             label = "Reported scam number — impersonates law enforcement",
             reason = "This number has been reported for the \"digital arrest\" scam pattern.",
             suspectedScamType = "digital_arrest",
         ),
-        normalize("+919876500001") to Entry(
+        normalizePhoneNumber("+919876500001") to Entry(
             tier = RiskLevel.HIGH,
             label = "Reported scam number — fake bank/KYC calls",
             reason = "This number has been reported for fake bank OTP/KYC-update calls.",
             suspectedScamType = "bank_otp_kyc",
         ),
-        normalize("+919876500002") to Entry(
+        normalizePhoneNumber("+919876500002") to Entry(
             tier = RiskLevel.MEDIUM,
             label = "Reported number — investment scheme calls",
             reason = "This number has been reported for guaranteed-return investment offers.",
@@ -54,7 +54,7 @@ class MockCallerLookupSource : CallerLookupSource {
     )
 
     override suspend fun lookup(phoneNumber: String): LookupResult {
-        val entry = knownNumbers[normalize(phoneNumber)]
+        val entry = knownNumbers[normalizePhoneNumber(phoneNumber)]
             ?: return LookupResult(
                 tier = RiskLevel.LOW,
                 label = "Unknown number",
@@ -67,7 +67,4 @@ class MockCallerLookupSource : CallerLookupSource {
             suspectedScamType = entry.suspectedScamType,
         )
     }
-
-    private fun normalize(raw: String): String = raw.filter { it.isDigit() }.takeLast(10)
-        .ifEmpty { raw.filter { it.isDigit() } }
 }

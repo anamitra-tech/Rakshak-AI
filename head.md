@@ -6,12 +6,106 @@ did I get wrong." Update this file at the end of each work session instead of
 trusting memory of the conversation.
 
 Repo: `D:/et-ai-hackathon-Madhav-wins/Rakshak-AI`, branch `main`. Latest work
-below is about to be committed on top of `38dc123`/`b2020fd` — check `git log`
-for the actual current HEAD rather than trusting this number once stale.
+below is about to be committed on top of `bdb8d48` — check `git log` for the
+actual current HEAD rather than trusting this number once stale.
+
+---
+
+## ⚠️ BLOCKED — pick this up first if resuming
+
+**Live end-to-end test of the Tier 2/3b manual-check auto-escalation (item 4
+below) is not done.** I asked the user for two real phone numbers and got no
+answer yet before the session moved to committing:
+
+1. **Auto-dial test number** for `tier3bPhoneNumber` — the countdown in
+   `AutoEscalationCountdownActivity` places a real `Intent.ACTION_CALL` when
+   it elapses (not just opens the dialer). Must NOT be `1930`. Do not guess
+   one — ask the user.
+2. **Trusted contact name + real phone number** for the Tier 2
+   SMS-with-draft-complaint test (`EscalationOrchestrator.notifyTrustedContact`)
+   — sends one real SMS via `SmsManager` to whatever number is configured.
+
+Once both are provided: set them via `adb shell run-as com.rakshak.ai` into
+`shared_prefs/rakshak_settings.xml` (keys `tier3b_phone_number`,
+`trusted_contact_name`, `trusted_contact_phone` — see `AppSettings.kt`'s
+companion object for the exact key strings), grant `CALL_PHONE`,
+`READ_PHONE_STATE`, `SEND_SMS` via `adb shell pm grant`, force-stop + relaunch
+the app, paste the CBI/digital-arrest scam text into "Check a call/message",
+submit, and confirm: countdown UI appears, Cancel button works if tapped,
+auto-dial fires on non-cancel, and `adb logcat` shows
+`RakshakEscalation: SMS sent-report for <id>: sent=true` (not just "no
+error" — that exact log line, from `SmsSentReceiver.kt`, is the delivery
+bar this project holds itself to, matching the WhatsApp test precedent in
+item 1 below).
+
+As of this note, device state is: no trusted contact configured, no
+`CALL_PHONE`/`READ_PHONE_STATE`/`SEND_SMS` granted, `tier3bPhoneNumber` blank
+(debug-build default). Backend (`api.server`:8000, `webhook.app`:8001) and
+`adb reverse tcp:8000`/`tcp:8001` were both up as of the last check in this
+session — re-verify both before testing if picking this up later, they don't
+survive a reboot/reconnect.
 
 ---
 
 ## Completed (committed + pushed to origin/main)
+
+### 4. Tier 2/3b auto-escalation now also fires from the manual "Check a
+call/message" screen, not just live incoming calls
+- **Original behavior** (confirmed by reading the code before changing
+  anything): a FRAUD/HIGH verdict from `CheckCallActivity` only
+  auto-triggered Tier 2 SMS + Tier 3b auto-dial if BOTH `tier3bEnabled` was
+  on AND a near-deterministic rule fired (`DecisionAgent.hasNearDeterministicSignal`).
+  Otherwise it fell through to `WarningActivity`, requiring a manual "I need
+  help" tap for SMS and a further tap on "Call 1930" (`ACTION_DIAL`, not an
+  auto-dial) for Tier 3.
+- **Changed**: `CheckCallActivity`'s trigger condition is now simply
+  `decision.riskLevel == RiskLevel.HIGH` — any FRAUD-level verdict from this
+  screen routes straight into the **existing, unmodified**
+  `AutoEscalationCountdownActivity` (10s cancellable countdown → auto-dial +
+  Tier 2 SMS "at the same time"). No new escalation logic was written; only
+  the trigger condition changed — `EscalationOrchestrator.notifyTrustedContact()`
+  and the `ACTION_CALL` intent are reused exactly as they already existed for
+  the near-deterministic-rule path.
+- Deliberately **not** gated behind `tier3bEnabled` or
+  `hasNearDeterministicSignal` anymore — user's explicit choice (see the
+  AskUserQuestion exchange this session): "any HIGH-risk verdict... regardless
+  of whether tier3bEnabled is on or the match was rule-based vs. ML-only."
+  Consequence flagged to the user and accepted: in a **release build**
+  (where `tier3bPhoneNumber` defaults to `"1930"` even without ever opening
+  Family Setup, see `AppSettings.DEFAULT_TIER3B_NUMBER`), if `CALL_PHONE`
+  permission were ever granted outside the guided Family Setup flow, a HIGH
+  verdict could auto-dial 1930 without explicit opt-in. Narrow edge case
+  (permission is normally only requested via that flow) but real — not
+  fixed, just documented.
+- `NEAR_DETERMINISTIC_RULE_CATEGORIES` / `hasNearDeterministicSignal` in
+  `DecisionAgent.kt` are now unused dead code (no call sites left) —
+  deliberately NOT deleted, kept as the documented cross-platform mirror of
+  `ml/detector.py`'s `NEAR_DETERMINISTIC_RULES` in case a more targeted gate
+  is reintroduced later. Comments updated to say so explicitly rather than
+  leave a stale "this is what gates Tier 3b" claim.
+- **New, separate change bundled in the same diff**: trusted-contact
+  weighting. A call/message whose number matches the family's configured
+  `trustedContactPhone` now steps `DecisionAgent`'s risk level down one notch
+  (HIGH→MEDIUM→LOW) instead of leaving it untouched — user's explicit choice
+  ("weight it, don't bypass" — a spoofed/compromised trusted-contact number
+  should still surface *something*, not be silently waved through). Applied
+  identically in both `RakshakCallScreeningService` (live pre-connect calls)
+  and `CheckCallActivity` (manual check). Only ever compares against the
+  single configured number — never a broader contacts/call-log scan, per
+  CLAUDE.md's no-PII-harvesting rule. New shared `PhoneNumberUtils.kt`
+  (`normalizePhoneNumber`) extracted so this and `MockCallerLookupSource`'s
+  existing matching use identical normalization.
+- **Mandatory eval gate run and PASSED**: `eval_testset.py` against
+  `rakshak_eval_testset.json` (54 cases, not touched by this change — no
+  Python file was modified) — 100% recall across every scam category,
+  `false_positive_bait` FPR 0.040 (`fp24` only, the documented known-failing
+  case). Byte-identical to the documented baseline, as expected since this
+  was pure Android/Kotlin escalation-wiring, not detection logic.
+- Built, installed (`./gradlew installDebug`), and launched clean on the
+  physical device (no `FATAL EXCEPTION`) after these changes — but the live
+  end-to-end escalation test itself is the item still blocked above.
+
+### 3. First real build/install/launch on physical hardware — see CLAUDE.md
 
 ### 3. First real build/install/launch on physical hardware — see CLAUDE.md
 Section 12 for full detail; summary here for quick recall.
