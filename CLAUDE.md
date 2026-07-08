@@ -287,8 +287,11 @@ What's built, and the honest gaps against the ideal spec:
 - Permissions used: `INTERNET`, `POST_NOTIFICATIONS`, `USE_FULL_SCREEN_INTENT` — all previously
   discussed in Sections 5/7, nothing new added. No `READ_PHONE_STATE`, `READ_CALL_LOG`,
   `ANSWER_PHONE_CALLS`, or `CALL_PHONE`.
-- No Gradle wrapper JAR is committed (this environment has no JDK/Gradle to generate one) — Android
-  Studio will offer to create it on first open.
+- Gradle wrapper JAR is committed (`android/gradle/wrapper/gradle-wrapper.jar`). A JDK 17 +
+  Android SDK toolchain is available at `D:\rakshak-android-toolchain` (source
+  `D:\rakshak-android-toolchain\env.sh` before running `./gradlew`) — see Section 12 for the
+  first real build/install/launch against a physical device, which superseded the earlier
+  "no JDK/Gradle in this environment" assumption baked into Sections 10-11.
 
 ---
 
@@ -382,3 +385,72 @@ measurement of this specific app on this specific hardware.
   change does not make unilaterally — same posture as CLAUDE.md's existing hard constraints on data
   boundaries. Flagged here as a real, live gap for an explicit future decision, not silently designed
   around.
+
+---
+
+## 12. First real build/install/launch against a physical device (this superseded Sections
+10-11's "no JDK/Gradle/emulator in this environment" caveats)
+
+A JDK 17 + Android SDK toolchain became available at `D:\rakshak-android-toolchain`
+(`env.sh` sets `JAVA_HOME`/`ANDROID_HOME`/`GRADLE_USER_HOME` etc. — source it before any
+`./gradlew` invocation). This section documents the first actual `./gradlew installDebug`
+onto real hardware and the two real bugs it surfaced — both fixed, both applicable
+regardless of which physical device or network this app is tested on next.
+
+### 12.1 `AndroidManifest.xml` had invalid XML (real bug, not a toolchain issue)
+
+Two doc-comments used a literal `--` inside an XML comment body (`"...screen only --
+always..."`, `"...recognizer API -- below it..."`) — invalid per the XML spec (comments may
+not contain `--`), and Android's manifest merger correctly refused to parse the file
+(`SAXParseException: The string "--" is not permitted within comments`, line 37). This had
+never been caught because nothing had compiled the manifest before. Fixed by replacing both
+with em-dashes (`—`), matching the style already used everywhere else in the file's
+comments. Watch for this in future long-form doc-comments inside XML — Markdown-style `--`
+as an em-dash substitute is fine in `.md`/`.kt` but breaks XML comments outright.
+
+### 12.2 Physical-device Prahari connectivity: LAN IP blocked by Windows Firewall,
+`adb reverse` used instead
+
+Section 5's "`adb reverse tcp:8000 tcp:8000` etc. for a physical device" guidance was
+correct in spirit but under-specified two things this session had to work out by hitting
+them:
+
+1. **`network_security_config_debug.xml` only ever whitelisted cleartext HTTP to
+   `10.0.2.2`** (the emulator alias). Pointing a physical device at any other host —
+   LAN IP or loopback — was silently blocked by Android's cleartext-traffic policy
+   (surfaces to the app as an `IOException`, indistinguishable from a real connectivity
+   failure without checking `logcat` for `CleartextNotPermittedException`). Fixed by adding
+   `127.0.0.1` to the same debug-only `cleartextTrafficPermitted` domain-config (not the LAN
+   IP — see next point for why).
+2. **The dev machine's LAN IP (`192.168.1.3:8000`/`:8001`) was reachable from the PC itself
+   but not from the phone** — `adb shell nc -z <LAN-IP> 8000` timed out from the device side
+   even though `curl 127.0.0.1:8000` worked locally. Root cause: Windows Firewall has no
+   inbound-allow rule for the ad-hoc `python -m api.server` / `uvicorn` processes, and this
+   session didn't have the elevated permissions to add one (`Get-NetFirewallRule` itself
+   returned Access Denied). Rather than asking for admin rights to poke a hole in the
+   firewall, used `adb reverse tcp:8000 tcp:8000` / `tcp:8001 tcp:8001` instead — that tunnels
+   through the already-authenticated adb transport (works the same over wireless-debugging
+   adb as over USB) and appears to the Python server as a loopback connection, sidestepping
+   the inbound-LAN firewall rule question entirely. The app's stored `prahari_base_url` /
+   `evidence_base_url` (`AppSettings`, `SharedPreferences` key `rakshak_settings` — there is
+   no in-app settings UI to edit these yet, see Section 10/MainActivity's `baseUrlValue` being
+   read-only) were set to `http://127.0.0.1:8000` / `:8001` accordingly, not the LAN IP.
+
+**Operational consequence for next time**: `adb reverse` is scoped to the adb connection, not
+persisted — after any adb server restart, device reconnect/re-pair (wireless-debugging pairing
+codes are short-lived and this device's USB-adb driver was independently flaky this session,
+see below), or app reinstall, `adb reverse tcp:8000 tcp:8000` / `tcp:8001 tcp:8001` must be
+re-run before the app can reach Prahari again. The backend processes themselves
+(`python -m api.server 8000`, `uvicorn webhook.app:app --port 8001`) are unaffected by any of
+this and can stay running across reconnects.
+
+### 12.3 This device's USB-ADB driver was unreliable; wireless debugging was used instead
+
+Windows Device Manager showed the phone's `ADB Interface`/`USB Composite Device` stuck at
+driver status `Unknown` (not `OK`), and `adb devices` flapped between `offline` /
+`unauthorized` / briefly `device` regardless of server restarts or reconnects — a genuine
+driver-binding problem, not a one-off cable glitch. Switched to wireless debugging
+(`adb pair <ip>:<port> <code>`, then it auto-connects via mDNS) for the rest of the session,
+which was stable. If USB adb is wanted again later, this needs an actual driver
+reinstall/replace in Device Manager (not attempted — no admin elevation available this
+session) before trusting it over wireless debugging.
