@@ -22,8 +22,8 @@ import com.rakshak.ai.escalation.EscalationOrchestrator
 import com.rakshak.ai.escalation.NotifyResult
 import com.rakshak.ai.intelligence.DecisionResult
 import com.rakshak.ai.intelligence.RiskLevel
+import com.rakshak.ai.tts.SpeechLanguageSelector
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /**
  * Full-screen warning card. Built to CLAUDE.md Section 9.2:
@@ -95,7 +95,9 @@ class WarningActivity : AppCompatActivity() {
             ttsReady = status == TextToSpeech.SUCCESS
             Log.i(TAG, "tts_init status=$status ready=$ttsReady")
             if (ttsReady) {
-                tts.setLanguage(Locale.forLanguageTag(app.settings.spokenLanguageTag))
+                // Language/voice is now chosen per-utterance in speak(), from
+                // the actual text being spoken (SpeechLanguageSelector) —
+                // no fixed setLanguage() here anymore.
                 tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
                         Log.i(TAG, "tts_utterance_start id=$utteranceId")
@@ -245,10 +247,17 @@ class WarningActivity : AppCompatActivity() {
         renderNotifyResult(notifyResult)
     }
 
+    /**
+     * Selects a TTS voice/locale matching this specific utterance's actual
+     * language (ML Kit Language ID, on-device) before speaking, falling back
+     * to the app's configured spokenLanguageTag if detection is inconclusive
+     * or no matching voice is installed. See SpeechLanguageSelector.
+     */
     private fun speak(text: String) {
         if (!ttsReady || text.isBlank()) return
         Log.i(TAG, "tts_speak text_len=${text.length}")
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "rakshak_warning")
+        val app = application as RakshakApp
+        SpeechLanguageSelector.speak(tts, text, app.settings.spokenLanguageTag, "rakshak_warning")
     }
 
     /**

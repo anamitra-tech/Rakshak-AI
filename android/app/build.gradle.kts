@@ -51,4 +51,9 @@ dependencies {
     // dying) — WorkManager is the standard, permission-free way to schedule
     // deferred work that survives both.
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+    // On-device language identification, used to auto-select the matching
+    // TTS voice for the warning speech (see tts/SpeechLanguageSelector.kt).
+    // The model ships bundled in the AAR -- no download, no network call, no
+    // text ever leaves the device for this.
+    implementation("com.google.mlkit:language-id:17.0.6")
 }

@@ -18,6 +18,19 @@
     <string name="check_call_loading">Checking with Prahari…</string>
     <string name="check_call_backend_error">Could not reach the Prahari backend at %1$s. Make sure it is running and reachable, then try again.</string>
 
+    <string name="check_call_voice_button">🎤 Speak instead</string>
+    <string name="check_call_voice_listening">🎤 Listening… (tap to stop)</string>
+    <string name="check_call_voice_permission_denied">Microphone permission was not granted — please type instead.</string>
+    <string name="check_call_voice_unsupported_device">On-device voice recognition needs Android 12 or higher on this device. Please type instead.</string>
+    <string name="check_call_voice_no_match">Didn\'t catch that. Please try again or type instead.</string>
+    <string name="check_call_voice_timeout">No speech detected. Please try again or type instead.</string>
+    <string name="check_call_voice_busy">Voice input is busy. Please try again in a moment.</string>
+    <string name="check_call_voice_mic_permission_needed">Microphone permission is needed for voice input.</string>
+    <string name="check_call_voice_language_unsupported">Offline voice recognition doesn\'t support %1$s on this device yet. Please type instead.</string>
+    <string name="check_call_voice_recognizer_unset">On-device voice recognition isn\'t set up on this device. Please type instead.</string>
+    <string name="check_call_voice_generic_error">Voice input isn\'t available right now. Please type instead.</string>
+    <string name="check_call_voice_start_failed">Voice input could not be started. Please try again or type instead.</string>
+
     <string name="feedback_toggle_label">Was this right?</string>
     <string name="feedback_positive_button">👍 Yes, this was right</string>
     <string name="feedback_negative_not_scam_button">👎 This wasn\'t actually a scam</string>

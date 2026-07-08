@@ -33,6 +33,18 @@
     -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!--
+      Voice-input option on the "Check a call/message" screen only -- always
+      alongside typed input, never a replacement (CLAUDE.md Section 9.2's
+      future STT hook). Uses Android's on-device SpeechRecognizer, gated
+      behind an explicit mic-button tap; never started automatically and
+      never during a live call. Restricted to API 31+ in code (see
+      stt/VoiceInputHelper.kt) because that is the first level with a
+      guaranteed-local, no-network on-device recognizer API -- below it,
+      the mic option is hidden and typed input is the only way in.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <application
         android:name=".RakshakApp"
         android:allowBackup="false"

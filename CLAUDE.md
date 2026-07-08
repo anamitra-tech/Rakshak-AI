@@ -289,3 +289,96 @@ What's built, and the honest gaps against the ideal spec:
   `ANSWER_PHONE_CALLS`, or `CALL_PHONE`.
 - No Gradle wrapper JAR is committed (this environment has no JDK/Gradle to generate one) — Android
   Studio will offer to create it on first open.
+
+---
+
+## 11. Voice input (STT) and language-aware spoken warnings (TTS)
+
+Added to the "Check a call/message" screen and the warning speech feature, purely as additive
+input/output — neither touches `ml/detector.py`, `rag/retriever.py`'s decision delegation, or any
+other part of the Prahari detection pipeline. Confirmed via the full `rakshak_eval_testset.json`
+suite (54 cases) both before and after: 100% recall, 0.040 false_positive_bait FPR (fp24 only),
+byte-identical to the pre-change baseline, since no Python file in the detection path was touched.
+
+### 11.1 STT — voice input on "Check a call/message" (`stt/VoiceInputHelper.kt`)
+
+Voice is an *option alongside* the existing typed-text field, never a replacement — the transcript
+field is still editable either way, and the "Check this" button still sends whatever text is in it.
+
+Deliberately built on `SpeechRecognizer.createOnDeviceSpeechRecognizer()` (API 31+) rather than the
+older `createSpeechRecognizer()` + `EXTRA_PREFER_OFFLINE` hint: the older path is only a *preference*
+— Android can silently fall back to a cloud recognizer if no offline pack exists, which this app's
+privacy posture (no audio/text leaves the device unless the user typed it themselves) treats as
+unacceptable, not a case to design around. Consequence of that choice: on API 29-30 the mic option is
+hidden entirely and typed input is the only way in — a real, disclosed gap, not silently degraded to
+an online recognizer just to keep the feature working everywhere.
+
+There is no public, reliable *pre-flight* API to ask "is language X's offline pack installed" that
+was safe to wire in here — see the TODO below. Instead, `VoiceInputHelper` discovers per-language
+offline availability *empirically*, at the moment recognition is attempted:
+`SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED` / `ERROR_LANGUAGE_UNAVAILABLE` (API 31+) are treated
+as persistent ("hide the mic option for this session, don't invite a retry loop"), while
+`ERROR_NO_MATCH`/`ERROR_SPEECH_TIMEOUT`/etc. are treated as transient (retry is fine).
+
+**TODO (not implemented, deliberately):** `SpeechRecognizer.checkRecognitionSupport()` plus
+`RecognitionSupport.supportedOnDeviceLanguages` / `installedOnDeviceLanguages` (API 33+) would give a
+genuine pre-flight per-language check instead of the attempt-then-react approach above — ask once
+before even offering the mic button whether the current language is supported/installed, rather than
+opening the mic and finding out from an error. Not added in this change: its exact method signatures
+(parameter types, callback shape) could not be verified against a real Android SDK in the environment
+this change was written in — no JDK/Gradle/compiler available (see the note above) — and shipping a
+guessed compile-time API surface was judged a worse failure mode (a broken build) than the plainer,
+verified approach actually shipped. Pick this up once there's a real device/SDK/compiler to check the
+signatures against — verify `RecognitionSupportCallback`'s exact abstract methods and
+`RecognitionSupport`'s exact field/getter names directly against
+`android.speech.RecognitionSupport`/`RecognitionSupportCallback` in a real `compileSdk 34` environment
+before writing the call, then wire it into `VoiceInputHelper.startListening()` ahead of the existing
+try/attempt path on API 33+, keeping the current attempt-then-react path as the fallback for API
+31-32 (where no such pre-flight query exists at all).
+
+### 11.2 TTS — automatic voice selection (`tts/SpeechLanguageSelector.kt`)
+
+`WarningActivity`'s `speak()` previously always used the one fixed `AppSettings.spokenLanguageTag`
+regardless of what language the actual headline/reason text was in. It now runs the text through ML
+Kit Language Identification (`com.google.mlkit:language-id`, on-device model bundled in the app —
+no network call, no text leaves the device for this) before every `speak()` call, and picks whichever
+locale is actually usable: detected language first, `spokenLanguageTag` as fallback, and if neither
+has an installed TTS voice, leaves the engine's current locale alone rather than forcing something
+unavailable. Applies to both existing speech call sites (the headline on open, and the panic-outcome
+text) with no new call sites added.
+
+### 11.3 Per-language coverage, honestly (12 languages: English, Hindi, Bengali, Marathi, Telugu,
+Tamil, Gujarati, Urdu, Kannada, Malayalam, Punjabi, Odia)
+
+**This section is a documentation-time assessment, not an empirical device test** — this environment
+has no JDK/Gradle/emulator (see the note above), so nothing in this change could actually be
+installed and run on a device or emulator. What follows is based on Android/Google's public
+documentation and current reporting, cross-checked via web search while writing this section, not
+assumed from training memory alone — but it is still a *claim about typical device behavior*, not a
+measurement of this specific app on this specific hardware.
+
+- **TTS (Google's Speech Services / Google Text-to-Speech engine, downloadable voice data):**
+  broad coverage is plausible across all 12 — English and Hindi are solid; Bengali, Marathi, Telugu,
+  Tamil, Gujarati, Kannada, Malayalam, Punjabi, Urdu, and Odia all appear as supported Google TTS
+  languages in current public references. Actual availability on a given phone still depends on the
+  installed Google app/TTS engine version and whether the user has downloaded that language's voice
+  data (Settings → Text-to-speech → Install voice data) — `SpeechLanguageSelector.isUsable()` checks
+  this per-device at runtime via `tts.isLanguageAvailable()` rather than assuming any language is
+  present, so an uninstalled voice degrades to the fallback language, not a crash or silent English.
+- **STT, genuinely on-device (`createOnDeviceSpeechRecognizer`, what this app actually uses):**
+  coverage here is materially narrower and not well-documented publicly per language. **English is
+  the only language with confident, broadly-available on-device support today.** Hindi has partial,
+  growing, device-dependent support (newer Android versions/Pixel devices). For the remaining ten
+  target languages (Bengali, Marathi, Telugu, Tamil, Gujarati, Kannada, Malayalam, Punjabi, Urdu,
+  Odia), there is no confirmed, reliable on-device recognition today — Google's own rollout of
+  broader on-device language coverage (e.g. a Gemini Nano-based "advanced mode") is, as of this
+  writing, restricted to specific newer devices, not general availability. In practice: most users
+  speaking one of those ten languages into the mic on this screen will hit
+  `ERROR_LANGUAGE_UNAVAILABLE`/`ERROR_LANGUAGE_NOT_SUPPORTED` today and fall back to typed text, by
+  design, not by bug.
+- **Online fallback (Sarvam or similar) — not implemented.** Closing the ten-language STT gap above
+  with an online Indian-language STT/TTS provider is the natural next step, but it means audio or
+  text leaving the device to a third party, which is a deliberate architectural/privacy decision this
+  change does not make unilaterally — same posture as CLAUDE.md's existing hard constraints on data
+  boundaries. Flagged here as a real, live gap for an explicit future decision, not silently designed
+  around.

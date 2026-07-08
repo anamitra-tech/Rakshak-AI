@@ -42,6 +42,28 @@
             android:hint="@string/check_call_transcript_hint"
             android:inputType="textMultiLine" />
 
+        <!--
+          Voice-input option, alongside (never instead of) the typed field
+          above. Hidden entirely at runtime if this device/OS can't do
+          genuinely on-device speech recognition — see
+          stt/VoiceInputHelper.kt and CLAUDE.md's STT/TTS coverage section.
+        -->
+        <Button
+            android:id="@+id/voiceInputButton"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/check_call_voice_button" />
+
+        <TextView
+            android:id="@+id/voiceStatusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
         <Button
             android:id="@+id/analyzeButton"
             android:layout_width="match_parent"
