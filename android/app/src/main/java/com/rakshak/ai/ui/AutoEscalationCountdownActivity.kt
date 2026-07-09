@@ -24,6 +24,7 @@ import androidx.work.workDataOf
 import com.rakshak.ai.escalation.EscalationOrchestrator
 import com.rakshak.ai.escalation.Tier3bCallOutcomeWorker
 import com.rakshak.ai.intelligence.DecisionResult
+import com.rakshak.ai.intelligence.ExplanationTranslations
 import com.rakshak.ai.intelligence.RiskLevel
 import java.util.Locale
 
@@ -178,6 +179,23 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
         (listOf(decision.headline) + decision.reasons).filter { it.isNotBlank() }.joinToString(". ")
 
     /**
+     * Builds the native-language explanation from ONLY the pieces of
+     * decision.headline + decision.reasons that have a pre-translated entry
+     * in [ExplanationTranslations] for [languageTag] — never the raw English
+     * text (see the near-silent-audio diagnosis this fixes). Returns null if
+     * nothing translated (e.g. an unsupported language, or a free-text piece
+     * outside the fixed set, such as an LLM-generated `reason`) — callers
+     * must speak the English pass instead in that case, not fall back to
+     * mismatched-voice English.
+     */
+    private fun nativeExplanationText(languageTag: String): String? {
+        val pieces = (listOf(decision.headline) + decision.reasons)
+            .filter { it.isNotBlank() }
+            .mapNotNull { ExplanationTranslations.translate(it, languageTag) }
+        return pieces.takeIf { it.isNotEmpty() }?.joinToString(". ")
+    }
+
+    /**
      * Requirement 2: speaks the explanation in the family's preferred
      * language first, then again in English, back to back — same "native
      * language first, English second" convention as the onboarding intro.
@@ -185,11 +203,13 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
      * passes (or the single pass) finish does [beginCountdownOnce] run — see
      * [onExplanationUtteranceDone].
      *
-     * The underlying text is always whatever Prahari returned, which today
-     * is English-only (no translation layer exists yet — CLAUDE.md §9.1 is
-     * still Phase 2). So the "native language" pass changes the TTS
-     * voice/locale, not the words themselves; it will mispronounce non-
-     * English text. Documented gap, not silently pretended away.
+     * The native pass speaks the pre-translated text from
+     * [nativeExplanationText], never the raw English — feeding English text
+     * through a non-English voice previously produced near-silent audio
+     * (mMaxAmplitude ~170 vs. a normal ~13000+), not just mispronunciation.
+     * If nothing translates for this language, the native pass is skipped
+     * entirely and English is spoken instead — the (unconditional) English
+     * pass below already covers that content either way.
      */
     private fun speakExplanationThenCountdown() {
         val app = application as RakshakApp
@@ -208,8 +228,14 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
         }
         if (preferredTag.startsWith("en", ignoreCase = true)) {
             speakForced(text, "en-IN", UTTERANCE_EXPLANATION_ENGLISH)
+            return
+        }
+        val nativeText = nativeExplanationText(preferredTag)
+        if (nativeText.isNullOrBlank()) {
+            Log.i(TAG, "No $preferredTag translation available for this explanation — speaking English only.")
+            speakForced(text, "en-IN", UTTERANCE_EXPLANATION_ENGLISH)
         } else {
-            speakForced(text, preferredTag, UTTERANCE_EXPLANATION_NATIVE)
+            speakForced(nativeText, preferredTag, UTTERANCE_EXPLANATION_NATIVE)
         }
     }
 
@@ -220,6 +246,10 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
         if (settled) return // user already cancelled — don't queue more speech or start the countdown
         when (utteranceId) {
             TTS_WARMUP_UTTERANCE_ID -> speakExplanationThenCountdown()
+            // Pass 2 is always the full, original English text, regardless
+            // of what (if anything) the native pass translated — this is
+            // what makes a partial/missing native translation safe: every
+            // piece is still guaranteed to be heard in English either way.
             UTTERANCE_EXPLANATION_NATIVE -> speakForced(explanationText(), "en-IN", UTTERANCE_EXPLANATION_ENGLISH)
             UTTERANCE_EXPLANATION_ENGLISH -> beginCountdownOnce()
             // Anything else (per-second ticks, the post-dial "calling now"
