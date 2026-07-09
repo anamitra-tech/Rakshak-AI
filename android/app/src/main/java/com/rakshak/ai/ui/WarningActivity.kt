@@ -91,9 +91,16 @@ class WarningActivity : AppCompatActivity() {
         // speech below.
         playAlertTone()
 
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-            Log.i(TAG, "tts_init status=$status ready=$ttsReady")
+        // Uses the app-wide shared TTS instance (RakshakApp.tts), constructed
+        // and warmed up once at process start, instead of building a fresh
+        // TextToSpeech here — that used to make the engine's several-second
+        // onInit binding delay visible every time this screen opened, right
+        // when the user needed to hear the warning fastest. By now, it has
+        // almost always already finished initializing in the background.
+        tts = app.tts
+        app.onTtsReady {
+            ttsReady = app.ttsReady
+            Log.i(TAG, "tts_init ready=$ttsReady (shared instance)")
             if (ttsReady) {
                 // Language/voice is now chosen per-utterance in speak(), from
                 // the actual text being spoken (SpeechLanguageSelector) —
@@ -293,10 +300,10 @@ class WarningActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        if (::tts.isInitialized) {
-            tts.stop()
-            tts.shutdown()
-        }
+        // tts is app-wide now (RakshakApp) — stop() cancels this screen's own
+        // pending speech, but never shutdown(): that would kill the engine
+        // for the whole app, not just this Activity.
+        if (::tts.isInitialized) tts.stop()
         alertPlayer?.release()
         alertPlayer = null
         super.onDestroy()

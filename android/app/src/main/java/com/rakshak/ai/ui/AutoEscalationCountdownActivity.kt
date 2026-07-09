@@ -38,14 +38,6 @@ private const val UTTERANCE_EXPLANATION_NATIVE = "tier3b_explanation_native"
 private const val UTTERANCE_EXPLANATION_ENGLISH = "tier3b_explanation_english"
 
 /**
- * Engine-binding warm-up: a short silent utterance queued before the real
- * explanation, so the first genuinely spoken utterance doesn't pay the cost
- * of the native audio pipeline opening for the first time on this screen.
- */
-private const val TTS_WARMUP_UTTERANCE_ID = "tier3b_tts_warmup"
-private const val TTS_WARMUP_SILENCE_MS = 300L
-
-/**
  * Safety net for requirement 4: if TTS never finishes (engine failure, an
  * unexpectedly long/looping utterance, a device with no usable voice at
  * all), the countdown must still eventually start — a broken TTS engine
@@ -132,8 +124,16 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
 
         binding.cancelButton.setOnClickListener { onCancelTapped() }
 
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
+        // Uses the app-wide shared TTS instance (RakshakApp.tts), constructed
+        // and warmed up once at process start, instead of building a fresh
+        // TextToSpeech here — that used to make the engine's several-second
+        // onInit binding delay visible every time this screen opened, right
+        // when the user needed to hear the explanation fastest. By now, it
+        // has almost always already finished initializing in the background.
+        val app = application as RakshakApp
+        tts = app.tts
+        app.onTtsReady {
+            ttsReady = app.ttsReady
             if (ttsReady) {
                 tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
@@ -150,12 +150,9 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
                         }
                     }
                 })
-                // Warm-up pass first — see TTS_WARMUP_UTTERANCE_ID's doc comment.
-                // Its onDone (handled in onExplanationUtteranceDone) is what
-                // actually kicks off the real Hindi/English explanation.
-                tts.playSilentUtterance(TTS_WARMUP_SILENCE_MS, TextToSpeech.QUEUE_FLUSH, TTS_WARMUP_UTTERANCE_ID)
+                speakExplanationThenCountdown()
             } else {
-                Log.e(TAG, "Tier 3b TTS failed to initialize (status=$status) — starting countdown without a spoken explanation.")
+                Log.e(TAG, "Shared TTS failed to initialize — starting countdown without a spoken explanation.")
                 beginCountdownOnce()
             }
         }
@@ -239,13 +236,13 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
         }
     }
 
-    /** Handles both natural completion (onDone) and onError for the warm-up
-     *  pass and the two explanation utterances, chaining
-     *  warm-up -> native -> English -> countdown. */
+    /** Handles both natural completion (onDone) and onError for the two
+     *  explanation utterances, chaining native -> English -> countdown.
+     *  (The engine-warmup silent utterance now runs once at app start —
+     *  see RakshakApp — not per-screen, so it isn't part of this chain.) */
     private fun onExplanationUtteranceDone(utteranceId: String?) {
         if (settled) return // user already cancelled — don't queue more speech or start the countdown
         when (utteranceId) {
-            TTS_WARMUP_UTTERANCE_ID -> speakExplanationThenCountdown()
             // Pass 2 is always the full, original English text, regardless
             // of what (if anything) the native pass translated — this is
             // what makes a partial/missing native translation safe: every
@@ -392,10 +389,10 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
     override fun onDestroy() {
         countdownTimer?.cancel()
         explanationSafetyHandler.removeCallbacks(explanationSafetyTimeout)
-        if (::tts.isInitialized) {
-            tts.stop()
-            tts.shutdown()
-        }
+        // tts is app-wide now (RakshakApp) — stop() cancels this screen's own
+        // pending speech, but never shutdown(): that would kill the engine
+        // for the whole app, not just this Activity.
+        if (::tts.isInitialized) tts.stop()
         super.onDestroy()
     }
 
