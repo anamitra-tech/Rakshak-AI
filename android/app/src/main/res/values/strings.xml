@@ -55,6 +55,9 @@
     <string name="family_setup_button">Family setup</string>
     <string name="family_setup_title">Family Setup</string>
     <string name="family_setup_intro">Set this up once, together with a family member. It is never asked of the elderly user during an actual call.</string>
+
+    <string name="family_setup_language_label">Spoken warning language</string>
+    <string name="family_setup_language_help">Warnings are always spoken in this language first, then in English. If left unset, Hindi is used first by default.</string>
     <string name="family_setup_contact_name_hint">Trusted contact\'s name</string>
     <string name="family_setup_contact_phone_hint">Trusted contact\'s phone number</string>
     <string name="family_setup_contact_help">If set, a text with the complaint draft is sent to this number whenever a HIGH risk call or message is detected.</string>

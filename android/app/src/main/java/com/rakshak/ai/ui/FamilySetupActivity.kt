@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -21,6 +22,27 @@ import com.rakshak.ai.settings.AppSettings
  * Never opened by the elderly/primary user during an actual scam call.
  */
 class FamilySetupActivity : AppCompatActivity() {
+
+    /**
+     * BCP-47 tag paired with its native-script self-name — the same 12
+     * languages CLAUDE.md §11.3 targets and ExplanationTranslations covers.
+     * Self-names (not English names) so a non-English-literate user can
+     * still recognize their own language in the list.
+     */
+    private val spokenLanguages = listOf(
+        "en-IN" to "English",
+        "hi-IN" to "हिन्दी",
+        "bn-IN" to "বাংলা",
+        "mr-IN" to "मराठी",
+        "te-IN" to "తెలుగు",
+        "ta-IN" to "தமிழ்",
+        "gu-IN" to "ગુજરાતી",
+        "ur-IN" to "اردو",
+        "kn-IN" to "ಕನ್ನಡ",
+        "ml-IN" to "മലയാളം",
+        "pa-IN" to "ਪੰਜਾਬੀ",
+        "or-IN" to "ଓଡ଼ିଆ",
+    )
 
     private lateinit var binding: ActivityFamilySetupBinding
 
@@ -78,6 +100,20 @@ class FamilySetupActivity : AppCompatActivity() {
 
         val settings = (application as RakshakApp).settings
 
+        binding.spokenLanguageSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            spokenLanguages.map { it.second },
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        // No language-selection UI existed before this screen — until now,
+        // "unset" silently meant Hindi-first at speak-time (see
+        // AutoEscalationCountdownActivity), not AppSettings.DEFAULT_LANGUAGE's
+        // "en-IN". Show that same actual default here rather than a
+        // technically-true-but-misleading "English" preselection.
+        val currentTag = if (settings.hasExplicitSpokenLanguage) settings.spokenLanguageTag else "hi-IN"
+        val currentIndex = spokenLanguages.indexOfFirst { it.first == currentTag }.coerceAtLeast(0)
+        binding.spokenLanguageSpinner.setSelection(currentIndex)
+
         binding.contactNameInput.setText(settings.trustedContactName)
         binding.contactPhoneInput.setText(settings.trustedContactPhone)
         binding.contactEmailInput.setText(settings.trustedContactEmail)
@@ -115,6 +151,13 @@ class FamilySetupActivity : AppCompatActivity() {
         // keep talking to whatever host was configured at process start until
         // the next cold start, silently ignoring the change just saved above.
         app.refreshPrahariClient()
+
+        // Always written on save, same as every other field here — this is
+        // what turns AppSettings.hasExplicitSpokenLanguage true from now on,
+        // even if the family picks Hindi itself (identical spoken behavior
+        // to the implicit pre-selection default, but now a real, persisted
+        // choice rather than a fallback).
+        settings.spokenLanguageTag = spokenLanguages[binding.spokenLanguageSpinner.selectedItemPosition].first
 
         val phone = binding.contactPhoneInput.text?.toString()?.trim().orEmpty()
         settings.trustedContactName = binding.contactNameInput.text?.toString()?.trim().orEmpty()
