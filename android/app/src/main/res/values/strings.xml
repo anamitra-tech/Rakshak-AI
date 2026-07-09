@@ -82,4 +82,8 @@
     <string name="tier3b_cancel_button">✋ Cancel</string>
     <string name="tier3b_calling_message">Calling for help now.</string>
     <string name="tier3b_countdown_announcement">Calling for help in %1$d seconds</string>
+    <string name="tier3b_explaining_message">Listening to why this was flagged before calling for help…</string>
+    <string name="tier3b_risk_label_high">🚨 HIGH RISK</string>
+    <string name="tier3b_risk_label_medium">⚠️ MEDIUM RISK</string>
+    <string name="tier3b_risk_label_low">✅ LOW RISK</string>
 </resources>

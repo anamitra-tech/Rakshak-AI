@@ -32,6 +32,18 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
 
+    /**
+     * True only if a family member has actually picked a language somewhere
+     * (no UI does this yet — see MainActivity's read-only baseUrlValue for
+     * the same class of gap). [spokenLanguageTag] itself can't express "never
+     * set" — it silently falls back to [DEFAULT_LANGUAGE] ("en-IN") — so
+     * callers that need to distinguish "the family chose English" from
+     * "nobody has ever touched this" (e.g. Tier 3b's native-language-first
+     * TTS pass) must check this instead of just testing the tag value.
+     */
+    val hasExplicitSpokenLanguage: Boolean
+        get() = prefs.contains(KEY_LANGUAGE)
+
     var trustedContactName: String
         get() = prefs.getString(KEY_CONTACT_NAME, "") ?: ""
         set(value) = prefs.edit().putString(KEY_CONTACT_NAME, value).apply()

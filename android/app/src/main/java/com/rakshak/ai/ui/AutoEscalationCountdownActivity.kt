@@ -7,8 +7,12 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.rakshak.ai.R
@@ -25,6 +29,32 @@ import java.util.Locale
 
 private const val TAG = "RakshakTier3b"
 private const val COUNTDOWN_SECONDS = 10
+
+/** Utterance IDs for the pre-countdown explanation pass(es) — distinct from
+ *  "rakshak_tier3b" (per-second ticks) and "tier3b_calling_message" (spoken
+ *  after auto-dial), neither of which should trigger the chaining below. */
+private const val UTTERANCE_EXPLANATION_NATIVE = "tier3b_explanation_native"
+private const val UTTERANCE_EXPLANATION_ENGLISH = "tier3b_explanation_english"
+
+/**
+ * Engine-binding warm-up: a short silent utterance queued before the real
+ * explanation, so the first genuinely spoken utterance doesn't pay the cost
+ * of the native audio pipeline opening for the first time on this screen.
+ */
+private const val TTS_WARMUP_UTTERANCE_ID = "tier3b_tts_warmup"
+private const val TTS_WARMUP_SILENCE_MS = 300L
+
+/**
+ * Safety net for requirement 4: if TTS never finishes (engine failure, an
+ * unexpectedly long/looping utterance, a device with no usable voice at
+ * all), the countdown must still eventually start — a broken TTS engine
+ * must never silently block escalation from ever happening. Widened from
+ * 22s to 40s after a real cold-start run measured ~17s just for TextToSpeech
+ * to bind + load the Hindi voice pack, before either explanation pass had
+ * even started speaking — 22s left too little runway for both passes to
+ * finish and was observed cutting the English pass off mid-sentence.
+ */
+private const val EXPLANATION_SAFETY_TIMEOUT_MS = 40_000L
 
 /**
  * Tier 3b — autonomous escalation. Launched for any HIGH-risk verdict from
@@ -64,6 +94,16 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
     // launched on top of it. Whichever runs first wins; the other is a no-op.
     private var settled = false
 
+    // Separate from `settled`: guards the TTS-completion callback and the
+    // safety-timeout Runnable from both firing (e.g. speech finishes right
+    // as the timeout would have fired) and starting the countdown twice.
+    private var countdownStarted = false
+    private val explanationSafetyHandler = Handler(Looper.getMainLooper())
+    private val explanationSafetyTimeout = Runnable {
+        Log.w(TAG, "Tier 3b explanation TTS safety timeout reached — starting countdown without waiting further.")
+        beginCountdownOnce()
+    }
+
     private var phoneNumber: String = ""
     private var transcript: String? = null
     private lateinit var decision: DecisionResult
@@ -74,7 +114,6 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         escalation = EscalationOrchestrator(this)
-        val app = application as RakshakApp
 
         phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER).orEmpty()
         transcript = intent.getStringExtra(EXTRA_TRANSCRIPT)
@@ -85,25 +124,148 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
             suspectedScamType = null,
         )
 
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-            if (ttsReady) {
-                tts.setLanguage(Locale.forLanguageTag(app.settings.spokenLanguageTag))
-                speak(getString(R.string.tier3b_countdown_announcement, COUNTDOWN_SECONDS))
-            }
-        }
+        // Requirement 1: risk level + reason are visual and immediate — never
+        // wait on TTS init, language detection, or anything audio-related.
+        renderImmediateVisual()
+        binding.countdownHeadline.text = getString(R.string.tier3b_explaining_message)
 
         binding.cancelButton.setOnClickListener { onCancelTapped() }
 
+        tts = TextToSpeech(this) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+            if (ttsReady) {
+                tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+
+                    override fun onDone(utteranceId: String?) {
+                        runOnUiThread { onExplanationUtteranceDone(utteranceId) }
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        runOnUiThread {
+                            Log.e(TAG, "Tier 3b explanation TTS error on utterance=$utteranceId — proceeding.")
+                            onExplanationUtteranceDone(utteranceId)
+                        }
+                    }
+                })
+                // Warm-up pass first — see TTS_WARMUP_UTTERANCE_ID's doc comment.
+                // Its onDone (handled in onExplanationUtteranceDone) is what
+                // actually kicks off the real Hindi/English explanation.
+                tts.playSilentUtterance(TTS_WARMUP_SILENCE_MS, TextToSpeech.QUEUE_FLUSH, TTS_WARMUP_UTTERANCE_ID)
+            } else {
+                Log.e(TAG, "Tier 3b TTS failed to initialize (status=$status) — starting countdown without a spoken explanation.")
+                beginCountdownOnce()
+            }
+        }
+
+        // Requirement 4: fires regardless of whether TTS ever succeeds/finishes.
+        explanationSafetyHandler.postDelayed(explanationSafetyTimeout, EXPLANATION_SAFETY_TIMEOUT_MS)
+    }
+
+    private fun renderImmediateVisual() {
+        binding.riskLevelText.text = getString(
+            when (decision.riskLevel) {
+                RiskLevel.HIGH -> R.string.tier3b_risk_label_high
+                RiskLevel.MEDIUM -> R.string.tier3b_risk_label_medium
+                RiskLevel.LOW -> R.string.tier3b_risk_label_low
+            }
+        )
+        binding.reasonText.text = explanationText()
+    }
+
+    private fun explanationText(): String =
+        (listOf(decision.headline) + decision.reasons).filter { it.isNotBlank() }.joinToString(". ")
+
+    /**
+     * Requirement 2: speaks the explanation in the family's preferred
+     * language first, then again in English, back to back — same "native
+     * language first, English second" convention as the onboarding intro.
+     * Skips the repeat if the preferred language IS English. Only once both
+     * passes (or the single pass) finish does [beginCountdownOnce] run — see
+     * [onExplanationUtteranceDone].
+     *
+     * The underlying text is always whatever Prahari returned, which today
+     * is English-only (no translation layer exists yet — CLAUDE.md §9.1 is
+     * still Phase 2). So the "native language" pass changes the TTS
+     * voice/locale, not the words themselves; it will mispronounce non-
+     * English text. Documented gap, not silently pretended away.
+     */
+    private fun speakExplanationThenCountdown() {
+        val app = application as RakshakApp
+        val text = explanationText()
+        if (text.isBlank()) {
+            beginCountdownOnce()
+            return
+        }
+        // No language-selection UI exists yet (see AppSettings.hasExplicitSpokenLanguage),
+        // so "no preference chosen" is the common case today — defaults to Hindi
+        // per product decision, not to AppSettings.DEFAULT_LANGUAGE's "en-IN".
+        val preferredTag = if (app.settings.hasExplicitSpokenLanguage) {
+            app.settings.spokenLanguageTag
+        } else {
+            "hi-IN"
+        }
+        if (preferredTag.startsWith("en", ignoreCase = true)) {
+            speakForced(text, "en-IN", UTTERANCE_EXPLANATION_ENGLISH)
+        } else {
+            speakForced(text, preferredTag, UTTERANCE_EXPLANATION_NATIVE)
+        }
+    }
+
+    /** Handles both natural completion (onDone) and onError for the warm-up
+     *  pass and the two explanation utterances, chaining
+     *  warm-up -> native -> English -> countdown. */
+    private fun onExplanationUtteranceDone(utteranceId: String?) {
+        if (settled) return // user already cancelled — don't queue more speech or start the countdown
+        when (utteranceId) {
+            TTS_WARMUP_UTTERANCE_ID -> speakExplanationThenCountdown()
+            UTTERANCE_EXPLANATION_NATIVE -> speakForced(explanationText(), "en-IN", UTTERANCE_EXPLANATION_ENGLISH)
+            UTTERANCE_EXPLANATION_ENGLISH -> beginCountdownOnce()
+            // Anything else (per-second ticks, the post-dial "calling now"
+            // line) isn't part of this chain — no-op.
+        }
+    }
+
+    /** Forces a specific TTS locale for this utterance — deliberately not
+     *  SpeechLanguageSelector, which auto-detects the text's language and
+     *  would just pick English both times here (the text itself is always
+     *  English; only the requested voice/locale differs between passes). */
+    private fun speakForced(text: String, languageTag: String, utteranceId: String) {
+        if (!ttsReady || text.isBlank()) {
+            onExplanationUtteranceDone(utteranceId)
+            return
+        }
+        val result = tts.setLanguage(Locale.forLanguageTag(languageTag))
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            Log.w(TAG, "Tier 3b explanation voice unavailable for $languageTag (result=$result) — skipping this pass.")
+            onExplanationUtteranceDone(utteranceId)
+            return
+        }
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+    }
+
+    /** Requirement 3/4: the single gate that starts the countdown, reached
+     *  either after the spoken explanation genuinely finishes or via the
+     *  safety timeout — never both (guarded by [countdownStarted]), and
+     *  never if the user already cancelled during the explanation (guarded
+     *  by [settled], same flag [onCancelTapped] and [CountDownTimer.onFinish]
+     *  already use). */
+    private fun beginCountdownOnce() {
+        if (settled || countdownStarted) return
+        countdownStarted = true
+        explanationSafetyHandler.removeCallbacks(explanationSafetyTimeout)
         startCountdown()
     }
 
     private fun startCountdown() {
+        binding.countdownCircleFrame.visibility = View.VISIBLE
         binding.countdownHeadline.text = getString(
             R.string.tier3b_countdown_announcement, COUNTDOWN_SECONDS
         )
         binding.secondsRemainingText.text = COUNTDOWN_SECONDS.toString()
         binding.shrinkingCircleView.progress = 1f
+        speak(getString(R.string.tier3b_countdown_announcement, COUNTDOWN_SECONDS))
 
         countdownTimer = object : CountDownTimer(COUNTDOWN_SECONDS * 1000L, 1000L) {
             override fun onTick(millisUntilFinished: Long) {
@@ -128,6 +290,10 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
         if (settled) return
         settled = true
         countdownTimer?.cancel()
+        explanationSafetyHandler.removeCallbacks(explanationSafetyTimeout)
+        // Also cancellable during the pre-countdown explanation (native/English
+        // TTS pass) — stop() here prevents the voice droning on after Cancel.
+        if (::tts.isInitialized) tts.stop()
         Log.i(TAG, "Tier 3b cancelled by user before auto-dial.")
         // Cancelling the auto-call must not leave the user with nothing —
         // fall back to the normal warning card so help is still one tap away.
@@ -195,6 +361,7 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         countdownTimer?.cancel()
+        explanationSafetyHandler.removeCallbacks(explanationSafetyTimeout)
         if (::tts.isInitialized) {
             tts.stop()
             tts.shutdown()

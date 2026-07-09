@@ -10,10 +10,36 @@
     android:padding="32dp"
     android:background="#B00020">
 
+    <!--
+      Shown immediately in onCreate, before TTS or the countdown — text must
+      never wait on audio. Stays visible for the rest of this screen's
+      lifetime, including once the countdown below starts.
+    -->
+    <TextView
+        android:id="@+id/riskLevelText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        tools:text="🚨 HIGH RISK" />
+
+    <TextView
+        android:id="@+id/reasonText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:textSize="16sp"
+        android:textColor="#FFFFFF"
+        tools:text="This looks like a scam. Do not share any code or send money." />
+
     <TextView
         android:id="@+id/countdownHeadline"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
         android:gravity="center"
         android:textSize="24sp"
         android:textStyle="bold"
@@ -21,9 +47,12 @@
         tools:text="Calling for help in 10 seconds" />
 
     <FrameLayout
+        android:id="@+id/countdownCircleFrame"
         android:layout_width="220dp"
         android:layout_height="220dp"
-        android:layout_marginTop="32dp">
+        android:layout_marginTop="32dp"
+        android:visibility="gone"
+        tools:visibility="visible">
 
         <com.rakshak.ai.ui.ShrinkingCircleView
             android:id="@+id/shrinkingCircleView"
