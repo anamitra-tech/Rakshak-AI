@@ -12,6 +12,9 @@ import com.rakshak.ai.R
 import com.rakshak.ai.RakshakApp
 import com.rakshak.ai.databinding.ActivityCheckCallBinding
 import com.rakshak.ai.intelligence.DecisionAgent
+import com.rakshak.ai.intelligence.DecisionResult
+import com.rakshak.ai.intelligence.OfflineRuleEngine
+import com.rakshak.ai.intelligence.PrahariTextAnalysis
 import com.rakshak.ai.intelligence.PrahariUnavailableException
 import com.rakshak.ai.intelligence.RiskLevel
 import com.rakshak.ai.intelligence.normalizePhoneNumber
@@ -169,46 +172,73 @@ class CheckCallActivity : AppCompatActivity() {
                     app.settings.trustedContactPhone.isNotBlank() &&
                     normalizePhoneNumber(phoneNumber) == normalizePhoneNumber(app.settings.trustedContactPhone)
                 val decision = DecisionAgent.decide(lookup, textAnalysis, sessionAnalysis, isTrustedContact)
-
-                if (decision.riskLevel == RiskLevel.LOW) {
-                    binding.resultText.visibility = View.GONE
-                    startActivity(
-                        SafeResultActivity.buildIntent(this@CheckCallActivity, phoneNumber, decision)
-                    )
-                } else if (decision.riskLevel == RiskLevel.HIGH) {
-                    // Auto-dial + Tier-2 SMS alert together, after a
-                    // cancellable countdown — fires for any HIGH verdict from
-                    // this screen now, not gated behind the family's Tier 3b
-                    // opt-in or a near-deterministic rule match (deliberate
-                    // product decision; see head.md for the tradeoff this
-                    // accepts). AutoEscalationCountdownActivity still falls
-                    // back to the plain WarningActivity on its own if no
-                    // number is configured or CALL_PHONE was never granted —
-                    // that fallback is unchanged.
-                    startActivity(
-                        AutoEscalationCountdownActivity.buildIntent(
-                            this@CheckCallActivity, phoneNumber, decision,
-                        )
-                    )
-                } else {
-                    startActivity(
-                        WarningActivity.buildIntent(
-                            this@CheckCallActivity,
-                            phoneNumber,
-                            decision,
-                            autoSilenced = false,
-                            transcript = transcript,
-                        )
-                    )
-                }
+                routeToOutcome(decision, phoneNumber, transcript)
             } catch (e: PrahariUnavailableException) {
-                binding.resultText.text = getString(
-                    R.string.check_call_backend_error,
-                    app.settings.prahariBaseUrl,
-                )
+                // Prahari unreachable — fall back to the same three
+                // near-deterministic regex categories the backend itself
+                // treats as certain-scam-on-their-own (OfflineRuleEngine).
+                // This is strictly a fallback: it never runs when the
+                // backend answered, and a miss here does NOT mean "safe" —
+                // it means the full ML/session/graph analysis simply
+                // couldn't run, which the shown message says explicitly.
+                val offlineMatch = OfflineRuleEngine.check(transcript)
+                if (offlineMatch != null) {
+                    val offlineAnalysis = PrahariTextAnalysis(
+                        riskLevel = RiskLevel.HIGH,
+                        rawLabel = "FRAUD",
+                        score = 0.95,
+                        reason = offlineMatch.explanation,
+                        signals = listOf(offlineMatch.signalLabel),
+                        recommendedAction =
+                            "Block sender, do NOT share any code/money, report at cybercrime.gov.in / 1930.",
+                        ruleCategories = listOf(offlineMatch.category),
+                    )
+                    val lookup = app.callerLookupSource.lookup(phoneNumber)
+                    val isTrustedContact = phoneNumber.isNotBlank() &&
+                        app.settings.trustedContactPhone.isNotBlank() &&
+                        normalizePhoneNumber(phoneNumber) == normalizePhoneNumber(app.settings.trustedContactPhone)
+                    val decision = DecisionAgent.decide(lookup, offlineAnalysis, null, isTrustedContact)
+                    routeToOutcome(decision, phoneNumber, transcript)
+                } else {
+                    binding.resultText.text = getString(R.string.check_call_offline_no_match)
+                }
             } finally {
                 binding.analyzeButton.isEnabled = true
             }
+        }
+    }
+
+    private fun routeToOutcome(decision: DecisionResult, phoneNumber: String, transcript: String) {
+        if (decision.riskLevel == RiskLevel.LOW) {
+            binding.resultText.visibility = View.GONE
+            startActivity(
+                SafeResultActivity.buildIntent(this@CheckCallActivity, phoneNumber, decision)
+            )
+        } else if (decision.riskLevel == RiskLevel.HIGH) {
+            // Auto-dial + Tier-2 SMS alert together, after a
+            // cancellable countdown — fires for any HIGH verdict from
+            // this screen now, not gated behind the family's Tier 3b
+            // opt-in or a near-deterministic rule match (deliberate
+            // product decision; see head.md for the tradeoff this
+            // accepts). AutoEscalationCountdownActivity still falls
+            // back to the plain WarningActivity on its own if no
+            // number is configured or CALL_PHONE was never granted —
+            // that fallback is unchanged.
+            startActivity(
+                AutoEscalationCountdownActivity.buildIntent(
+                    this@CheckCallActivity, phoneNumber, decision,
+                )
+            )
+        } else {
+            startActivity(
+                WarningActivity.buildIntent(
+                    this@CheckCallActivity,
+                    phoneNumber,
+                    decision,
+                    autoSilenced = false,
+                    transcript = transcript,
+                )
+            )
         }
     }
 }

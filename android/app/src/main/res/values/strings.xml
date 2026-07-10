@@ -20,6 +20,7 @@
     <string name="check_call_empty_error">Please enter something to check first.</string>
     <string name="check_call_loading">Checking with Prahari…</string>
     <string name="check_call_backend_error">Could not reach the Prahari backend at %1$s. Make sure it is running and reachable, then try again.</string>
+    <string name="check_call_offline_no_match">No internet - basic checks found nothing alarming, but we couldn\'t run the full analysis. If in doubt, hang up and call your bank\'s official number.</string>
 
     <string name="check_call_voice_button">🎤 Speak instead</string>
     <string name="check_call_voice_listening">🎤 Listening… (tap to stop)</string>
