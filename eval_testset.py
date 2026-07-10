@@ -22,6 +22,7 @@ from collections import defaultdict
 from ml.detector import ScamDetector
 from voice.voice_fraud import analyze_transcript
 from ml import llm_explainer
+import check_pattern_parity
 
 USE_LLM = "--no-llm" not in sys.argv
 
@@ -135,4 +136,10 @@ def run():
 
 
 if __name__ == "__main__":
+    parity_ok, parity_report = check_pattern_parity.check()
+    print(parity_report)
+    if not parity_ok:
+        print("\nAborting eval run: fix the Kotlin/Python pattern drift above before trusting these results.")
+        sys.exit(1)
+    print()
     run()
