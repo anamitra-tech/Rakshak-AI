@@ -31,12 +31,6 @@
     <string name="check_call_voice_generic_error">Voice input isn\'t available right now. Please type instead.</string>
     <string name="check_call_voice_start_failed">Voice input could not be started. Please try again or type instead.</string>
 
-    <string name="feedback_toggle_label">Was this right?</string>
-    <string name="feedback_positive_button">👍 Yes, this was right</string>
-    <string name="feedback_negative_not_scam_button">👎 This wasn\'t actually a scam</string>
-    <string name="feedback_negative_should_flag_button">👎 This should have been flagged</string>
-    <string name="feedback_thanks">Thanks — feedback recorded.</string>
-
     <string name="warning_notification_title">Rakshak AI warning</string>
     <string name="warning_channel_name">Call warnings</string>
     <string name="warning_channel_description">Full-screen warnings for risky incoming calls</string>

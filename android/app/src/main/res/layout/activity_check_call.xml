@@ -79,47 +79,6 @@
             android:textSize="16sp"
             android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/feedbackToggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:padding="8dp"
-            android:text="@string/feedback_toggle_label"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/feedbackButtons"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <Button
-                android:id="@+id/feedbackPositiveButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/feedback_positive_button" />
-
-            <Button
-                android:id="@+id/feedbackNegativeButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                tools:text="@string/feedback_negative_should_flag_button" />
-
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/feedbackThanksText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textSize="16sp"
-            android:visibility="gone"
-            android:text="@string/feedback_thanks" />
-
     </LinearLayout>
 
 </ScrollView>

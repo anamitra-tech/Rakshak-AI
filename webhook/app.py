@@ -161,15 +161,6 @@ def _build_reply(decision: dict, lang: str) -> str:
         lines.append(action_en)
         lines.append(action_hi)
 
-    lines.append("")
-    if lang == "hi":
-        lines.append("क्या यह सही था? 👍 सही / 👎 गलत")
-    elif lang == "both":
-        lines.append("Was this right? 👍 correct / 👎 wrong")
-        lines.append("क्या यह सही था? 👍 सही / 👎 गलत")
-    else:
-        lines.append("Was this right? Reply 👍 correct / 👎 wrong")
-
     return "\n".join(lines)
 
 
