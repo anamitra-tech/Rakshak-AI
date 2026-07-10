@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="32dp"
+    android:background="@color/risk_low">
+
+    <!--
+      Calm, reassuring counterpart to WarningActivity — same full-screen
+      card structure, deliberately much simpler: no traffic-light escalation
+      states, no countdown, no secondary disclosures. One message, spoken
+      aloud, one dismiss action.
+    -->
+    <TextView
+        android:id="@+id/safeEmoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:textSize="96sp"
+        tools:text="✅" />
+
+    <TextView
+        android:id="@+id/safeHeadlineText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        tools:text="This looks safe. Stay alert anyway." />
+
+    <TextView
+        android:id="@+id/safePhoneNumberText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="4dp"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:visibility="gone"
+        tools:text="From +91 98765 00001" />
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <Button
+        android:id="@+id/safeOkButton"
+        android:layout_width="match_parent"
+        android:layout_height="96dp"
+        android:textSize="24sp"
+        android:text="@string/safe_result_ok_button" />
+
+</LinearLayout>

@@ -9,6 +9,9 @@
     <string name="check_call_button">Check a call or message</string>
     <string name="base_url_label">Prahari backend</string>
 
+    <string name="safe_result_title">Looks safe</string>
+    <string name="safe_result_ok_button">OK</string>
+
     <string name="check_call_title">Check a call or message</string>
     <string name="check_call_intro">Type or paste what the caller said, or paste a suspicious message. This is sent to the Prahari backend for a real check — no live call audio is used.</string>
     <string name="check_call_phone_hint">Phone number (optional)</string>

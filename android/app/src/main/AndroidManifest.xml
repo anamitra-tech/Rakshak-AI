@@ -70,6 +70,11 @@
             android:label="@string/check_call_title" />
 
         <activity
+            android:name=".ui.SafeResultActivity"
+            android:exported="false"
+            android:label="@string/safe_result_title" />
+
+        <activity
             android:name=".ui.FullScreenIntentSetupActivity"
             android:exported="false"
             android:label="@string/fsi_setup_title" />

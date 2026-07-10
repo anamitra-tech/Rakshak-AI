@@ -171,7 +171,10 @@ class CheckCallActivity : AppCompatActivity() {
                 val decision = DecisionAgent.decide(lookup, textAnalysis, sessionAnalysis, isTrustedContact)
 
                 if (decision.riskLevel == RiskLevel.LOW) {
-                    binding.resultText.text = decision.headline
+                    binding.resultText.visibility = View.GONE
+                    startActivity(
+                        SafeResultActivity.buildIntent(this@CheckCallActivity, phoneNumber, decision)
+                    )
                 } else if (decision.riskLevel == RiskLevel.HIGH) {
                     // Auto-dial + Tier-2 SMS alert together, after a
                     // cancellable countdown — fires for any HIGH verdict from
