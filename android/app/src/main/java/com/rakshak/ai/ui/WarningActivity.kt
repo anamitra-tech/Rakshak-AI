@@ -61,27 +61,9 @@ class WarningActivity : AppCompatActivity() {
 
         escalation = EscalationOrchestrator(this)
         val app = application as RakshakApp
+        tts = app.tts
 
-        riskLevel = RiskLevel.valueOf(intent.getStringExtra(EXTRA_RISK_LEVEL) ?: RiskLevel.MEDIUM.name)
-        headline = intent.getStringExtra(EXTRA_HEADLINE).orEmpty()
-        reasons = intent.getStringArrayListExtra(EXTRA_REASONS).orEmpty()
-        phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER).orEmpty()
-        transcript = intent.getStringExtra(EXTRA_TRANSCRIPT)
-        autoSilenced = intent.getBooleanExtra(EXTRA_AUTO_SILENCED, false)
-
-        renderTrafficLight(riskLevel, headline)
-        renderPhoneNumber(phoneNumber)
-        renderReasons(reasons)
-        showWarningState()
-
-        // Fires for every path that reaches this Activity — the manual
-        // "check a message" flow (CheckCallActivity) and the automatic
-        // CallScreeningService flow both funnel through here, so a single
-        // call site covers both. Must not depend on reading/seeing anything
-        // (CLAUDE.md 9.2 — elderly/illiterate-first), so this plays on
-        // STREAM_ALARM (via AudioAttributes.USAGE_ALARM) specifically so it
-        // is audible even with the phone on silent/vibrate, same as the TTS
-        // speech below.
+        applyIntentState(intent)
         playAlertTone()
 
         // Uses the app-wide shared TTS instance (RakshakApp.tts), constructed
@@ -90,7 +72,9 @@ class WarningActivity : AppCompatActivity() {
         // onInit binding delay visible every time this screen opened, right
         // when the user needed to hear the warning fastest. By now, it has
         // almost always already finished initializing in the background.
-        tts = app.tts
+        // Registered once, here — ttsReady is an instance field that
+        // persists across onNewIntent (below), so a reused singleTask
+        // instance doesn't need to re-register this.
         app.onTtsReady {
             ttsReady = app.ttsReady
             Log.i(TAG, "tts_init ready=$ttsReady (shared instance)")
@@ -122,6 +106,43 @@ class WarningActivity : AppCompatActivity() {
                 if (nowVisible) R.string.why_toggle_hide else R.string.why_toggle_show
             )
         }
+    }
+
+    /**
+     * WarningActivity is launchMode="singleTask" (AndroidManifest.xml) so a
+     * second detection while one warning is already showing reuses this same
+     * instance and re-alerts, rather than stacking warning screens. Without
+     * this override, that reused instance kept displaying whatever
+     * riskLevel/headline/reasons its *original* onCreate() parsed — the new
+     * Intent's extras were delivered here but never read — so a stale
+     * previous test's reason text (or even just a stale HELP-state button
+     * layout) could show through for an unrelated new message. Real bug,
+     * not a text-generation bug: every layer that computes the reason string
+     * itself was already correct, this is why it never reached the screen.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyIntentState(intent)
+        playAlertTone()
+        if (ttsReady) speak(headline)
+    }
+
+    private fun applyIntentState(intent: Intent) {
+        riskLevel = RiskLevel.valueOf(intent.getStringExtra(EXTRA_RISK_LEVEL) ?: RiskLevel.MEDIUM.name)
+        headline = intent.getStringExtra(EXTRA_HEADLINE).orEmpty()
+        reasons = intent.getStringArrayListExtra(EXTRA_REASONS).orEmpty()
+        phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER).orEmpty()
+        transcript = intent.getStringExtra(EXTRA_TRANSCRIPT)
+        autoSilenced = intent.getBooleanExtra(EXTRA_AUTO_SILENCED, false)
+
+        renderTrafficLight(riskLevel, headline)
+        renderPhoneNumber(phoneNumber)
+        renderReasons(reasons)
+        // Reset to the WARNING state even if the reused instance was left in
+        // HELP state (primary button already tapped) by a previous, unrelated
+        // detection — a fresh Intent means a fresh warning, not a continuation.
+        showWarningState()
     }
 
     private fun onPanicTapped() {
