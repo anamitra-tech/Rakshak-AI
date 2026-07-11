@@ -4,6 +4,7 @@ import android.app.Application
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.rakshak.ai.intelligence.CallerLookupSource
+import com.rakshak.ai.intelligence.MlScamScorer
 import com.rakshak.ai.intelligence.MockCallerLookupSource
 import com.rakshak.ai.intelligence.PrahariApiClient
 import com.rakshak.ai.intelligence.PrahariHttpApiClient
@@ -94,5 +95,26 @@ class RakshakApp : Application() {
     /** Call after the user changes the Prahari base URL in settings. */
     fun refreshPrahariClient() {
         prahariApiClient = PrahariHttpApiClient(settings.prahariBaseUrl)
+    }
+
+    /**
+     * Loaded lazily on first use, not at process start — this is only ever
+     * read from the Prahari-unreachable fallback path (see
+     * CheckCallActivity), which most sessions never hit, so there's no
+     * reason to pay the parse cost (~6700 vocabulary entries) on every app
+     * launch. `null` on any load failure (missing/corrupt asset) rather than
+     * crashing — OfflineEvaluator already degrades to rules-only scoring
+     * when handed a null model, same "never appear to hang or crash on a
+     * failed dependency" posture as the rest of the offline fallback.
+     */
+    val offlineMlModel: MlScamScorer.Model? by lazy {
+        try {
+            assets.open("scam_model.txt").bufferedReader(Charsets.UTF_8).use {
+                MlScamScorer.parseModel(it.readText())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "offline_ml_model_load_failed", e)
+            null
+        }
     }
 }

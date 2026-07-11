@@ -13,7 +13,7 @@ import com.rakshak.ai.RakshakApp
 import com.rakshak.ai.databinding.ActivityCheckCallBinding
 import com.rakshak.ai.intelligence.DecisionAgent
 import com.rakshak.ai.intelligence.DecisionResult
-import com.rakshak.ai.intelligence.OfflineRuleEngine
+import com.rakshak.ai.intelligence.OfflineEvaluator
 import com.rakshak.ai.intelligence.PrahariTextAnalysis
 import com.rakshak.ai.intelligence.PrahariUnavailableException
 import com.rakshak.ai.intelligence.RiskLevel
@@ -174,24 +174,29 @@ class CheckCallActivity : AppCompatActivity() {
                 val decision = DecisionAgent.decide(lookup, textAnalysis, sessionAnalysis, isTrustedContact)
                 routeToOutcome(decision, phoneNumber, transcript)
             } catch (e: PrahariUnavailableException) {
-                // Prahari unreachable — fall back to the same three
-                // near-deterministic regex categories the backend itself
-                // treats as certain-scam-on-their-own (OfflineRuleEngine).
-                // This is strictly a fallback: it never runs when the
-                // backend answered, and a miss here does NOT mean "safe" —
-                // it means the full ML/session/graph analysis simply
-                // couldn't run, which the shown message says explicitly.
-                val offlineMatch = OfflineRuleEngine.check(transcript)
-                if (offlineMatch != null) {
+                // Prahari unreachable — fall back to OfflineEvaluator, which
+                // combines the same three near-deterministic regex
+                // categories the backend treats as certain-scam-on-their-own
+                // with MlScamScorer's ported copy of the actual trained
+                // model (not just the rules), so a message with no rule hit
+                // but a real ML signal (e.g. an expert_scam-style script with
+                // no digit-count/OTP wording) still gets flagged instead of
+                // silently falling through to "no match". This is strictly a
+                // fallback: it never runs when the backend answered, and a
+                // LOW verdict here does NOT mean "definitely safe" — it means
+                // the full ML/session/graph analysis simply couldn't run,
+                // which the shown message says explicitly.
+                val offlineEval = OfflineEvaluator.evaluate(transcript, app.offlineMlModel)
+                if (offlineEval.riskLevel != RiskLevel.LOW) {
                     val offlineAnalysis = PrahariTextAnalysis(
-                        riskLevel = RiskLevel.HIGH,
-                        rawLabel = "FRAUD",
-                        score = 0.95,
-                        reason = offlineMatch.explanation,
-                        signals = listOf(offlineMatch.signalLabel),
+                        riskLevel = offlineEval.riskLevel,
+                        rawLabel = if (offlineEval.riskLevel == RiskLevel.HIGH) "FRAUD" else "SUSPICIOUS",
+                        score = offlineEval.score,
+                        reason = offlineEval.reason,
+                        signals = offlineEval.signals,
                         recommendedAction =
                             "Block sender, do NOT share any code/money, report at cybercrime.gov.in / 1930.",
-                        ruleCategories = listOf(offlineMatch.category),
+                        ruleCategories = offlineEval.ruleCategories,
                     )
                     val lookup = app.callerLookupSource.lookup(phoneNumber)
                     val isTrustedContact = phoneNumber.isNotBlank() &&
