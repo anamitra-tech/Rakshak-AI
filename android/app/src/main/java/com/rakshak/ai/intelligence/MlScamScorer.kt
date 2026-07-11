@@ -35,8 +35,16 @@ object MlScamScorer {
 
     data class TermWeights(val idf: Double, val coef: Double)
 
-    private val WORD_TOKEN_PATTERN = Regex("(?U)\\b\\w\\w+\\b")
-    private val WHITESPACE_SPLIT = Regex("(?U)\\s+")
+    // No (?U) flag: Android's regex engine is ICU-native (com.android.icu.util.regex),
+    // not OpenJDK's, and doesn't support the (?U)/UNICODE_CHARACTER_CLASS embedded-flag
+    // syntax at all -- compiling it threw PatternSyntaxException at class-init time,
+    // crashing the app on every offline-fallback use. \w and \b are Unicode-aware on
+    // Android by default (unlike desktop java.util.regex, where \w is ASCII-only unless
+    // this flag or UNICODE_CHARACTER_CLASS is set), so dropping the flag entirely is the
+    // fix, not a workaround -- see check_ml_scorer_parity.py's re-run after this change,
+    // which re-validates Devanagari-containing cases specifically.
+    private val WORD_TOKEN_PATTERN = Regex("\\b\\w\\w+\\b")
+    private val WHITESPACE_SPLIT = Regex("\\s+")
 
     fun parseModel(raw: String): Model {
         val lines = raw.split("\n").map { it.trimEnd('\r') }
