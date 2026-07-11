@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Rakshak AI</string>
+    <string name="app_name">AbhayAI</string>
 
     <string name="role_status_active">Call screening is active.</string>
     <string name="role_status_inactive">Call screening is not set up yet.</string>
@@ -18,9 +18,24 @@
     <string name="check_call_transcript_hint">What did the caller say?</string>
     <string name="check_call_analyze_button">Check this</string>
     <string name="check_call_empty_error">Please enter something to check first.</string>
-    <string name="check_call_loading">Checking with Prahari…</string>
     <string name="check_call_backend_error">Could not reach the Prahari backend at %1$s. Make sure it is running and reachable, then try again.</string>
     <string name="check_call_offline_no_match">No internet - basic checks found nothing alarming, but we couldn\'t run the full analysis. If in doubt, hang up and call your bank\'s official number.</string>
+
+    <!-- Loading overlay: shown for however long the Prahari call / offline
+         fallback takes (see CheckCallActivity + LoadingOverlay). The stat
+         line is a real, current number pulled from rakshak_eval_testset.json
+         (33 scam-labeled cases, 100% recall confirmed by eval_testset.py at
+         the time this was written) — not an invented percentage. If the
+         eval suite's case count or recall ever changes, this string needs
+         updating to match, same as any other documented result in this repo. -->
+    <string-array name="loading_reassuring_phrases">
+        <item>Surakshit, don\'t take tension</item>
+        <item>Aapki suraksha, hamari zimmedari</item>
+        <item>Take a deep breath — we\'ve got this</item>
+        <item>Ek minute, hum dhyaan se check kar rahe hain</item>
+        <item>No need to worry, just a moment</item>
+    </string-array>
+    <string name="loading_stat_line">Tested against 33 real scam patterns — 100% catch rate in our evaluation</string>
 
     <string name="check_call_voice_button">🎤 Speak instead</string>
     <string name="check_call_voice_listening">🎤 Listening… (tap to stop)</string>
@@ -35,7 +50,7 @@
     <string name="check_call_voice_generic_error">Voice input isn\'t available right now. Please type instead.</string>
     <string name="check_call_voice_start_failed">Voice input could not be started. Please try again or type instead.</string>
 
-    <string name="warning_notification_title">Rakshak AI warning</string>
+    <string name="warning_notification_title">AbhayAI warning</string>
     <string name="warning_channel_name">Call warnings</string>
     <string name="warning_channel_description">Full-screen warnings for risky incoming calls</string>
 
@@ -46,7 +61,7 @@
     <string name="why_toggle_hide">Hide details</string>
 
     <string name="fsi_setup_title">One more setup step</string>
-    <string name="fsi_setup_explanation">Rakshak AI needs permission to show full-screen warnings so they appear immediately — even when the phone is locked. Without this, a warning about a scam call might not be seen in time.\n\nThis is a one-time setup step, best done by a family member.</string>
+    <string name="fsi_setup_explanation">AbhayAI needs permission to show full-screen warnings so they appear immediately — even when the phone is locked. Without this, a warning about a scam call might not be seen in time.\n\nThis is a one-time setup step, best done by a family member.</string>
     <string name="fsi_setup_button">Open settings to allow this</string>
     <string name="fsi_setup_waiting">Waiting for permission… come back here after allowing it.</string>
 
@@ -64,7 +79,7 @@
     <string name="family_setup_tier3b_toggle">Enable automatic emergency call (Tier 3b)</string>
     <string name="family_setup_tier3b_explanation">For the clearest scam signals only (e.g. being asked to read out an OTP, or being told not to call the bank). Shows a countdown and calls the number below automatically unless cancelled. Off by default — only turn this on if the primary user may not be able to act during a scam call themselves.</string>
     <string name="family_setup_tier3b_number_hint">Number to auto-dial</string>
-    <string name="family_setup_tier3b_debug_warning">TEST BUILD: enter a real test number here, never 1930. Tier 3b stays off until a number is set.</string>
+    <string name="family_setup_tier3b_debug_warning">⚠️ TEST BUILD: enter a real test number here, never 1930. Tier 3b stays off until a number is set.</string>
     <string name="family_setup_backend_url_label">Prahari backend address (for testing)</string>
     <string name="family_setup_backend_url_hint">http://10.0.2.2:8000</string>
     <string name="family_setup_backend_url_help">Leave as-is for the emulator. Change this only to point at a real network address (e.g. an ngrok URL) when testing on a physical phone. Blank resets to the emulator default.</string>

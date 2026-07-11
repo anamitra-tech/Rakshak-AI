@@ -46,7 +46,7 @@ _INTENT_PROMPT = (
 
 # ── Personality strings ───────────────────────────────────────────────────────
 
-GREETING = """🛡️ *Namaste! I'm Rakshak.*
+GREETING = """🛡️ *Namaste! I'm AbhayAI.*
 
 I help citizens identify scams — digital arrest calls, fake bank alerts, suspicious links, QR code fraud, and more.
 
@@ -57,7 +57,7 @@ Just tell me:
 
 I'll tell you if it's a scam and exactly what to do. 🔴🟢"""
 
-ABOUT = """🛡️ *Rakshak — Digital Public Safety Assistant*
+ABOUT = """🛡️ *AbhayAI — Digital Public Safety Assistant*
 
 I can detect:
 ✓ Digital arrest scams (fake CBI/ED/Police)

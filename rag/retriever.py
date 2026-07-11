@@ -52,7 +52,7 @@ _CONFIRM_KW = {
 }
 
 _PROMPT_TEMPLATE = """\
-You are Rakshak, a public safety assistant for Indian citizens.
+You are AbhayAI, a public safety assistant for Indian citizens.
 A citizen has sent this message: "{user_message}"
 
 Our fraud classifier has already assessed this as {risk_level} risk, matching a known scam pattern:

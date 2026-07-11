@@ -94,7 +94,7 @@ class MissedEscalationAgent(private val context: Context) {
             val json = JSONObject().apply {
                 put("phone_number", phone)
                 put("pdf_base64", pdfBase64)
-                put("caption", "Rakshak AI — missed escalation evidence. See attached.")
+                put("caption", "AbhayAI — missed escalation evidence. See attached.")
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
@@ -181,10 +181,10 @@ class MissedEscalationAgent(private val context: Context) {
         return try {
             val json = JSONObject().apply {
                 put("to_email", email)
-                put("subject", "Rakshak AI — missed escalation evidence")
+                put("subject", "AbhayAI — missed escalation evidence")
                 put("text_summary", draftText)
                 put("pdf_base64", pdfBase64)
-                put("pdf_filename", "rakshak_evidence.pdf")
+                put("pdf_filename", "abhayai_evidence.pdf")
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()

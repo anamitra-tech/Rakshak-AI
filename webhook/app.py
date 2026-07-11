@@ -287,7 +287,7 @@ _EVIDENCE_FILENAME_RE = re.compile(r"^[0-9a-f]{32}\.pdf$")
 class WhatsAppEvidenceRequest(BaseModel):
     phone_number: str  # E.164, no "whatsapp:" prefix — this adds it
     pdf_base64: str
-    caption: str = "Rakshak AI — missed escalation evidence"
+    caption: str = "AbhayAI — missed escalation evidence"
 
 
 class EmailEvidenceRequest(BaseModel):

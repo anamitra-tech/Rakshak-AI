@@ -86,7 +86,7 @@ class EscalationOrchestrator(private val context: Context) {
         }
 
         return try {
-            val smsBody = "RAKSHAK AI ALERT — possible scam detected.\n\n$draft"
+            val smsBody = "ABHAYAI ALERT — possible scam detected.\n\n$draft"
             val smsManager = SmsManager.getDefault()
             val parts = smsManager.divideMessage(smsBody)
 

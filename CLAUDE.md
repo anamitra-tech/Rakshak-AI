@@ -2,7 +2,7 @@
 (package `com.rakshak.ai`, minSdk 29). See the end of this doc for what's real vs. stubbed and
 how to run it.
 
-# Rakshak AI — Android Client, Phase 1 (revised)
+# AbhayAI — Android Client, Phase 1 (revised)
 
 This repo already contains **Prahari**, a working Python fraud-intelligence backend (see
 `README.md`). This document specifies the Android call-protection app that will consume it,
@@ -31,7 +31,7 @@ Android code.
 
 ## 1. What Prahari already covers vs. what's genuinely mocked
 
-| Rakshak agent role | Prahari coverage | Integration |
+| AbhayAI agent role | Prahari coverage | Integration |
 |---|---|---|
 | **Call Intelligence** (CNAP + Sanchar Saathi, number-only, pre-connect) | **Not covered** — Prahari has no phone-number-reputation lookup; nothing to consume | `MockCallerLookupSource` stays, as originally planned |
 | **Speech Intelligence** (scam-phrase / urgency detection on text) | **Covered** — `POST /analyze_voice {transcript}` (`voice/voice_fraud.py`), `POST /analyze_message {text}` (`ml/detector.py`) | Real HTTP calls, fed from manual/pasted text (see Section 3 — no live audio in this phase) |
