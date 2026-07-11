@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WebView-assisted NCRP complaint filing. The WebView shows the real,
+  unmodified cybercrime.gov.in site — the user navigates it (including the
+  mandatory mobile-OTP verification step, which this app deliberately never
+  attempts to automate) themselves. "Autofill this page" is a manual,
+  on-demand action the user taps once they believe they've reached the
+  incident-details form; it never runs automatically on page load. The
+  complaint-summary panel (the pre-existing ComplaintDraft text, copy/paste
+  fallback) is always available, not just shown on failure — see
+  NcrpComplaintActivity's doc comment for the full investigation findings.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/screen_background">
+
+    <TextView
+        android:id="@+id/neverSubmitsNotice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="#33000000"
+        android:text="@string/ncrp_never_submits_notice"
+        android:textColor="@color/text_on_background"
+        android:textSize="13sp" />
+
+    <WebView
+        android:id="@+id/ncrpWebView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <Button
+        android:id="@+id/autofillButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:enabled="false"
+        android:text="@string/ncrp_autofill_button" />
+
+    <TextView
+        android:id="@+id/summaryToggle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:gravity="center"
+        android:textColor="@color/accent_cyan"
+        android:textStyle="bold"
+        android:text="@string/ncrp_summary_toggle_show" />
+
+    <ScrollView
+        android:id="@+id/summaryScroll"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:id="@+id/summaryText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_on_background"
+                android:textSize="13sp"
+                tools:text="DRAFT complaint — review before submitting..." />
+
+            <Button
+                android:id="@+id/copySummaryButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/ncrp_summary_copy_button" />
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

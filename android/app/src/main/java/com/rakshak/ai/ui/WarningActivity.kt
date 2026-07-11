@@ -17,11 +17,13 @@ import androidx.appcompat.app.AppCompatActivity
 import com.rakshak.ai.R
 import com.rakshak.ai.RakshakApp
 import com.rakshak.ai.databinding.ActivityWarningBinding
+import com.rakshak.ai.escalation.ComplaintDraft
 import com.rakshak.ai.escalation.EscalationOrchestrator
 import com.rakshak.ai.escalation.NotifyResult
 import com.rakshak.ai.intelligence.DecisionResult
 import com.rakshak.ai.intelligence.RiskLevel
 import com.rakshak.ai.tts.SpeechLanguageSelector
+import java.util.Date
 
 /**
  * Full-screen warning card. Built to CLAUDE.md Section 9.2:
@@ -51,6 +53,7 @@ class WarningActivity : AppCompatActivity() {
     private lateinit var riskLevel: RiskLevel
     private var headline: String = ""
     private var reasons: List<String> = emptyList()
+    private var ruleCategories: List<String> = emptyList()
     private var phoneNumber: String = ""
     private var transcript: String? = null
 
@@ -132,6 +135,7 @@ class WarningActivity : AppCompatActivity() {
         riskLevel = RiskLevel.valueOf(intent.getStringExtra(EXTRA_RISK_LEVEL) ?: RiskLevel.MEDIUM.name)
         headline = intent.getStringExtra(EXTRA_HEADLINE).orEmpty()
         reasons = intent.getStringArrayListExtra(EXTRA_REASONS).orEmpty()
+        ruleCategories = intent.getStringArrayListExtra(EXTRA_RULE_CATEGORIES).orEmpty()
         phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER).orEmpty()
         transcript = intent.getStringExtra(EXTRA_TRANSCRIPT)
         autoSilenced = intent.getBooleanExtra(EXTRA_AUTO_SILENCED, false)
@@ -154,6 +158,32 @@ class WarningActivity : AppCompatActivity() {
         showHelpState(notifyResult)
         speak(outcome)
         binding.helpActionButton.setOnClickListener { escalation.dialHelpline() }
+
+        // Same ComplaintDraft text already used for the SMS/copy fallback —
+        // NcrpComplaintActivity treats it as the always-available manual
+        // fallback alongside its WebView-assisted autofill attempt.
+        val now = Date()
+        val draftText = ComplaintDraft.build(phoneNumber, decision, transcript, now)
+        val descriptionText = buildString {
+            if (reasons.isNotEmpty()) append(reasons.joinToString("; "))
+            if (!transcript.isNullOrBlank()) {
+                if (isNotEmpty()) append(" — ")
+                append("\"$transcript\"")
+            }
+        }
+        binding.fileComplaintButton.visibility = View.VISIBLE
+        binding.fileComplaintButton.setOnClickListener {
+            startActivity(
+                NcrpComplaintActivity.buildIntent(
+                    context = this,
+                    suspectPhone = phoneNumber,
+                    incidentEpochMillis = now.time,
+                    description = descriptionText,
+                    ruleCategories = ruleCategories,
+                    draftText = draftText,
+                )
+            )
+        }
     }
 
     /** Only surfaced when Tier 2 did NOT actually reach the trusted contact —
@@ -288,6 +318,7 @@ class WarningActivity : AppCompatActivity() {
         private const val EXTRA_RISK_LEVEL = "risk_level"
         private const val EXTRA_HEADLINE = "headline"
         private const val EXTRA_REASONS = "reasons"
+        private const val EXTRA_RULE_CATEGORIES = "rule_categories"
         private const val EXTRA_PHONE_NUMBER = "phone_number"
         private const val EXTRA_AUTO_SILENCED = "auto_silenced"
         private const val EXTRA_TRANSCRIPT = "transcript"
@@ -303,6 +334,7 @@ class WarningActivity : AppCompatActivity() {
             putExtra(EXTRA_RISK_LEVEL, decision.riskLevel.name)
             putExtra(EXTRA_HEADLINE, decision.headline)
             putStringArrayListExtra(EXTRA_REASONS, ArrayList(decision.reasons))
+            putStringArrayListExtra(EXTRA_RULE_CATEGORIES, ArrayList(decision.ruleCategories))
             putExtra(EXTRA_PHONE_NUMBER, phoneNumber)
             putExtra(EXTRA_AUTO_SILENCED, autoSilenced)
             putExtra(EXTRA_TRANSCRIPT, transcript)

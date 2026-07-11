@@ -102,4 +102,18 @@
     <string name="tier3b_risk_label_high">🚨 HIGH RISK</string>
     <string name="tier3b_risk_label_medium">⚠️ MEDIUM RISK</string>
     <string name="tier3b_risk_label_low">✅ LOW RISK</string>
+
+    <string name="ncrp_complaint_button">📝 File complaint (NCRP)</string>
+    <string name="ncrp_complaint_title">File a complaint</string>
+    <string name="ncrp_never_submits_notice">This app only fills in fields for you to review — it never submits anything. You must check everything and press Submit yourself on the government site.</string>
+    <string name="ncrp_autofill_button">Autofill this page</string>
+    <string name="ncrp_autofill_result_prefix">Filled %1$d field(s).</string>
+    <string name="ncrp_autofill_result_missing">%1$d not found — please fill those in yourself.</string>
+    <string name="ncrp_autofill_no_fields_found">No matching fields found on this page yet. If you haven\'t reached the incident-details form, continue through the site (including the mobile OTP verification step — this app cannot and will not do that part for you), then tap Autofill again.</string>
+    <string name="ncrp_autofill_script_error">Autofill could not run on this page (%1$s). Use your complaint summary below instead.</string>
+    <string name="ncrp_load_error">Could not load the NCRP website (%1$s). You can still call 1930 or use your complaint summary below.</string>
+    <string name="ncrp_summary_toggle_show">Show my complaint summary (copy/paste)</string>
+    <string name="ncrp_summary_toggle_hide">Hide complaint summary</string>
+    <string name="ncrp_summary_copy_button">Copy summary</string>
+    <string name="ncrp_summary_copied_toast">Complaint summary copied.</string>
 </resources>

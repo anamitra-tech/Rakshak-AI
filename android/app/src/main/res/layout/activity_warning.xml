@@ -137,6 +137,19 @@
                 android:visibility="gone"
                 android:text="@string/complaint_draft_copy_button" />
 
+            <!-- Secondary action alongside copyDraftButton above, not a
+                 second competing primary action — same "read-only
+                 disclosure, not a competing action" reasoning as the
+                 draft toggle/copy button (see WarningActivity doc). Only
+                 shown in the HELP state, same as the draft controls. -->
+            <Button
+                android:id="@+id/fileComplaintButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:visibility="gone"
+                android:text="@string/ncrp_complaint_button" />
+
         </LinearLayout>
     </ScrollView>
 

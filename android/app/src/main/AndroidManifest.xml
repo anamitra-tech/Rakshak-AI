@@ -90,6 +90,15 @@
             android:exported="false"
             android:label="@string/family_setup_title" />
 
+        <!-- WebView-assisted NCRP complaint filing — loads the real
+             cybercrime.gov.in in-app; never submits anything itself, see
+             NcrpComplaintActivity's doc comment for the full investigation
+             findings this was built against. -->
+        <activity
+            android:name=".ui.NcrpComplaintActivity"
+            android:exported="false"
+            android:label="@string/ncrp_complaint_title" />
+
         <!--
           Tier 3b countdown — same visibility rules as WarningActivity (only
           ever started when the near-deterministic gate fires and the family
