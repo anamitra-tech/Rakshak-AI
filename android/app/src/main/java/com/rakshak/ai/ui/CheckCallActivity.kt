@@ -42,6 +42,7 @@ class CheckCallActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityCheckCallBinding
     private lateinit var voiceInput: VoiceInputHelper
+    private lateinit var loadingOverlay: LoadingOverlay
     private var isListening = false
 
     private val micPermissionLauncher = registerForActivityResult(
@@ -61,6 +62,13 @@ class CheckCallActivity : AppCompatActivity() {
 
         voiceInput = VoiceInputHelper(this)
         setUpVoiceInputButton()
+
+        loadingOverlay = LoadingOverlay(
+            overlayView = binding.loadingOverlay.root,
+            wordmarkView = binding.loadingOverlay.loadingWordmark,
+            phraseView = binding.loadingOverlay.loadingPhrase,
+            phrases = resources.getStringArray(R.array.loading_reassuring_phrases).toList(),
+        )
 
         binding.analyzeButton.setOnClickListener { runAnalysis() }
     }
@@ -165,8 +173,8 @@ class CheckCallActivity : AppCompatActivity() {
         // checks; every anonymous check gets its own one-shot id instead.
         val sessionId = phoneNumber.ifBlank { "anon-${java.util.UUID.randomUUID()}" }
 
-        binding.resultText.visibility = View.VISIBLE
-        binding.resultText.text = getString(R.string.check_call_loading)
+        binding.resultText.visibility = View.GONE
+        loadingOverlay.show()
         binding.analyzeButton.isEnabled = false
 
         val app = application as RakshakApp
@@ -229,8 +237,10 @@ class CheckCallActivity : AppCompatActivity() {
                     routeToOutcome(decision, phoneNumber, transcript)
                 } else {
                     binding.resultText.text = getString(R.string.check_call_offline_no_match)
+                    binding.resultText.visibility = View.VISIBLE
                 }
             } finally {
+                loadingOverlay.hide()
                 binding.analyzeButton.isEnabled = true
             }
         }
