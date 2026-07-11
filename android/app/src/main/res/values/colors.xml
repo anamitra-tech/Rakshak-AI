@@ -4,41 +4,43 @@
          AutoEscalationCountdownActivity). Deliberately NOT touched by the
          app-wide brand theme below: a HIGH-risk scam warning must stay
          visually distinct from a normal screen, so these are set at runtime
-         per risk level instead of inheriting the default screen background. -->
-    <color name="risk_high">#C62828</color>
+         per risk level instead of inheriting the default screen background.
+         Per "SOC Nightwatch" spec: safe (risk_low) and warning (risk_medium)
+         are explicitly unchanged ("keep as-is" / "stays amber"); risk_high
+         is the one deliberate value change, #C62828 -> #E63946. -->
+    <color name="risk_high">#E63946</color>
     <color name="risk_medium">#E65100</color>
     <color name="risk_low">#2E7D32</color>
-    <color name="brand_primary">#1B5E20</color>
+    <color name="brand_primary">#0D1B2A</color>
 
-    <!-- App-wide brand theme (non-risk screens: home, Check Call, Family
-         Setup, FSI Setup, Safe Result, loading screen). screen_background
-         happens to equal risk_low exactly — intentional: this is the same
-         calm green already used for a "safe" verdict.
+    <!-- "SOC Nightwatch" app-wide brand theme (non-risk screens: home, Check
+         Call, Family Setup, FSI Setup, Safe Result, loading screen).
          Contrast verified (WCAG relative-luminance formula, not eyeballed):
-           text_on_background (#FFFFFF) vs screen_background: 5.13:1 — passes
-             AA for normal text (needs 4.5:1).
-           button_text (#000000) vs button_background (#FFC107): 12.88:1 —
-             passes AAA (needs 7:1) with wide margin.
-         Cream (#FFF8E1) was the other option offered; white was chosen
-         instead since it has the better contrast margin (4.83:1 vs 5.13:1)
-         and this app's stated design priority is elderly readability. -->
-    <color name="screen_background">#2E7D32</color>
-    <color name="text_on_background">#FFFFFF</color>
-    <color name="text_on_background_cream">#FFF8E1</color>
-    <color name="button_background">#FFC107</color>
+           text_on_background (#F1FAEE) vs screen_background: 16.27:1 — clears
+             AAA (7:1) with a very wide margin.
+           accent_cyan (#00B4D8) vs screen_background: 7.06:1 — also clears
+             AAA, safe for secondary/hint text and highlights.
+           button_text (#000000) vs button_background (#FFD60A): 14.88:1 —
+             clears AAA with a wide margin. -->
+    <color name="screen_background">#0D1B2A</color>
+    <color name="text_on_background">#F1FAEE</color>
+    <color name="accent_cyan">#00B4D8</color>
+    <color name="button_background">#FFD60A</color>
     <color name="button_text">#000000</color>
 
-    <!-- #B00020 (the pre-existing debug-warning red) measures only 1.43:1
-         against screen_background — effectively invisible — so it needed a
-         real replacement here, not just a theme swap. This measures 4.04:1,
-         which still falls short of AA's 4.5:1 for normal 13sp body text, so
-         family_setup_tier3b_debug_warning also gained a bold "⚠️" prefix so
-         the warning doesn't rely on color contrast alone (WCAG 1.4.1: never
-         convey meaning by color alone) — the debug-only field this labels
-         is inherently low-stakes (a test phone number, not a live user
-         safety verdict), which is why a slightly-under-AA text color was an
-         acceptable tradeoff here specifically, unlike anywhere else in this
-         file. -->
+    <!-- risk_high's new value (#E63946) only clears 4.17:1 against white/
+         text_on_background — passes AA's large-text threshold (3:1, e.g.
+         WarningActivity's 26sp bold headline) but falls short of AA's normal-
+         text threshold (4.5:1). The pre-existing risk_medium amber (#E65100,
+         untouched by this change) has the same shortfall against white,
+         3.79:1 — this was already true before this palette change, just
+         never measured. Rather than accept a contrast regression on the
+         single most safety-critical screen in the app, WarningActivity's
+         regular-weight body text (phoneNumberText/whyToggle/reasonsList/
+         statusText/draftText) was bumped to bold + a size increase so it
+         genuinely qualifies as WCAG "large text" (which only needs 3:1)
+         instead of silently accepting a borderline color — see
+         activity_warning.xml. -->
     <color name="debug_warning_on_background">#FFE0B2</color>
     <!-- Dividers: the pre-existing #33000000 (20%-alpha black) is nearly
          invisible against a dark background; this is the same divider

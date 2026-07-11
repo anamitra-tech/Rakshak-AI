@@ -1,20 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base theme: applies the green/yellow/cream brand scheme to every
-         activity that doesn't explicitly override it below. In practice
-         that's every non-risk screen (Main, Check Call, Family Setup, FSI
-         Setup, Safe Result, loading) — WarningActivity and
-         AutoEscalationCountdownActivity both use Theme.RakshakAI.Warning
-         (below), which restores a neutral windowBackground so the brand
-         green never competes with the traffic-light risk color those
-         screens draw at runtime. -->
+    <!-- Base theme: applies the "SOC Nightwatch" brand scheme (deep navy +
+         cyan accent + yellow buttons) to every activity that doesn't
+         explicitly override it below. In practice that's every non-risk
+         screen (Main, Check Call, Family Setup, FSI Setup, Safe Result,
+         loading) — WarningActivity and AutoEscalationCountdownActivity both
+         use Theme.RakshakAI.Warning (below), which restores a neutral
+         windowBackground so the brand navy never competes with the
+         traffic-light risk color those screens draw at runtime.
+         colorSecondary/colorAccent (not just windowBackground/text) carry
+         the cyan accent so Material's own default interactive tinting
+         (EditText focus underline, CheckBox check, Spinner dropdown arrow)
+         picks it up automatically, not just the elements this app styles
+         explicitly. -->
     <style name="Theme.RakshakAI" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorPrimaryDark">@color/brand_primary</item>
+        <item name="colorSecondary">@color/accent_cyan</item>
+        <item name="colorAccent">@color/accent_cyan</item>
         <item name="android:windowBackground">@color/screen_background</item>
         <item name="android:textColorPrimary">@color/text_on_background</item>
         <item name="android:textColorSecondary">@color/text_on_background</item>
-        <item name="android:textColorHint">@color/text_on_background_cream</item>
+        <item name="android:textColorHint">@color/accent_cyan</item>
         <item name="materialButtonStyle">@style/AbhayAIButton</item>
     </style>
 

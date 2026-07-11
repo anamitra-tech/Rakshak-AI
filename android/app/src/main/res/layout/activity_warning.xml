@@ -44,13 +44,26 @@
                 android:textColor="#FFFFFF"
                 tools:text="This looks like a scam. Do not share any code or send money." />
 
+            <!--
+              textSize bumped 16sp->18sp (14sp->16sp for draftText) and all
+              made bold below, on every regular-weight TextView on this
+              screen: the new risk_high (#E63946) only measures 4.17:1
+              against white body text — clears WCAG AA's large-text
+              threshold (3:1) but not the normal-text one (4.5:1). The
+              pre-existing risk_medium amber has the same shortfall
+              (3.79:1), never caught before. Bold + this size increase is
+              enough to genuinely qualify as WCAG "large text" instead of
+              silently shipping a borderline color on the single most
+              safety-critical screen in the app — see colors.xml.
+            -->
             <TextView
                 android:id="@+id/phoneNumberText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:textColor="#FFFFFF"
-                android:textSize="16sp"
+                android:textSize="18sp"
+                android:textStyle="bold"
                 android:visibility="gone"
                 tools:text="From +91 98765 00001" />
 
@@ -62,7 +75,8 @@
                 android:layout_marginTop="12dp"
                 android:padding="8dp"
                 android:textColor="#FFFFFF"
-                android:textSize="16sp"
+                android:textSize="18sp"
+                android:textStyle="bold"
                 android:text="@string/why_toggle_show" />
 
             <TextView
@@ -71,7 +85,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:textColor="#FFFFFF"
-                android:textSize="16sp"
+                android:textSize="18sp"
+                android:textStyle="bold"
                 android:visibility="gone" />
 
             <TextView
@@ -82,7 +97,8 @@
                 android:layout_marginBottom="16dp"
                 android:gravity="center"
                 android:textColor="#FFFFFF"
-                android:textSize="16sp"
+                android:textSize="18sp"
+                android:textStyle="bold"
                 android:visibility="gone" />
 
             <!--
@@ -98,7 +114,8 @@
                 android:layout_marginBottom="8dp"
                 android:padding="8dp"
                 android:textColor="#FFFFFF"
-                android:textSize="16sp"
+                android:textSize="18sp"
+                android:textStyle="bold"
                 android:visibility="gone"
                 android:text="@string/complaint_draft_toggle_show" />
 
@@ -108,7 +125,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
                 android:textColor="#FFFFFF"
-                android:textSize="14sp"
+                android:textSize="16sp"
+                android:textStyle="bold"
                 android:visibility="gone" />
 
             <Button
