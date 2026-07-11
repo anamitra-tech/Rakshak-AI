@@ -17,9 +17,21 @@ import java.util.concurrent.TimeUnit
  */
 class PrahariHttpApiClient(
     private val baseUrl: String,
+    // Tightened from connectTimeout=5s/readTimeout=8s/writeTimeout=10s
+    // (OkHttp's unset default) with no overall cap — that combination let a
+    // single call wait upwards of 13s (worst case ~5s+10s if the stalling
+    // phase happened to be write, not just connect+read) with a static
+    // "Checking with Prahari…" spinner and no cancel option, before this
+    // was ever tested against anything but instant-refusal (server fully
+    // down). callTimeout() is the real fix here — it caps the ENTIRE call
+    // (connect+write+read combined) regardless of which phase stalls, so a
+    // rural/patchy connection gets a bounded ~5s fallback instead of a
+    // best-case-per-phase sum that could still run well past it.
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .writeTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
+        .callTimeout(5, TimeUnit.SECONDS)
         .build(),
 ) : PrahariApiClient {
 

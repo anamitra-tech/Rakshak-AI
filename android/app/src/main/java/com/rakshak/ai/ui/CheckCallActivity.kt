@@ -3,6 +3,8 @@ package com.rakshak.ai.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -17,6 +19,7 @@ import com.rakshak.ai.intelligence.OfflineEvaluator
 import com.rakshak.ai.intelligence.PrahariTextAnalysis
 import com.rakshak.ai.intelligence.PrahariUnavailableException
 import com.rakshak.ai.intelligence.RiskLevel
+import com.rakshak.ai.intelligence.hasActiveNetworkConnection
 import com.rakshak.ai.intelligence.normalizePhoneNumber
 import com.rakshak.ai.stt.VoiceInputHelper
 import kotlinx.coroutines.launch
@@ -32,6 +35,10 @@ import kotlinx.coroutines.launch
  * explanation, explicitly Phase 2).
  */
 class CheckCallActivity : AppCompatActivity() {
+
+    companion object {
+        private const val TAG = "RakshakCheckCall"
+    }
 
     private lateinit var binding: ActivityCheckCallBinding
     private lateinit var voiceInput: VoiceInputHelper
@@ -163,8 +170,21 @@ class CheckCallActivity : AppCompatActivity() {
         binding.analyzeButton.isEnabled = false
 
         val app = application as RakshakApp
+        val startMs = SystemClock.elapsedRealtime()
+        Log.i(TAG, "analysis_start")
         lifecycleScope.launch {
             try {
+                // No active network at all (e.g. airplane mode) — skip the
+                // HTTP attempt entirely rather than let OkHttp discover this
+                // itself after a connect-timeout wait. There's genuinely
+                // nothing to reach, so there's nothing to wait for; this
+                // throws the same exception the real request would
+                // eventually throw anyway, reusing the offline fallback
+                // below unchanged rather than duplicating it.
+                if (!hasActiveNetworkConnection(this@CheckCallActivity)) {
+                    Log.i(TAG, "analysis_no_network_detected elapsed_ms=${SystemClock.elapsedRealtime() - startMs}")
+                    throw PrahariUnavailableException("No active network connection")
+                }
                 val textAnalysis = app.prahariApiClient.analyzeVoice(transcript)
                 val sessionAnalysis = app.prahariApiClient.analyzeSession(sessionId, transcript)
                 val lookup = app.callerLookupSource.lookup(phoneNumber)
@@ -172,8 +192,10 @@ class CheckCallActivity : AppCompatActivity() {
                     app.settings.trustedContactPhone.isNotBlank() &&
                     normalizePhoneNumber(phoneNumber) == normalizePhoneNumber(app.settings.trustedContactPhone)
                 val decision = DecisionAgent.decide(lookup, textAnalysis, sessionAnalysis, isTrustedContact)
+                Log.i(TAG, "analysis_online_success elapsed_ms=${SystemClock.elapsedRealtime() - startMs}")
                 routeToOutcome(decision, phoneNumber, transcript)
             } catch (e: PrahariUnavailableException) {
+                Log.i(TAG, "analysis_prahari_unavailable elapsed_ms=${SystemClock.elapsedRealtime() - startMs} msg=${e.message}")
                 // Prahari unreachable — fall back to OfflineEvaluator, which
                 // combines the same three near-deterministic regex
                 // categories the backend treats as certain-scam-on-their-own
@@ -187,6 +209,7 @@ class CheckCallActivity : AppCompatActivity() {
                 // the full ML/session/graph analysis simply couldn't run,
                 // which the shown message says explicitly.
                 val offlineEval = OfflineEvaluator.evaluate(transcript, app.offlineMlModel)
+                Log.i(TAG, "analysis_offline_result elapsed_ms=${SystemClock.elapsedRealtime() - startMs} riskLevel=${offlineEval.riskLevel} score=${offlineEval.score}")
                 if (offlineEval.riskLevel != RiskLevel.LOW) {
                     val offlineAnalysis = PrahariTextAnalysis(
                         riskLevel = offlineEval.riskLevel,

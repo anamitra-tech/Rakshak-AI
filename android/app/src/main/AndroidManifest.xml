@@ -3,6 +3,12 @@
 
     <!-- Backend calls to Prahari (api/server.py) — Section 7 of CLAUDE.md -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Normal permission, no runtime prompt — lets CheckCallActivity check
+         ConnectivityManager before attempting a Prahari call, so a device
+         with no active network (e.g. airplane mode) skips straight to the
+         offline fallback instead of waiting out an HTTP timeout for a
+         connection that was never going to happen. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Warning card while a real call is ringing — Section 7 of CLAUDE.md -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
