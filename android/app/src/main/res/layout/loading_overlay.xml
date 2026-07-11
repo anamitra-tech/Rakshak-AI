@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Full-screen loading state for CheckCallActivity — pulsing wordmark,
-  rotating reassurance phrase, and one honest stat line. Driven by
-  LoadingOverlay.kt (show()/hide()), included via <include> in
-  activity_check_call.xml so this stays a self-contained, reusable unit
-  rather than inline elements mixed into the form layout.
+  Full-screen loading state for CheckCallActivity — a radar-sweep animation
+  (radar_rings.xml static + radar_sweep.xml rotated continuously, see
+  LoadingOverlay.kt), the AbhayAI wordmark, a rotating reassurance phrase,
+  and one honest stat line. Driven by LoadingOverlay.kt (show()/hide()),
+  included via <include> in activity_check_call.xml so this stays a
+  self-contained, reusable unit rather than inline elements mixed into the
+  form layout.
+
+  No Lottie animation here despite that being the first choice asked for —
+  LottieFiles blocks automated fetches (403 on every candidate page tried)
+  and no alternative, clearly-licensed, thematically-fitting file could be
+  found and verified, so this uses the explicit native fallback instead:
+  standard VectorDrawable + ObjectAnimator, no external asset, no new
+  dependency, fully verifiable at the code level.
 -->
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -25,22 +34,42 @@
         android:gravity="center_horizontal"
         android:padding="32dp">
 
+        <FrameLayout
+            android:layout_width="140dp"
+            android:layout_height="140dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/radar_rings"
+                android:contentDescription="@null" />
+
+            <ImageView
+                android:id="@+id/radarSweep"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/radar_sweep"
+                android:contentDescription="@null" />
+
+        </FrameLayout>
+
         <TextView
             android:id="@+id/loadingWordmark"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
             android:text="@string/app_name"
             android:textColor="@color/text_on_background"
-            android:textSize="40sp"
+            android:textSize="32sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/loadingPhrase"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="28dp"
+            android:layout_marginTop="20dp"
             android:gravity="center"
-            android:textColor="@color/text_on_background_cream"
+            android:textColor="@color/accent_cyan"
             android:textSize="18sp"
             tools:text="Surakshit, don't take tension" />
 
@@ -48,7 +77,7 @@
             android:id="@+id/loadingStat"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="48dp"
+            android:layout_marginTop="40dp"
             android:alpha="0.85"
             android:gravity="center"
             android:text="@string/loading_stat_line"

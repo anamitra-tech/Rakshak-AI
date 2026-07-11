@@ -65,7 +65,7 @@ class CheckCallActivity : AppCompatActivity() {
 
         loadingOverlay = LoadingOverlay(
             overlayView = binding.loadingOverlay.root,
-            wordmarkView = binding.loadingOverlay.loadingWordmark,
+            radarSweepView = binding.loadingOverlay.radarSweep,
             phraseView = binding.loadingOverlay.loadingPhrase,
             phrases = resources.getStringArray(R.array.loading_reassuring_phrases).toList(),
         )

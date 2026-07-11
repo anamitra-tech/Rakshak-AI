@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Rotating layer of the loading screen's radar-sweep animation. A full disc
+  filled with a sweepGradient (transparent -> semi-transparent -> opaque
+  cyan) gives the classic radar "sweep with a fading trail" look purely
+  through a standard VectorDrawable gradient fill, rotated continuously by
+  LoadingOverlay.kt (ObjectAnimator on this ImageView's `rotation`
+  property) — no custom Canvas drawing or animation-frame code needed.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <path android:pathData="M100,100 m-92,0 a92,92 0 1,1 184,0 a92,92 0 1,1 -184,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="sweep"
+                android:centerX="100"
+                android:centerY="100"
+                android:startColor="#0000B4D8"
+                android:centerColor="#3300B4D8"
+                android:endColor="#CC00B4D8" />
+        </aapt:attr>
+    </path>
+</vector>

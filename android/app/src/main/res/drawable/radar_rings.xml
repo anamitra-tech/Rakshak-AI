@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Static layer of the loading screen's radar-sweep animation (see
+  LoadingOverlay.kt, radar_sweep.xml) — three concentric cyan ring outlines
+  fading outward, plus a solid center dot, giving the "radar display" frame
+  the rotating sweep (radar_sweep.xml) sweeps across. Never rotates itself.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <path
+        android:pathData="M100,100 m-30,0 a30,30 0 1,1 60,0 a30,30 0 1,1 -60,0"
+        android:strokeColor="#5500B4D8"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000" />
+
+    <path
+        android:pathData="M100,100 m-60,0 a60,60 0 1,1 120,0 a60,60 0 1,1 -120,0"
+        android:strokeColor="#4000B4D8"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000" />
+
+    <path
+        android:pathData="M100,100 m-92,0 a92,92 0 1,1 184,0 a92,92 0 1,1 -184,0"
+        android:strokeColor="#3000B4D8"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000" />
+
+    <path
+        android:pathData="M100,100 m-4,0 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0"
+        android:fillColor="#00B4D8" />
+</vector>
