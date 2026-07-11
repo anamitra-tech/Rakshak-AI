@@ -115,10 +115,10 @@ HIGH_RISK_PATTERNS = {
     # for this — see the near-deterministic override in predict() below.
     "otp_readout_request": [
         r"read\s+(out\s+|me\s+)?(the\s+|your\s+)?(otp|pin|cvv|code|digits|one-?time code)",
-        r"(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|one-?time code)",
+        r"(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|code|verification code|one-?time code)",
         r"(code|digits)\s+(that\s+)?(just\s+)?arrived",
         r"(code|digits)\s+you'?re\s+seeing",
-        r"confirm\s+the\s+(six|four|\d+)[- ]?digit",
+        r"(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit",
         r"(otp|pin|cvv|code)\s+(bata|bol|bhej)(o|iye|na|do)?",
         r"(bata|bol|bhej)(o|iye|do)\s+(mujhe\s+)?(the\s+)?(otp|pin|cvv|code)",
         # Batch-expanded 2026-07-06: paraphrased readout requests that avoid

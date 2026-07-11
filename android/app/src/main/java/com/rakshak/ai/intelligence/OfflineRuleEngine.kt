@@ -94,10 +94,10 @@ object OfflineRuleEngine {
 
     private val OTP_READOUT_PATTERNS = listOf(
         """read\s+(out\s+|me\s+)?(the\s+|your\s+)?(otp|pin|cvv|code|digits|one-?time code)""",
-        """(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|one-?time code)""",
+        """(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|code|verification code|one-?time code)""",
         """(code|digits)\s+(that\s+)?(just\s+)?arrived""",
         """(code|digits)\s+you'?re\s+seeing""",
-        """confirm\s+the\s+(six|four|\d+)[- ]?digit""",
+        """(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit""",
         """(otp|pin|cvv|code)\s+(bata|bol|bhej)(o|iye|na|do)?""",
         """(bata|bol|bhej)(o|iye|do)\s+(mujhe\s+)?(the\s+)?(otp|pin|cvv|code)""",
         """(provide|give|share|state|relay|pass on) (us |me )?(the |your )?""" +
