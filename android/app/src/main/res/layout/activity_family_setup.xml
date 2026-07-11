@@ -27,7 +27,7 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginTop="20dp"
-            android:background="#33000000" />
+            android:background="@color/divider_on_background" />
 
         <TextView
             android:layout_width="match_parent"
@@ -53,7 +53,7 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginTop="20dp"
-            android:background="#33000000" />
+            android:background="@color/divider_on_background" />
 
         <EditText
             android:id="@+id/contactNameInput"
@@ -97,7 +97,7 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginTop="20dp"
-            android:background="#33000000" />
+            android:background="@color/divider_on_background" />
 
         <CheckBox
             android:id="@+id/tier3bToggle"
@@ -127,14 +127,15 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:textSize="13sp"
-            android:textColor="#B00020"
+            android:textColor="@color/debug_warning_on_background"
+            android:textStyle="bold"
             android:text="@string/family_setup_tier3b_debug_warning" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginTop="20dp"
-            android:background="#33000000" />
+            android:background="@color/divider_on_background" />
 
         <TextView
             android:layout_width="match_parent"

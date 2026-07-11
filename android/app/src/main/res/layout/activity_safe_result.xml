@@ -31,7 +31,7 @@
         android:gravity="center"
         android:textSize="26sp"
         android:textStyle="bold"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/text_on_background"
         tools:text="This looks safe. Stay alert anyway." />
 
     <TextView
@@ -40,7 +40,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="4dp"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/text_on_background"
         android:textSize="16sp"
         android:visibility="gone"
         tools:text="From +91 98765 00001" />

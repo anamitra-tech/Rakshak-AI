@@ -1,14 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base theme: applies the green/yellow/cream brand scheme to every
+         activity that doesn't explicitly override it below. In practice
+         that's every non-risk screen (Main, Check Call, Family Setup, FSI
+         Setup, Safe Result, loading) — WarningActivity and
+         AutoEscalationCountdownActivity both use Theme.RakshakAI.Warning
+         (below), which restores a neutral windowBackground so the brand
+         green never competes with the traffic-light risk color those
+         screens draw at runtime. -->
     <style name="Theme.RakshakAI" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorPrimaryDark">@color/brand_primary</item>
+        <item name="android:windowBackground">@color/screen_background</item>
+        <item name="android:textColorPrimary">@color/text_on_background</item>
+        <item name="android:textColorSecondary">@color/text_on_background</item>
+        <item name="android:textColorHint">@color/text_on_background_cream</item>
+        <item name="materialButtonStyle">@style/AbhayAIButton</item>
     </style>
 
     <!-- Warning card fills the whole screen; the background color is set at
-         runtime per risk level (see WarningActivity.renderTrafficLight). -->
+         runtime per risk level (see WarningActivity.renderTrafficLight) or
+         hardcoded in the layout (AutoEscalationCountdownActivity's alarm
+         red) — both intentionally override this windowBackground within a
+         frame or two of window creation, same as every Android app's
+         standard cold-start background flash. Buttons still inherit the
+         brand's yellow/black styling from the base theme for visual
+         consistency across screens. -->
     <style name="Theme.RakshakAI.Warning" parent="Theme.RakshakAI">
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+    <style name="AbhayAIButton" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/button_background</item>
+        <item name="android:textColor">@color/button_text</item>
     </style>
 </resources>

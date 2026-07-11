@@ -1,7 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Risk-level colors — the traffic-light safety signal (WarningActivity,
+         AutoEscalationCountdownActivity). Deliberately NOT touched by the
+         app-wide brand theme below: a HIGH-risk scam warning must stay
+         visually distinct from a normal screen, so these are set at runtime
+         per risk level instead of inheriting the default screen background. -->
     <color name="risk_high">#C62828</color>
     <color name="risk_medium">#E65100</color>
     <color name="risk_low">#2E7D32</color>
     <color name="brand_primary">#1B5E20</color>
+
+    <!-- App-wide brand theme (non-risk screens: home, Check Call, Family
+         Setup, FSI Setup, Safe Result, loading screen). screen_background
+         happens to equal risk_low exactly — intentional: this is the same
+         calm green already used for a "safe" verdict.
+         Contrast verified (WCAG relative-luminance formula, not eyeballed):
+           text_on_background (#FFFFFF) vs screen_background: 5.13:1 — passes
+             AA for normal text (needs 4.5:1).
+           button_text (#000000) vs button_background (#FFC107): 12.88:1 —
+             passes AAA (needs 7:1) with wide margin.
+         Cream (#FFF8E1) was the other option offered; white was chosen
+         instead since it has the better contrast margin (4.83:1 vs 5.13:1)
+         and this app's stated design priority is elderly readability. -->
+    <color name="screen_background">#2E7D32</color>
+    <color name="text_on_background">#FFFFFF</color>
+    <color name="text_on_background_cream">#FFF8E1</color>
+    <color name="button_background">#FFC107</color>
+    <color name="button_text">#000000</color>
+
+    <!-- #B00020 (the pre-existing debug-warning red) measures only 1.43:1
+         against screen_background — effectively invisible — so it needed a
+         real replacement here, not just a theme swap. This measures 4.04:1,
+         which still falls short of AA's 4.5:1 for normal 13sp body text, so
+         family_setup_tier3b_debug_warning also gained a bold "⚠️" prefix so
+         the warning doesn't rely on color contrast alone (WCAG 1.4.1: never
+         convey meaning by color alone) — the debug-only field this labels
+         is inherently low-stakes (a test phone number, not a live user
+         safety verdict), which is why a slightly-under-AA text color was an
+         acceptable tradeoff here specifically, unlike anywhere else in this
+         file. -->
+    <color name="debug_warning_on_background">#FFE0B2</color>
+    <!-- Dividers: the pre-existing #33000000 (20%-alpha black) is nearly
+         invisible against a dark background; this is the same divider
+         concept at 20%-alpha white instead. -->
+    <color name="divider_on_background">#33FFFFFF</color>
 </resources>
