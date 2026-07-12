@@ -118,10 +118,16 @@ import java.util.Locale
  *   showed it holding only the `'--Select--'` placeholder immediately after
  *   selecting the category — its real options (whatever NCRP's actual
  *   financial-fraud sub-types are) are populated by the site's own script/
- *   postback in reaction to that selection, not present up front. Fixed by
- *   polling (`finalizeSubCategoryAndReport`, up to ~2.4s) for real options to
- *   actually appear before attempting the keyword match, rather than judging
- *   a DOM state that structurally couldn't have the answer yet. Still never
+ *   postback in reaction to that selection, not present up front, and
+ *   **incrementally**, not atomically — a live capture caught a genuine
+ *   keyword match (`"debit"` against `"Debit/Credit Card Fraud/Sim Swap
+ *   Fraud"`) being missed because the original "any one real option has
+ *   arrived" poll fired against a still-partial list, even though all 8 real
+ *   options had fully landed ~815ms later. Fixed by `finalizeSubCategoryAndReport`
+ *   polling (up to ~3.2s) for the option count to stay identical across two
+ *   consecutive 400ms reads (i.e. the list has stopped growing) before
+ *   attempting the keyword match, rather than matching against a DOM state
+ *   that structurally couldn't yet hold the answer. Still never
  *   triggers a postback/click itself — only waits for whatever the page's
  *   own category-change handler already does unprompted.
  * - `ContentPlaceHolder1_rdbBankFroudYesNo_0/_1` ("is this bank fraud?") and
@@ -676,17 +682,31 @@ class NcrpComplaintActivity : AppCompatActivity() {
                         // selection above — its real options are populated by the
                         // site's own script/postback in response to that selection,
                         // which hasn't had time to run yet in the same synchronous
-                        // tick. Poll briefly for real options (>1, i.e. more than
-                        // just the placeholder) to actually appear before matching,
-                        // instead of judging by a DOM state that was never going to
-                        // have the answer. Never triggers a postback/click itself —
-                        // only waits for whatever the page's own category 'change'
-                        // handler already does on its own.
-                        function finalizeSubCategoryAndReport(attemptsLeft) {
+                        // tick. Never triggers a postback/click itself — only waits
+                        // for whatever the page's own category 'change' handler
+                        // already does on its own.
+                        //
+                        // Was previously gated on "options.length > 1" (i.e. any one
+                        // real option has arrived) but real evidence (a live capture
+                        // against NCRP tonight) showed that's a race: the list is
+                        // populated incrementally, not atomically — a genuine
+                        // keyword match (e.g. "debit" against "Debit/Credit Card
+                        // Fraud/Sim Swap Fraud") was missed because the scan ran
+                        // against a still-partial list, even though all 8 real
+                        // options had fully landed ~815ms later. Now waits for the
+                        // option count to be identical across two consecutive
+                        // 400ms polls (i.e. the list has stopped growing) before
+                        // scanning — observed full population finished well inside
+                        // that window, so this trades a little latency for actually
+                        // seeing the complete list before matching.
+                        function finalizeSubCategoryAndReport(attemptsLeft, lastCount) {
                             var subEl = document.getElementById('ContentPlaceHolder1_ddl_Sub_CategoryCrime');
-                            var hasRealOptions = subEl && subEl.options.length > 1;
-                            if (!hasRealOptions && attemptsLeft > 0) {
-                                setTimeout(function() { finalizeSubCategoryAndReport(attemptsLeft - 1); }, 400);
+                            var currentCount = subEl ? subEl.options.length : 0;
+                            var stabilized = currentCount > 1 && currentCount === lastCount;
+                            if (!stabilized && attemptsLeft > 0) {
+                                setTimeout(function() {
+                                    finalizeSubCategoryAndReport(attemptsLeft - 1, currentCount);
+                                }, 400);
                                 return;
                             }
                             selectByOptionKeyword('complaint sub-category', 'ContentPlaceHolder1_ddl_Sub_CategoryCrime', $subCategoryKeywordsJs);
@@ -695,7 +715,12 @@ class NcrpComplaintActivity : AppCompatActivity() {
                                 window.$JS_BRIDGE_NAME.onFillResult(JSON.stringify({ filled: filled, notFound: notFound }));
                             }
                         }
-                        finalizeSubCategoryAndReport(6);
+                        // -1 sentinel as the initial lastCount so the very first
+                        // check (count=1, placeholder only) can never spuriously
+                        // "stabilize"; 8 attempts (~3.2s worst case) budgets for one
+                        // extra confirmation round-trip versus the old single-arrival
+                        // check, since stabilization needs two matching reads, not one.
+                        finalizeSubCategoryAndReport(8, -1);
                     } catch (e) {
                         if (window.$JS_BRIDGE_NAME && window.$JS_BRIDGE_NAME.onFillResult) {
                             window.$JS_BRIDGE_NAME.onFillResult(JSON.stringify({ filled: [], notFound: [], error: String(e) }));

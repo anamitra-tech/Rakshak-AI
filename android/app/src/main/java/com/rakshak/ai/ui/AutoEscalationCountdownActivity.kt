@@ -115,6 +115,7 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
             headline = intent.getStringExtra(EXTRA_HEADLINE).orEmpty(),
             reasons = intent.getStringArrayListExtra(EXTRA_REASONS).orEmpty(),
             suspectedScamType = null,
+            ruleCategories = intent.getStringArrayListExtra(EXTRA_RULE_CATEGORIES).orEmpty(),
         )
 
         // Requirement 1: risk level + reason are visual and immediate — never
@@ -402,6 +403,7 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
         private const val EXTRA_HEADLINE = "headline"
         private const val EXTRA_REASONS = "reasons"
         private const val EXTRA_TRANSCRIPT = "transcript"
+        private const val EXTRA_RULE_CATEGORIES = "rule_categories"
 
         fun buildIntent(
             context: Context,
@@ -415,6 +417,7 @@ class AutoEscalationCountdownActivity : AppCompatActivity() {
             putExtra(EXTRA_HEADLINE, decision.headline)
             putStringArrayListExtra(EXTRA_REASONS, ArrayList(decision.reasons))
             putExtra(EXTRA_TRANSCRIPT, transcript)
+            putStringArrayListExtra(EXTRA_RULE_CATEGORIES, ArrayList(decision.ruleCategories))
         }
     }
 }
