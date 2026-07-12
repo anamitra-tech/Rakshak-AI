@@ -119,8 +119,14 @@ HIGH_RISK_PATTERNS = {
         r"(code|digits)\s+(that\s+)?(just\s+)?arrived",
         r"(code|digits)\s+you'?re\s+seeing",
         r"(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit",
-        r"(otp|pin|cvv|code)\s+(bata|bol|bhej)(o|iye|na|do)?",
-        r"(bata|bol|bhej)(o|iye|do)\s+(mujhe\s+)?(the\s+)?(otp|pin|cvv|code)",
+        r"(otp|pin|cvv|code)\s+(bata|bol|bhej|de\s?do)(o|iye|na|do)?",
+        # "de do"/"dedo" ("give [it]") added 2026-07-13: bata/bol/bhej (tell/
+        # say/send) were covered but not the "give" verb itself in Hinglish
+        # Latin script, even though both the English ("give me the otp",
+        # line below) and Devanagari ("otp ... दें") forms already were —
+        # found via a real "otp dedo pls" test message that neither this nor
+        # the offline rule engine's verbatim copy caught.
+        r"((bata|bol|bhej)(o|iye|do)|de\s?do)\s+(mujhe\s+)?(the\s+)?(otp|pin|cvv|code)",
         # Batch-expanded 2026-07-06: paraphrased readout requests that avoid
         # the literal otp/pin/cvv words. Each pattern requires an explicit
         # request/reference verb (provide/give/showing/displaying/bataen),

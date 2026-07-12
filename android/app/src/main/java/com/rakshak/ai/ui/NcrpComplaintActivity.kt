@@ -23,15 +23,18 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import com.rakshak.ai.BuildConfig
 import com.rakshak.ai.R
 import com.rakshak.ai.databinding.ActivityNcrpComplaintBinding
 import com.rakshak.ai.escalation.IncidentSummaryPdf
+import com.rakshak.ai.escalation.ScreenshotEvidenceStore
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.random.Random
 
 /**
  * WebView-assisted NCRP (cybercrime.gov.in) complaint filing.
@@ -283,19 +286,25 @@ class NcrpComplaintActivity : AppCompatActivity() {
                     pendingFileChooserCallback?.onReceiveValue(null)
                     pendingFileChooserCallback = filePathCallback
 
+                    // Only offered when the user actually uploaded a
+                    // screenshot on "Check a call/message" this session —
+                    // see ScreenshotEvidenceStore's doc comment for why a
+                    // well-known on-disk file is the handoff instead of
+                    // threading anything through Intent extras.
+                    val hasScreenshot =
+                        ScreenshotEvidenceStore.find(this@NcrpComplaintActivity) != null
+                    val options = mutableListOf(getString(R.string.ncrp_evidence_chooser_generated_option))
+                    if (hasScreenshot) options += getString(R.string.ncrp_evidence_chooser_screenshot_option)
+                    options += getString(R.string.ncrp_evidence_chooser_browse_option)
+
                     AlertDialog.Builder(this@NcrpComplaintActivity)
                         .setTitle(R.string.ncrp_evidence_chooser_title)
-                        .setItems(
-                            arrayOf(
-                                getString(R.string.ncrp_evidence_chooser_generated_option),
-                                getString(R.string.ncrp_evidence_chooser_browse_option),
-                            ),
-                        ) { _, which ->
+                        .setItems(options.toTypedArray()) { _, which ->
                             Log.i(TAG, "ncrp_file_chooser_option_selected which=$which")
-                            if (which == 0) {
-                                deliverGeneratedEvidencePdf()
-                            } else {
-                                systemFileChooserLauncher.launch(fileChooserParams.createIntent())
+                            when {
+                                which == 0 -> deliverGeneratedEvidencePdf()
+                                hasScreenshot && which == 1 -> deliverScreenshotEvidence()
+                                else -> systemFileChooserLauncher.launch(fileChooserParams.createIntent())
                             }
                         }
                         .setOnCancelListener {
@@ -364,6 +373,7 @@ class NcrpComplaintActivity : AppCompatActivity() {
         val script = buildAutofillScript(
             suspectPhone = suspectPhone,
             description = padDescriptionForNcrp(
+                context = this,
                 description = incidentDescription,
                 ruleCategories = ruleCategories,
                 suspectPhone = suspectPhone,
@@ -412,6 +422,29 @@ class NcrpComplaintActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.ncrp_evidence_pdf_error, Toast.LENGTH_LONG).show()
             callback.onReceiveValue(null)
         }
+    }
+
+    /**
+     * Delivers the real screenshot the user uploaded on "Check a
+     * call/message" (via [ScreenshotEvidenceStore]) as the file-chooser
+     * result. Only reachable when [ScreenshotEvidenceStore.find] already
+     * found a file — see the option-list construction in [setUpWebView] —
+     * so a null here would mean the file vanished between building the
+     * dialog and the user tapping this option; handled defensively rather
+     * than assumed impossible.
+     */
+    private fun deliverScreenshotEvidence() {
+        val callback = pendingFileChooserCallback
+        pendingFileChooserCallback = null
+        if (callback == null) return
+        val file = ScreenshotEvidenceStore.find(this)
+        if (file == null) {
+            Toast.makeText(this, R.string.ncrp_evidence_pdf_error, Toast.LENGTH_LONG).show()
+            callback.onReceiveValue(null)
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        callback.onReceiveValue(arrayOf(uri))
     }
 
     private inner class FillResultBridge {
@@ -634,6 +667,88 @@ class NcrpComplaintActivity : AppCompatActivity() {
         }
 
         /**
+         * Six first-person "additional information" variants, written to
+         * read like the victim describing what actually happened rather
+         * than a system log line concatenated with boilerplate — NCRP's
+         * field is a legal complaint description, not an app diagnostic.
+         * Two family-member-voice drafts were considered and dropped: there
+         * is no signal anywhere in this app for "is the person filing this
+         * the victim or a relative filing on their behalf," and guessing
+         * that voice would be worse than always using the victim's own,
+         * which is true in the common case. Every blank here is filled
+         * locally by [fillDescriptionTemplate] — no network/LLM call, same
+         * static-lookup-and-fill pattern as [ExplanationTranslations], and
+         * used identically whether [description]/[ruleCategories] came from
+         * a live Prahari response or the offline evaluator, since both
+         * converge on this same function before NCRP filing.
+         */
+        private val DESCRIPTION_TEMPLATE_VARIANTS = listOf(
+            "On {timestamp} I got a call from {phone_number}. {brief_description_of_what_was_said_or_asked} " +
+                "The Rakshak AI app on my phone flagged this as {rule_category_plain_language} I am filing " +
+                "this report because I believe someone was trying to defraud me.",
+            "{phone_number} called me on {timestamp}. {brief_description_of_what_was_said_or_asked} I did " +
+                "not act on anything they asked. It looked like {rule_category_plain_language} so I am " +
+                "reporting the number.",
+            "This happened on {timestamp}. The number that called was {phone_number}. What they told me " +
+                "was roughly this, {brief_description_of_what_was_said_or_asked} It sounded exactly like " +
+                "{rule_category_plain_language} and my phone warned me about it right there during the " +
+                "call, so I am filing this while it is still fresh.",
+            "I want to report a call I received on {timestamp} from {phone_number}. Rakshak AI picked this " +
+                "up on my phone as {rule_category_plain_language} Here is what actually happened on the " +
+                "call, {brief_description_of_what_was_said_or_asked} I am submitting this so it is on file " +
+                "with NCRP.",
+            "The call came from {phone_number}. It came in on {timestamp}. The caller said this. " +
+                "{brief_description_of_what_was_said_or_asked} My phone flagged the call as " +
+                "{rule_category_plain_language} I want this recorded as a complaint.",
+            "On {timestamp} I got a call from {phone_number}. During the call, " +
+                "{brief_description_of_what_was_said_or_asked} This lines up with " +
+                "{rule_category_plain_language} which my phone detected on its own. I am reporting the " +
+                "number so it can be looked into.",
+        )
+
+        private const val DESCRIPTION_VARIANT_PREFS = "rakshak_ncrp_description_state"
+        private const val KEY_LAST_DESCRIPTION_VARIANT = "last_variant_index"
+
+        // Neutral, honest fillers for when a blank is genuinely unknown —
+        // never a fabricated tactic or claim, same real-facts-only principle
+        // as this file's bank-fraud/delay-reason radios (see
+        // buildAutofillScript's doc comment).
+        private const val NO_CATEGORY_FALLBACK = "a pattern the app associates with phone fraud"
+        private const val NO_DESCRIPTION_FALLBACK = "the exact wording was not noted in detail"
+
+        /**
+         * Picks a variant index, persisted in its own SharedPreferences file
+         * (same per-device-settings pattern as [com.rakshak.ai.settings.AppSettings]),
+         * so consecutive complaints on this device don't repeat the same
+         * wording twice in a row. Single global "last index" rather than
+         * anything keyed by phone number or session — this app only ever
+         * has one person filing complaints per device.
+         */
+        private fun pickDescriptionVariant(context: Context): String {
+            val prefs = context.applicationContext
+                .getSharedPreferences(DESCRIPTION_VARIANT_PREFS, Context.MODE_PRIVATE)
+            val lastIndex = prefs.getInt(KEY_LAST_DESCRIPTION_VARIANT, -1)
+            var nextIndex = Random.nextInt(DESCRIPTION_TEMPLATE_VARIANTS.size)
+            while (DESCRIPTION_TEMPLATE_VARIANTS.size > 1 && nextIndex == lastIndex) {
+                nextIndex = Random.nextInt(DESCRIPTION_TEMPLATE_VARIANTS.size)
+            }
+            prefs.edit().putInt(KEY_LAST_DESCRIPTION_VARIANT, nextIndex).apply()
+            return DESCRIPTION_TEMPLATE_VARIANTS[nextIndex]
+        }
+
+        private fun fillDescriptionTemplate(
+            template: String,
+            timestamp: String,
+            phoneNumber: String,
+            ruleCategoryPlainLanguage: String,
+            briefDescription: String,
+        ): String = template
+            .replace("{timestamp}", timestamp)
+            .replace("{phone_number}", phoneNumber)
+            .replace("{rule_category_plain_language}", ruleCategoryPlainLanguage)
+            .replace("{brief_description_of_what_was_said_or_asked}", briefDescription)
+
+        /**
          * NCRP's "Additional Information" field enforces both a minimum
          * length and a strict character allowlist (both confirmed live on
          * the site — neither documented anywhere in this repo, so neither
@@ -643,21 +758,18 @@ class NcrpComplaintActivity : AppCompatActivity() {
          * contains characters — semicolons, em dashes, quote marks, "%" —
          * the site's own regex rejects.
          *
-         * Pads short descriptions with true, already-known facts — the
-         * detected risk category label(s), the suspect's number, and when
-         * this was flagged — never invented or exaggerated emotional
-         * narrative. This is a real legal complaint field; the same
-         * principle already governs why this file never auto-answers
-         * NCRP's bank-fraud/delay-reason radios (see [buildAutofillScript]'s
-         * doc comment) — a confident-sounding fabrication is worse than an
-         * honest gap. The closing sentence below is always appended
-         * (not just when a rule category matched) specifically so the
-         * length floor holds even in the sparsest case — a blank/near-blank
-         * description with no detected category and no phone number — since
-         * sanitizing can itself shorten text that looked long enough before
-         * disallowed characters were stripped from it.
+         * Below the minimum, the *entire* field becomes one of
+         * [DESCRIPTION_TEMPLATE_VARIANTS], filled with only true,
+         * already-known facts (timestamp, suspect's number, detected
+         * category, the user's own original text) — never invented or
+         * exaggerated narrative, same principle as why this file never
+         * auto-answers NCRP's bank-fraud/delay-reason radios. The original
+         * short description is used *once*, as the template's own
+         * brief-description blank, rather than prepended separately —
+         * doing both would duplicate the same sentence.
          */
         private fun padDescriptionForNcrp(
+            context: Context,
             description: String,
             ruleCategories: List<String>,
             suspectPhone: String,
@@ -673,25 +785,25 @@ class NcrpComplaintActivity : AppCompatActivity() {
             val whenText = SimpleDateFormat("dd MMM yyyy, HHmm 'hrs'", Locale.getDefault())
                 .format(Date(incidentEpochMillis))
             val categoryLabels = ruleCategories.mapNotNull { RULE_CATEGORY_LABELS[it] }
-
-            val facts = buildString {
-                append("This was flagged by the Rakshak AI app on $whenText")
-                if (suspectPhone.isNotBlank()) append(", involving the number $suspectPhone")
-                append(".")
-                if (categoryLabels.isNotEmpty()) {
-                    append(" Automated detection identified the following pattern(s). ")
-                    append(categoryLabels.joinToString(". "))
-                    append(".")
-                }
-                append(
-                    " This description was supplemented automatically because the original " +
-                        "report was brief. Please review and add any further detail you recall " +
-                        "before submitting."
-                )
+            val ruleCategoryText = if (categoryLabels.isNotEmpty()) {
+                categoryLabels.joinToString(", ").replaceFirstChar { it.lowercaseChar() }
+            } else {
+                NO_CATEGORY_FALLBACK
             }
+            val briefDescriptionText = sanitizedOriginal.ifBlank { NO_DESCRIPTION_FALLBACK }
+            // The allowlist (NCRP_DESCRIPTION_DISALLOWED_RUN) doesn't include
+            // "+" — embedding an E.164 number as-is would otherwise turn
+            // into a stray ". " right where the "+" was.
+            val phoneText = suspectPhone.removePrefix("+").ifBlank { "an unknown number" }
 
-            val padded = listOf(sanitizedOriginal, facts).filter { it.isNotBlank() }.joinToString(" ")
-            return sanitizeForNcrpDescription(padded)
+            val filled = fillDescriptionTemplate(
+                template = pickDescriptionVariant(context),
+                timestamp = whenText,
+                phoneNumber = phoneText,
+                ruleCategoryPlainLanguage = ruleCategoryText,
+                briefDescription = briefDescriptionText,
+            )
+            return sanitizeForNcrpDescription(filled)
         }
 
         /**

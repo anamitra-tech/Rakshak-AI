@@ -56,4 +56,8 @@ dependencies {
     // The model ships bundled in the AAR -- no download, no network call, no
     // text ever leaves the device for this.
     implementation("com.google.mlkit:language-id:17.0.6")
+    // On-device OCR for the "Upload screenshot" option on the "Check a
+    // call/message" screen (see ocr/ScreenshotOcrHelper.kt) -- Latin script
+    // only, same bundled-model/no-network posture as language-id above.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }

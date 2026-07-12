@@ -2,6 +2,7 @@ package com.rakshak.ai.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -13,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import com.rakshak.ai.R
 import com.rakshak.ai.RakshakApp
 import com.rakshak.ai.databinding.ActivityCheckCallBinding
+import com.rakshak.ai.escalation.ScreenshotEvidenceStore
 import com.rakshak.ai.intelligence.DecisionAgent
 import com.rakshak.ai.intelligence.DecisionResult
 import com.rakshak.ai.intelligence.OfflineEvaluator
@@ -21,6 +23,7 @@ import com.rakshak.ai.intelligence.PrahariUnavailableException
 import com.rakshak.ai.intelligence.RiskLevel
 import com.rakshak.ai.intelligence.hasActiveNetworkConnection
 import com.rakshak.ai.intelligence.normalizePhoneNumber
+import com.rakshak.ai.ocr.ScreenshotOcrHelper
 import com.rakshak.ai.stt.VoiceInputHelper
 import kotlinx.coroutines.launch
 
@@ -55,6 +58,16 @@ class CheckCallActivity : AppCompatActivity() {
         }
     }
 
+    // A standard system picker (SAF-mediated) -- no runtime permission
+    // needed for a single-image pick, consistent with CLAUDE.md's "system
+    // pickers over bulk grants" rule. Null result means the user backed out
+    // of the picker; that's not an error, just do nothing.
+    private val screenshotPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) handlePickedScreenshot(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCheckCallBinding.inflate(layoutInflater)
@@ -62,6 +75,9 @@ class CheckCallActivity : AppCompatActivity() {
 
         voiceInput = VoiceInputHelper(this)
         setUpVoiceInputButton()
+        binding.screenshotUploadButton.setOnClickListener {
+            screenshotPickerLauncher.launch("image/*")
+        }
 
         loadingOverlay = LoadingOverlay(
             overlayView = binding.loadingOverlay.root,
@@ -149,6 +165,42 @@ class CheckCallActivity : AppCompatActivity() {
     private fun showVoiceStatus(message: String) {
         binding.voiceStatusText.text = message
         binding.voiceStatusText.visibility = View.VISIBLE
+    }
+
+    /**
+     * Runs OCR on the picked image and, on success, replaces
+     * [ActivityCheckCallBinding.transcriptInput]'s text with the extracted
+     * text — same field typed and voice input use, still fully editable
+     * before the user taps Check. Also saves the original image into the
+     * shared evidence folder ([ScreenshotEvidenceStore]) regardless of
+     * whether OCR found readable text, since the image itself may still be
+     * usable evidence on NCRP's form even if this app's on-device OCR
+     * (Latin script only — see [ScreenshotOcrHelper]) couldn't read it.
+     */
+    private fun handlePickedScreenshot(uri: Uri) {
+        ScreenshotEvidenceStore.save(this, uri)
+
+        showScreenshotStatus(getString(R.string.check_call_screenshot_processing))
+        ScreenshotOcrHelper.recognizeText(this, uri, object : ScreenshotOcrHelper.Callback {
+            override fun onSuccess(text: String) {
+                binding.transcriptInput.setText(text)
+                binding.transcriptInput.setSelection(text.length)
+                showScreenshotStatus(getString(R.string.check_call_screenshot_success))
+            }
+
+            override fun onNoTextFound() {
+                showScreenshotStatus(getString(R.string.check_call_screenshot_no_text_found))
+            }
+
+            override fun onFailure(message: String) {
+                showScreenshotStatus(getString(R.string.check_call_screenshot_failed, message))
+            }
+        })
+    }
+
+    private fun showScreenshotStatus(message: String) {
+        binding.screenshotStatusText.text = message
+        binding.screenshotStatusText.visibility = View.VISIBLE
     }
 
     override fun onDestroy() {

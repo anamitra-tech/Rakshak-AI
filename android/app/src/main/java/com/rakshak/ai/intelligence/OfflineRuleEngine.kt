@@ -115,8 +115,10 @@ object OfflineRuleEngine {
         """(code|digits)\s+(that\s+)?(just\s+)?arrived""",
         """(code|digits)\s+you'?re\s+seeing""",
         """(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit""",
-        """(otp|pin|cvv|code)\s+(bata|bol|bhej)(o|iye|na|do)?""",
-        """(bata|bol|bhej)(o|iye|do)\s+(mujhe\s+)?(the\s+)?(otp|pin|cvv|code)""",
+        """(otp|pin|cvv|code)\s+(bata|bol|bhej|de\s?do)(o|iye|na|do)?""",
+        // "de do"/"dedo" ("give [it]") added 2026-07-13, mirroring the same
+        // fix in ml/detector.py — see that file's comment for why.
+        """((bata|bol|bhej)(o|iye|do)|de\s?do)\s+(mujhe\s+)?(the\s+)?(otp|pin|cvv|code)""",
         """(provide|give|share|state|relay|pass on) (us |me )?(the |your )?""" +
             """(otp|one-time password|verification code|security code|authentication code|one-time key)""",
         """(code|digits|number|figures|password|key) (that |which )?(is |are )?""" +

@@ -68,6 +68,29 @@
             android:textSize="13sp"
             android:visibility="gone" />
 
+        <!--
+          Screenshot-upload option, alongside (never instead of) typed and
+          voice input above — a picked image is run through on-device OCR
+          (ScreenshotOcrHelper) and the extracted text lands in the same
+          editable transcriptInput field voice input uses, so the user can
+          review/correct it before tapping Check.
+        -->
+        <Button
+            android:id="@+id/screenshotUploadButton"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/check_call_screenshot_button" />
+
+        <TextView
+            android:id="@+id/screenshotStatusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
         <Button
             android:id="@+id/analyzeButton"
             android:layout_width="match_parent"

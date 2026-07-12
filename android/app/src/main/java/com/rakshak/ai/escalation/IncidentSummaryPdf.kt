@@ -69,8 +69,7 @@ object IncidentSummaryPdf {
         bodyText.split("\n").forEach { drawLine(it, bodyPaint) }
         document.finishPage(page)
 
-        val dir = File(context.cacheDir, "ncrp_evidence").apply { mkdirs() }
-        val file = File(dir, "incident_summary.pdf")
+        val file = File(EvidenceFiles.dir(context), "incident_summary.pdf")
         FileOutputStream(file).use { document.writeTo(it) }
         document.close()
 
