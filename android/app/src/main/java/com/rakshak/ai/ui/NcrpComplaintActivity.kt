@@ -363,7 +363,12 @@ class NcrpComplaintActivity : AppCompatActivity() {
 
         val script = buildAutofillScript(
             suspectPhone = suspectPhone,
-            description = incidentDescription,
+            description = padDescriptionForNcrp(
+                description = incidentDescription,
+                ruleCategories = ruleCategories,
+                suspectPhone = suspectPhone,
+                incidentEpochMillis = incidentEpochMillis,
+            ),
             isoDate = isoDate,
             hour12 = hour12,
             minute = minute,
@@ -565,6 +570,128 @@ class NcrpComplaintActivity : AppCompatActivity() {
             // as "not found" for an empty keyword list — the honest outcome,
             // not a forced guess.
             return ruleCategories.flatMap { map[it].orEmpty() }.distinct()
+        }
+
+        // Same 11 signal-label strings as ml/detector.py::build_signals()'s
+        // dict values (the single source of truth those labels come from —
+        // also what the Hindi/Bengali/etc. translation tables in
+        // intelligence/translations are keyed by), reproduced here only to
+        // turn a rule-category *key* (e.g. "otp_readout_request") back into
+        // its human-readable label for the NCRP description padding below.
+        private val RULE_CATEGORY_LABELS = mapOf(
+            "authority_impersonation" to "Impersonates law-enforcement / govt authority",
+            "credential_request" to "Requests OTP/PIN/CVV/KYC credentials",
+            "urgency_coercion" to "Creates artificial urgency / coercion",
+            "money_demand" to "Demands money transfer",
+            "reward_bait" to "Offers unrealistic reward / lottery / returns",
+            "isolation_tactics" to "Discourages independent verification (bank/police/family)",
+            "otp_readout_request" to "Asks you to read out your OTP/PIN/CVV over the call",
+            "card_collection_request" to
+                "Arranges in-person collection of your card, or asks you to keep the PIN ready",
+            "relative_impersonation" to
+                "Claims to be a family member/friend in sudden distress asking for urgent money",
+            "telecom_impersonation" to
+                "Impersonates DoT/TRAI/your telecom operator, threatening SIM/number disconnection",
+            "extortion_threat" to "Threatens to leak private content unless paid (blackmail/sextortion framing)",
+        )
+
+        private const val NCRP_MIN_DESCRIPTION_LENGTH = 200
+
+        // NCRP's own client-side regex validator for this field (confirmed
+        // live, via Page_Validators[...].validationexpression — an
+        // allowlist, not the shorter "these symbols are banned" list its
+        // own hint text shows): letters, digits, whitespace, .,-()_@/? and
+        // Devanagari/Tamil/Telugu script. Notably excludes semicolons and
+        // colons — which WarningActivity's own reasons.joinToString("; ")
+        // (the source of [description] here) uses, so even an
+        // already-long-enough description can still fail this check.
+        private val NCRP_DESCRIPTION_DISALLOWED_RUN = Regex(
+            "[^a-zA-Z0-9\\s.,\\-()_@/?\\u0900-\\u097F\\u0B80-\\u0BFF\\u0C00-\\u0C7F]+"
+        )
+
+        /**
+         * Replaces any run of characters NCRP's own regex would reject with
+         * ". " (itself an allowed character) rather than deleting them
+         * outright, so "credentials; Asks" reads as "credentials. Asks"
+         * instead of running the two clauses together. Also collapses the
+         * doubled-up ". . " runs and stray ". )"/". ," this can create when
+         * two disallowed characters (or a disallowed character right next
+         * to a sentence that already ended in ".") sit close together —
+         * e.g. a stripped "%" right before a closing paren, or a stripped
+         * em dash right after a period. Applied unconditionally — including
+         * to descriptions already past the 200-character minimum below —
+         * since length and character-set are two independent checks on the
+         * real site, and this can itself shorten the text (which is why
+         * [padDescriptionForNcrp] sanitizes *before* checking length, not
+         * after).
+         */
+        private fun sanitizeForNcrpDescription(text: String): String {
+            var result = text.replace(NCRP_DESCRIPTION_DISALLOWED_RUN, ". ")
+            result = result.replace(Regex("\\.\\s*([),.])"), "$1")
+            result = result.replace(Regex("(\\.\\s*){2,}"), ". ")
+            result = result.replace(Regex("\\s{2,}"), " ")
+            return result.trim()
+        }
+
+        /**
+         * NCRP's "Additional Information" field enforces both a minimum
+         * length and a strict character allowlist (both confirmed live on
+         * the site — neither documented anywhere in this repo, so neither
+         * was something [buildAutofillScript]'s own investigation caught).
+         * A one-line detected reason is often shorter than the minimum, and
+         * separately, the reason text itself (or a quoted transcript) often
+         * contains characters — semicolons, em dashes, quote marks, "%" —
+         * the site's own regex rejects.
+         *
+         * Pads short descriptions with true, already-known facts — the
+         * detected risk category label(s), the suspect's number, and when
+         * this was flagged — never invented or exaggerated emotional
+         * narrative. This is a real legal complaint field; the same
+         * principle already governs why this file never auto-answers
+         * NCRP's bank-fraud/delay-reason radios (see [buildAutofillScript]'s
+         * doc comment) — a confident-sounding fabrication is worse than an
+         * honest gap. The closing sentence below is always appended
+         * (not just when a rule category matched) specifically so the
+         * length floor holds even in the sparsest case — a blank/near-blank
+         * description with no detected category and no phone number — since
+         * sanitizing can itself shorten text that looked long enough before
+         * disallowed characters were stripped from it.
+         */
+        private fun padDescriptionForNcrp(
+            description: String,
+            ruleCategories: List<String>,
+            suspectPhone: String,
+            incidentEpochMillis: Long,
+        ): String {
+            val sanitizedOriginal = sanitizeForNcrpDescription(description)
+            if (sanitizedOriginal.length >= NCRP_MIN_DESCRIPTION_LENGTH) return sanitizedOriginal
+
+            // No colon — NCRP's character allowlist doesn't include one, and
+            // letting sanitizeForNcrpDescription mangle "16:55" into
+            // "16. 55" would be needlessly ugly when it's easy to just not
+            // generate a colon in the first place.
+            val whenText = SimpleDateFormat("dd MMM yyyy, HHmm 'hrs'", Locale.getDefault())
+                .format(Date(incidentEpochMillis))
+            val categoryLabels = ruleCategories.mapNotNull { RULE_CATEGORY_LABELS[it] }
+
+            val facts = buildString {
+                append("This was flagged by the Rakshak AI app on $whenText")
+                if (suspectPhone.isNotBlank()) append(", involving the number $suspectPhone")
+                append(".")
+                if (categoryLabels.isNotEmpty()) {
+                    append(" Automated detection identified the following pattern(s). ")
+                    append(categoryLabels.joinToString(". "))
+                    append(".")
+                }
+                append(
+                    " This description was supplemented automatically because the original " +
+                        "report was brief. Please review and add any further detail you recall " +
+                        "before submitting."
+                )
+            }
+
+            val padded = listOf(sanitizedOriginal, facts).filter { it.isNotBlank() }.joinToString(" ")
+            return sanitizeForNcrpDescription(padded)
         }
 
         /**
