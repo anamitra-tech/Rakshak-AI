@@ -2,6 +2,29 @@
 (package `com.rakshak.ai`, minSdk 29). See the end of this doc for what's real vs. stubbed and
 how to run it.
 
+## Definition of Done — mandatory for every fix in this project
+
+A fix, feature, or change is **not done** until all five of these are true. Do not mark anything
+complete on (a) or (b) alone — this exact mistake happened repeatedly on the night of 2026-07-12/13
+(a sub-category autofill fix and an NCRP description-template rewrite were both re-reported as
+"fixed" multiple times, based on code review and commit messages alone, before either was actually
+confirmed working on a real device — and one of the two had never even been rebuilt yet when it was
+first claimed done).
+
+1. **(a) Code change made.**
+2. **(b) Committed.**
+3. **(c) App rebuilt, with a logged, actually-checked build artifact/timestamp** — not assumed
+   from "the build succeeded" alone.
+4. **(d) Reinstalled on the physical device, with the installed APK's timestamp re-confirmed**
+   (`adb shell dumpsys package <app> | grep lastUpdateTime` or equivalent) to be different from —
+   and after — the previous build's timestamp. A stale install is indistinguishable from a real fix
+   by symptom alone; the timestamp comparison is what actually distinguishes them.
+5. **(e) Actually re-tested on the device, with a real, reported result** — a logcat line, a DOM
+   dump, a screenshot — never assumed from reading the code or from a prior, unrelated test run.
+
+State explicitly which of (a)-(e) are true whenever reporting a fix's status, and call out plainly
+which ones aren't yet. Never say a fix is "done" or "working" based on (a)/(b) alone.
+
 # AbhayAI — Android Client, Phase 1 (revised)
 
 This repo already contains **Prahari**, a working Python fraud-intelligence backend (see

@@ -1,4 +1,5 @@
 import base64
+import json
 import re
 import smtplib
 import time
@@ -11,11 +12,23 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from twilio.rest import Client as TwilioRestClient
-from twilio.twiml.messaging_response import MessagingResponse
 from dotenv import load_dotenv
 import logging
 import os
 import sys
+
+# Windows' default console codepage (cp1252) can't encode the Unicode block
+# characters ("█") easyocr's own model-download progress bar prints on first
+# use — an uncaught UnicodeEncodeError there previously aborted OCR reader
+# init entirely (real failure observed: 'charmap' codec can't encode
+# character '█'). Reconfiguring stdout/stderr to UTF-8 fixes this at the
+# source rather than relying on PYTHONIOENCODING being set by whoever starts
+# this process. No-op on platforms where reconfigure isn't needed/available.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(_ROOT, ".env"))
@@ -34,6 +47,31 @@ from feedback.store import log_correction
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def _warm_up_models():
+    """Pre-loads the RAG embedding model (BAAI/bge-m3, rag/embedder.py
+    instantiates it at import time) and the EasyOCR reader eagerly at
+    process start, instead of lazily on the first real webhook request.
+    Added 2026-07-13: repeated real WhatsApp tests showed the first
+    message after every restart taking 20-30s+ (measured: bge-m3 weight
+    loading alone took ~15s) before this — a real, user-visible latency
+    problem, not an assumption. This is a one-time cost per process
+    lifetime either way; moving it to startup just means the app itself
+    is slower to report "ready" instead of the first user being the one
+    who pays for it. Wrapped in try/except so a slow/failed download here
+    degrades to the original lazy-load-on-first-request behavior rather
+    than blocking startup entirely — same safety property the lazy import
+    below (bot.agent inside /webhook) was already written to preserve.
+    """
+    try:
+        logging.info("Pre-warming RAG stack (bot.agent) and OCR reader...")
+        import bot.agent  # noqa: F401 — import side effect loads bge-m3
+        _get_ocr_reader()
+        logging.info("Pre-warming complete — models are warm.")
+    except Exception as e:
+        logging.warning(f"Model pre-warm failed (will lazy-load on first request instead): {e}")
 
 # ── /whatsapp/webhook — same classification pipeline CheckCallActivity uses
 # (analyze_voice + analyze_session), NOT the LLM/RAG bot.agent.chat() pipeline
@@ -112,6 +150,248 @@ def _media_descriptor(media_url: str, content_type: str) -> str | None:
     # *something* was attached, since even that bare fact is more than the
     # classifier had before, without inventing a filename or extension.
     return f"[Attachment, type: {content_type}]"
+
+
+# ── Media content extraction — OCR (images) + Sarvam STT (audio) ────────────
+# Added 2026-07-13. Previously, an image or voice note reached the classifier
+# as nothing but _media_descriptor's filename/type note above (e.g. "[Attached
+# file type: .jpg]") — the actual screenshot text or spoken words never got
+# to ml.detector at all. _extract_media_content below downloads image/audio
+# attachments and extracts real text (OCR / speech-to-text-translate) so that
+# text, not just a type label, is what reaches the classifier. Non-image/audio
+# attachments (zip/exe/etc.) are untouched — _media_descriptor still handles
+# those exactly as before.
+SARVAM_API_KEY = os.environ.get("SARVAM_API_KEY", "")
+
+_AUDIO_MIME_TO_EXT = {
+    "audio/ogg": ".ogg", "audio/opus": ".ogg",
+    "audio/mpeg": ".mp3", "audio/mp3": ".mp3",
+    "audio/mp4": ".m4a", "audio/aac": ".aac",
+    "audio/amr": ".amr", "audio/webm": ".webm",
+    "audio/wav": ".wav", "audio/x-wav": ".wav",
+    "audio/flac": ".flac",
+}
+
+# Lazy singleton: easyocr.Reader(...) loads detection+recognition models
+# (~64MB download on first use, cached after) and is slow to construct —
+# built once, on the first actual image, not at process start. Same reason
+# /webhook lazy-imports bot.agent below: a slow/failed model load must not
+# take down routes that don't need it (health check, /whatsapp/webhook's
+# text-only path, etc).
+_ocr_reader = None
+
+
+def _get_ocr_reader():
+    global _ocr_reader
+    if _ocr_reader is None:
+        import easyocr
+        logging.info("Initializing EasyOCR reader (first use — downloads models if not cached)...")
+        _ocr_reader = easyocr.Reader(["en"], gpu=False)
+    return _ocr_reader
+
+
+def _download_media(media_url: str) -> bytes | None:
+    """Authenticated fetch of a Twilio media URL. None on any failure —
+    callers must fall back to the type-only descriptor, never raise."""
+    if not media_url or not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN):
+        return None
+    try:
+        resp = requests.get(
+            media_url, auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN), timeout=20,
+        )
+        resp.raise_for_status()
+        return resp.content
+    except Exception as e:
+        logging.error(f"_download_media failed for {media_url}: {e}")
+        return None
+
+
+_OCR_MAX_DIMENSION = 1280  # phone-camera photos (3000px+) cost real seconds of
+# EasyOCR inference time for no accuracy gain past this — text legible at
+# 1280px on the long edge is still legible after detection/recognition.
+
+
+def _ocr_image(image_bytes: bytes) -> str | None:
+    """Runs on-device-equivalent OCR (English/Latin script only, same scope
+    as the Android app's ScreenshotOcrHelper — no Devanagari support here
+    either) over a downloaded image. None on failure or no text found."""
+    try:
+        import numpy as np
+        from PIL import Image
+        import io as _io
+
+        pil_image = Image.open(_io.BytesIO(image_bytes)).convert("RGB")
+        if max(pil_image.size) > _OCR_MAX_DIMENSION:
+            scale = _OCR_MAX_DIMENSION / max(pil_image.size)
+            new_size = (round(pil_image.width * scale), round(pil_image.height * scale))
+            pil_image = pil_image.resize(new_size, Image.LANCZOS)
+
+        image = np.array(pil_image)
+        reader = _get_ocr_reader()
+        lines = reader.readtext(image, detail=0, paragraph=True)
+        text = " ".join(line.strip() for line in lines if line.strip())
+        return text or None
+    except Exception as e:
+        logging.error(f"_ocr_image failed: {e}")
+        return None
+
+
+def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str) -> str | None:
+    """Sarvam speech-to-text, mode=translate — Indic speech (or English)
+    straight to an English transcript, same translate-to-English behavior
+    CLAUDE.md documented as the planned online-STT fallback (§11.3), here
+    used server-side rather than on-device. None if SARVAM_API_KEY isn't
+    configured or the call fails for any reason — never blocks the reply.
+
+    Tries the fast synchronous /speech-to-text endpoint first (real limit,
+    confirmed via a live 400 response: 30 seconds max). A voice note longer
+    than that — real user report 2026-07-13 — falls back to Sarvam's async
+    batch job API (client.speech_to_text_job), which supports files up to
+    2 hours. Despite the "batch" name this completed in ~3s in live testing
+    (create_job -> upload_files -> start -> wait_until_complete), so this
+    isn't the slow path it sounds like."""
+    if not SARVAM_API_KEY:
+        logging.info("_transcribe_audio_sarvam: SARVAM_API_KEY not set, skipping")
+        return None
+    ext = _AUDIO_MIME_TO_EXT.get(content_type.lower(), ".ogg")
+    try:
+        resp = requests.post(
+            "https://api.sarvam.ai/speech-to-text",
+            headers={"api-subscription-key": SARVAM_API_KEY},
+            files={"file": (f"voice{ext}", audio_bytes, content_type)},
+            data={"model": "saaras:v3", "mode": "translate"},
+            timeout=30,
+        )
+        if resp.status_code == 400 and "exceeds the maximum limit" in resp.text:
+            logging.info("_transcribe_audio_sarvam: audio too long for sync endpoint, trying batch job")
+            return _transcribe_audio_sarvam_batch(audio_bytes, ext)
+        if resp.status_code >= 400:
+            logging.error(f"_transcribe_audio_sarvam: {resp.status_code} response body: {resp.text[:500]}")
+        resp.raise_for_status()
+        transcript = (resp.json().get("transcript") or "").strip()
+        return transcript or None
+    except Exception as e:
+        logging.error(f"_transcribe_audio_sarvam failed: {e}")
+        return None
+
+
+def _transcribe_audio_sarvam_batch(audio_bytes: bytes, ext: str) -> str | None:
+    """Async batch-job path for audio too long for the sync endpoint — see
+    _transcribe_audio_sarvam's doc comment. The SDK's upload_files() takes
+    file paths, not bytes, so this writes to a real temp file first. Output
+    shape (a downloaded per-file JSON with the same {"transcript": ...}
+    field as the sync endpoint) confirmed via a live test run, not assumed
+    from Sarvam's docs — the docs for this specific flow don't publish exact
+    schemas, only an SDK usage sketch."""
+    import shutil
+    import tempfile
+    from sarvamai import SarvamAI
+
+    tmp_path = None
+    out_dir = None
+    try:
+        client = SarvamAI(api_subscription_key=SARVAM_API_KEY)
+        fd, tmp_path = tempfile.mkstemp(suffix=ext)
+        with os.fdopen(fd, "wb") as f:
+            f.write(audio_bytes)
+
+        job = client.speech_to_text_job.create_job(model="saaras:v3", mode="translate")
+        job.upload_files(file_paths=[tmp_path])
+        job.start()
+        # 180s budget: real test completed in ~3s for a 2s clip; this leaves
+        # headroom for a genuinely long (1-2 minute) voice note without
+        # blocking indefinitely. The reply is sent out-of-band via the
+        # Twilio REST API regardless of how long this takes (see /webhook's
+        # and /whatsapp/webhook's reply-delivery doc comments), so there's
+        # no hard deadline tying this to the original webhook connection.
+        job.wait_until_complete(poll_interval=3, timeout=180)
+        if not job.is_successful():
+            logging.error(f"_transcribe_audio_sarvam_batch: job did not complete successfully: {job.get_status()}")
+            return None
+
+        out_dir = tempfile.mkdtemp()
+        job.download_outputs(output_dir=out_dir)
+        json_files = [f for f in os.listdir(out_dir) if f.endswith(".json")]
+        if not json_files:
+            logging.error("_transcribe_audio_sarvam_batch: no output file downloaded")
+            return None
+        with open(os.path.join(out_dir, json_files[0]), encoding="utf-8") as f:
+            data = json.load(f)
+        transcript = (data.get("transcript") or "").strip()
+        return transcript or None
+    except Exception as e:
+        logging.error(f"_transcribe_audio_sarvam_batch failed: {e}")
+        return None
+    finally:
+        if tmp_path:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+        if out_dir:
+            shutil.rmtree(out_dir, ignore_errors=True)
+
+
+def _is_audio_content_type(content_type: str) -> bool:
+    return bool(content_type) and content_type.lower().startswith("audio/")
+
+
+# Real bug found 2026-07-13: when Sarvam STT failed (observed cause: audio
+# over its 30s synchronous-endpoint limit — the batch API would be needed for
+# longer files, not wired up here), _extract_media_content correctly returned
+# None, but the caller then fell back to _media_descriptor's bare filename
+# note (e.g. "[Attached file: File.m4a]") and ran that through the classifier
+# as if it were the entire message. With no actual speech content, the
+# classifier — correctly, given what it was handed — scored this as SAFE,
+# but that reads to the user as "I checked your voice message and it's fine,"
+# which is false: nothing about what was actually said was ever analyzed.
+# Callers must treat this as a distinct, honest "could not analyze" case
+# instead of silently degrading to a real-sounding but unfounded verdict.
+_AUDIO_UNANALYZED_EN = (
+    "I could not process this voice message — it may be longer than 30 seconds, "
+    "or transcription failed. Please type out what was said, or send a shorter clip, "
+    "so I can actually check it."
+)
+_AUDIO_UNANALYZED_HI = (
+    "मैं इस वॉइस मैसेज को प्रोसेस नहीं कर पाया — यह 30 सेकंड से लंबा हो सकता है, "
+    "या ट्रांसक्रिप्शन विफल रहा। कृपया जो कहा गया था वह टाइप करें, या एक छोटा क्लिप भेजें, "
+    "ताकि मैं इसे सही से जांच सकूं।"
+)
+
+
+def _audio_unanalyzed_reply(lang: str) -> str:
+    if lang == "en":
+        return "⚠️ COULD NOT ANALYZE\n" + _AUDIO_UNANALYZED_EN
+    if lang == "hi":
+        return "⚠️ जांच नहीं हो पाई\n" + _AUDIO_UNANALYZED_HI
+    return "⚠️ COULD NOT ANALYZE / जांच नहीं हो पाई\n" + _AUDIO_UNANALYZED_EN + "\n\n" + _AUDIO_UNANALYZED_HI
+
+
+def _extract_media_content(media_url: str, content_type: str) -> str | None:
+    """Returns real extracted text for an image (OCR) or audio (Sarvam STT-
+    translate) attachment, bracketed for the classifier the same way
+    _media_descriptor's notes are — or None for any other media type, or if
+    download/extraction failed, in which case the caller falls back to
+    _media_descriptor's type-only note rather than sending nothing."""
+    if not media_url or not content_type:
+        return None
+    content_type = content_type.lower()
+
+    if content_type.startswith("image/"):
+        data = _download_media(media_url)
+        if data is None:
+            return None
+        text = _ocr_image(data)
+        return f"[Image text: {text}]" if text else None
+
+    if content_type.startswith("audio/"):
+        data = _download_media(media_url)
+        if data is None:
+            return None
+        text = _transcribe_audio_sarvam(data, content_type)
+        return f"[Voice message: {text}]" if text else None
+
+    return None
 
 
 _RISK_RANK = {"REAL": 0, "SUSPICIOUS": 1, "FRAUD": 2}
@@ -243,9 +523,37 @@ async def whatsapp_webhook(
     session_id = From.replace("whatsapp:", "")
     try:
         text = Body.strip()
-        media_descriptor = (
-            _media_descriptor(MediaUrl0, MediaContentType0) if NumMedia != "0" else None
-        )
+        media_descriptor = None
+        audio_unanalyzed = False
+        if NumMedia != "0":
+            # Real content (OCR'd image text / translated voice message)
+            # first; only fall back to the type-only note if extraction
+            # wasn't possible (no key configured, download failed, no text
+            # found) or the attachment isn't an image/audio at all.
+            media_descriptor = _extract_media_content(MediaUrl0, MediaContentType0)
+            if media_descriptor is None:
+                if _is_audio_content_type(MediaContentType0):
+                    audio_unanalyzed = True
+                media_descriptor = _media_descriptor(MediaUrl0, MediaContentType0)
+            logging.info(f"whatsapp session={session_id} | media_descriptor={media_descriptor!r}")
+
+        # Feedback/language resolution intentionally use the raw caption
+        # (`text`), not classify_text — a media descriptor is never
+        # something the user typed and must never be misread as a feedback
+        # command or a language-detection signal.
+        lang = _resolve_language(session_id, text)
+
+        # An audio message that failed to transcribe must never be silently
+        # classified off just its filename note — see _AUDIO_UNANALYZED_EN's
+        # doc comment for the real false-SAFE-verdict bug this replaces.
+        if audio_unanalyzed:
+            reply = _audio_unanalyzed_reply(lang)
+            if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+                client = TwilioRestClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+                client.messages.create(from_=TWILIO_WHATSAPP_FROM, to=From, body=reply)
+            logging.info(f"whatsapp session={session_id} | audio unanalyzed, sent honest could-not-process reply")
+            return Response(content="", media_type="application/xml")
+
         # A media-only message (attachment, no caption) used to be dropped
         # here entirely — classify_text is what actually reaches the
         # detector, so this only bails out when there's truly nothing at
@@ -258,12 +566,6 @@ async def whatsapp_webhook(
         classify_text = " ".join(p for p in (text, media_descriptor) if p)
         if not classify_text:
             return Response(content="", media_type="application/xml")
-
-        # Feedback/language resolution intentionally use the raw caption
-        # (`text`), not classify_text — a media descriptor is never
-        # something the user typed and must never be misread as a feedback
-        # command or a language-detection signal.
-        lang = _resolve_language(session_id, text)
 
         # Feedback on the verdict shown for the *previous* message, not a new
         # thing to classify — log it and stop, don't run it through the
@@ -487,15 +789,29 @@ async def webhook(
     try:
         # Same real gap as /whatsapp/webhook (see _media_descriptor's doc
         # comment): without this, an attachment's filename/extension never
-        # reached chat() -> ScamDetector.predict() either.
-        media_descriptor = (
-            _media_descriptor(MediaUrl0, MediaContentType0) if NumMedia != "0" else None
-        )
+        # reached chat() -> ScamDetector.predict() either. As of 2026-07-13,
+        # image/audio attachments get real extracted content (OCR/Sarvam
+        # STT-translate) via _extract_media_content, same as /whatsapp/webhook,
+        # falling back to the type-only note on any failure.
+        media_descriptor = None
+        audio_unanalyzed = False
+        if NumMedia != "0":
+            media_descriptor = _extract_media_content(MediaUrl0, MediaContentType0)
+            if media_descriptor is None:
+                if _is_audio_content_type(MediaContentType0):
+                    audio_unanalyzed = True
+                media_descriptor = _media_descriptor(MediaUrl0, MediaContentType0)
+            logging.info(f"webhook from={From} | media_descriptor={media_descriptor!r}")
         # Space-joined, not newline-joined — see /whatsapp/webhook's
         # classify_text for why (HIGH_RISK_PATTERNS' gap patterns don't
         # cross a "\n" by default).
         classify_text = " ".join(p for p in (Body.strip(), media_descriptor) if p)
-        if not classify_text:
+        if audio_unanalyzed:
+            # Same real bug as /whatsapp/webhook (see _AUDIO_UNANALYZED_EN's
+            # doc comment) — never let chat() classify off a bare filename
+            # note when the actual speech was never transcribed.
+            reply = _audio_unanalyzed_reply("both")
+        elif not classify_text:
             reply = "Please send a message."
         else:
             session_id = From.replace("whatsapp:", "")
@@ -522,9 +838,29 @@ async def webhook(
         logging.error(f"Error: {e}")
         reply = "Kuch gadbad ho gayi. Seedha 1930 pe call karein."
 
-    resp = MessagingResponse()
-    resp.message(reply.strip('"').strip("'"))
-    return Response(content=str(resp), media_type="application/xml")
+    # Sent via the Twilio REST API (same pattern /whatsapp/webhook and
+    # /evidence/whatsapp already use), not returned in the TwiML response
+    # body. Real gap found 2026-07-13: with media handling added, a cold
+    # RAG-stack + EasyOCR-reader load can take 20-30s+ (confirmed via a live
+    # test — bge-m3 weight loading alone took ~15s), which blew past
+    # whatever Twilio/ngrok waits for a webhook HTTP response. The reply
+    # this function computed was correct, but was silently lost — ngrok
+    # showed status_code=0 on the original connection even though this
+    # process logged "200 OK" for the response it tried to send into an
+    # already-abandoned connection. Sending via the REST API here means the
+    # reply is delivered as soon as it's computed, regardless of whether
+    # Twilio is still waiting on the original webhook connection.
+    reply = reply.strip('"').strip("'")
+    if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+        try:
+            client = TwilioRestClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+            client.messages.create(from_=TWILIO_WHATSAPP_FROM, to=From, body=reply)
+        except Exception as e:
+            logging.error(f"webhook reply send failed: {e}")
+    else:
+        logging.error(f"TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN not set — reply computed but not sent: {reply!r}")
+
+    return Response(content="", media_type="application/xml")
 
 @app.get("/health")
 async def health():

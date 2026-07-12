@@ -24,3 +24,9 @@ FlagEmbedding
 beautifulsoup4>=4.12
 feedparser>=6.0
 pdfplumber>=0.11
+
+# WhatsApp media handling (webhook/app.py) — OCR for images, Sarvam STT
+# for audio (sync REST for short clips, sarvamai SDK for the async batch
+# job path when audio exceeds the sync endpoint's 30s limit).
+easyocr>=1.7
+sarvamai>=0.1
