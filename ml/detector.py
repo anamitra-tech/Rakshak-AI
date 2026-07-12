@@ -228,6 +228,62 @@ HIGH_RISK_PATTERNS = {
         r"(video|photo|tasveer(ein)?).{0,80}(payment|paisa|paise|rupya|bhugtan|upi).{0,80}(bhej denge|share kar denge|de denge|viral|leak)",
         r"(recorded|record kar liya|access to your (device|phone|camera)|hacked your).{0,80}(pay|transfer|bitcoin|paisa|paise|payment|upi)",
     ],
+    # Added 2026-07-12: text-classification coverage for link/URL-bait scam
+    # framing only — deliberately does NOT analyze what a URL actually points
+    # to or anything about post-click device state (that's link/url_safety.py,
+    # Module 5's separate analyze_url() engine, exposed at /analyze_url; it
+    # only ever runs on a URL a caller has already extracted and passed in,
+    # never auto-invoked from this text path — a structurally different
+    # problem: this module classifies the *message text*, not the link
+    # target). "Click here" alone is far too common in ordinary, legitimate
+    # messages (order tracking, bill payment, appointment confirmation — see
+    # the false_positive_bait cases this was tuned against) to fire on its
+    # own, so every pattern below requires the click/tap/open instruction to
+    # co-occur with account/KYC/card suspension-threat framing, parcel/
+    # delivery-hold framing, or prize/reward-claim framing, in either clause
+    # order — the same near-deterministic-only-with-combination principle as
+    # extortion_threat above, not a bare keyword match.
+    "malicious_link_bait": [
+        r"(account|kyc|card|profile) (will be |has been |has |is )?(suspend|block|deactivat|expir|freez|restrict)(ed|e)?.{0,80}(click|tap|open).{0,15}(link|url|button|claim|here)",
+        r"(click|tap|open).{0,15}(link|url|button|claim|here).{0,80}(account|kyc|card|profile) (will be |has been |has |is )?(suspend|block|deactivat|expir|freez|restrict)(ed|e)?",
+        r"(parcel|package|courier|shipment|delivery).{0,40}(hold|pending|customs|fee|undelivered|failed|reschedul\w*|could not be delivered|not delivered|unable to deliver).{0,80}(click|tap|open).{0,15}(link|url|button|claim|here)",
+        r"(click|tap|open).{0,15}(link|url|button|claim|here).{0,80}(parcel|package|courier|shipment|delivery).{0,40}(hold|pending|customs|fee|undelivered|failed|reschedul\w*|could not be delivered|not delivered|unable to deliver)",
+        r"(won|selected|eligible|congratulations).{0,40}(prize|reward|gift|lottery|lucky draw|cashback).{0,80}(click|tap|open).{0,15}(link|url|button|claim|here)",
+        r"(click|tap|open).{0,15}(link|url|button|claim|here).{0,80}(won|selected|eligible|congratulations).{0,40}(prize|reward|gift|lottery|lucky draw|cashback)",
+        r"(khaata|account|kyc|sim).{0,20}(band|block|suspend).{0,60}(is|us) link (pe|par) click kar(o|ke|iye|ein)?",
+        r"(is|us) link (pe|par) click kar(o|ke|iye|ein)?.{0,60}(khaata|account|kyc|sim).{0,20}(band|block|suspend)",
+    ],
+    # Added 2026-07-12: caught a real miss — "Statement of Account6.25.zip
+    # ... forward kar dijiye apni company ke finance manager ko ... computer
+    # par open kijiye" scored SAFE, since no existing category covers
+    # malware-delivery social engineering (this isn't impersonation, isn't a
+    # credential request — it's convincing the victim to relay a malicious
+    # attachment to whoever will open it on a real desktop, the classic
+    # business-email-compromise/trojan-delivery pattern). Same combination
+    # discipline as every other non-trivial category here: a bare "forward
+    # this" or a bare ".zip" mention is far too common in ordinary work chat
+    # to fire alone (see the "forward this invoice PDF to accounts for
+    # payment" false_positive_bait case this was tuned against) — every
+    # pattern requires a forward-to-someone instruction to combine with
+    # EITHER an explicit desktop/laptop/PC-specific open instruction
+    # (deliberately excludes phone/mobile — opening on a real computer is
+    # what actually lets a .zip/.exe payload execute) OR a literal risky
+    # attachment extension in the text. The open-on-computer pairing also
+    # requires a finance/accounts/manager/boss-framed recipient, since
+    # "forward + open on computer" alone is ordinary business chat; the
+    # risky-extension pairing does not require a role, since an
+    # executable/archive/macro-enabled extension is already a strong,
+    # rare-in-legitimate-chat signal on its own.
+    "malware_attachment_delivery": [
+        r"(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}(finance (manager|team|department)|accounts (team|department|manager)|(your |the )?(manager|boss|supervisor|hr( team)?)).{0,120}open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop)",
+        r"open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop).{0,120}(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}(finance (manager|team|department)|accounts (team|department|manager)|(your |the )?(manager|boss|supervisor|hr( team)?))",
+        r"(finance manager|accounts (team|department|manager)|(company|apni company) ke (finance|accounts)).{0,50}(ko|ke liye)?.{0,25}forward kar ?(dijiye|do|kijiye|karein|ke)?.{0,120}(computer|pc|laptop|desktop) (par|pe) open ?(kijiye|karo|kariye|kar dijiye|karein)?",
+        r"(computer|pc|laptop|desktop) (par|pe) open ?(kijiye|karo|kariye|kar dijiye|karein)?.{0,120}(finance manager|accounts (team|department|manager)|(company|apni company) ke (finance|accounts)).{0,50}(ko|ke liye)?.{0,25}forward kar ?(dijiye|do|kijiye|karein|ke)?",
+        r"(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,150}\.(zip|exe|scr|js|docm|xlsm|bat)\b",
+        r"\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip))",
+        r"forward kar ?(dijiye|do|kijiye|karein|ke)?.{0,150}\.(zip|exe|scr|js|docm|xlsm|bat)\b",
+        r"\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}forward kar ?(dijiye|do|kijiye|karein|ke)?",
+    ],
 }
 
 # Surfaced verbatim to the user when the matching near-deterministic rule
@@ -391,6 +447,14 @@ class ScamDetector:
         if "extortion_threat" in rules:
             score = max(score, 0.85)
 
+        # malware_attachment_delivery is structural the same way: every
+        # pattern already requires a forward-to-someone instruction combined
+        # with either a computer-specific open instruction (+ role framing)
+        # or a risky attachment extension, so a single hit carries the same
+        # weight as two independent categories elsewhere.
+        if "malware_attachment_delivery" in rules:
+            score = max(score, 0.85)
+
         # Near-deterministic overrides (isolation tactics, OTP/PIN readout
         # requests, in-person card collection) — each is near-certain scam on
         # its own, so any one of them overrides regardless of tone/ML score
@@ -422,6 +486,8 @@ class ScamDetector:
             "relative_impersonation": "Claims to be a family member/friend in sudden distress asking for urgent money",
             "telecom_impersonation": "Impersonates DoT/TRAI/your telecom operator, threatening SIM/number disconnection",
             "extortion_threat": "Threatens to leak private content unless paid (blackmail/sextortion framing)",
+            "malicious_link_bait": "Pressures you to click a link, tied to an account/KYC suspension threat, a parcel/delivery hold, or a prize claim",
+            "malware_attachment_delivery": "Asks you to forward an attachment (e.g. to a finance/accounts contact) and open it on a computer, or names a risky file type (.zip/.exe/.docm/etc.)",
         }
         return [label[k] for k in rules]
 

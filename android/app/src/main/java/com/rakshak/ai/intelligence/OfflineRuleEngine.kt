@@ -1,18 +1,29 @@
 package com.rakshak.ai.intelligence
 
 /**
- * On-device port of ml/detector.py's NEAR_DETERMINISTIC_RULES — the three
- * regex categories proven near-certain-scam-on-their-own (isolation_tactics,
+ * On-device port of ml/detector.py's NEAR_DETERMINISTIC_RULES (isolation_tactics,
  * otp_readout_request, card_collection_request; see DecisionAgent's
- * NEAR_DETERMINISTIC_RULE_CATEGORIES, which this must stay in sync with).
+ * NEAR_DETERMINISTIC_RULE_CATEGORIES, which this must stay in sync with),
+ * plus malware_attachment_delivery — added 2026-07-12 as an explicit,
+ * deliberate exception to the "near-deterministic only" rule below: unlike
+ * relative_impersonation/telecom_impersonation/extortion_threat (ordinary
+ * contributing categories left off this list on purpose), every pattern in
+ * malware_attachment_delivery already requires two conditions combined (a
+ * forward-to-someone instruction plus either a computer-specific open
+ * instruction or a risky attachment extension) — the same structural
+ * certainty as the three NEAR_DETERMINISTIC_RULES categories, and
+ * ml/detector.py's own critical-combo score bump already treats it as
+ * FRAUD-alone (score = max(score, 0.85)), so mirroring it here for the
+ * offline fallback doesn't diverge from what the real backend would say.
  * Patterns below are copied verbatim from HIGH_RISK_PATTERNS in
  * ml/detector.py — do not add, remove, or reword a pattern here without
  * updating both files. Deliberately excludes every other category
  * (money_demand, authority_impersonation, telecom_impersonation,
- * relative_impersonation, extortion_threat, ...) — none of those are
- * deterministic-alone in Python (they only reach FRAUD in combination with
- * a second category), so treating a lone match as automatic FRAUD offline
- * would diverge from what the real backend would say about the same text.
+ * relative_impersonation, extortion_threat, malicious_link_bait, ...) —
+ * none of those are deterministic-alone in Python (they only reach FRAUD in
+ * combination with a second category), so treating a lone match as
+ * automatic FRAUD offline would diverge from what the real backend would
+ * say about the same text.
  *
  * Deliberately does NOT port ml/detector.py's BENIGN_CONTEXT guard (which
  * can strip an otp_readout_request-only hit on a legitimate "do not share
@@ -48,6 +59,12 @@ object OfflineRuleEngine {
         "Banks and government bodies do not send someone to your home to collect your active " +
         "debit or credit card. If your card needs to be blocked, it can be done remotely — no one " +
         "needs to physically take it from you."
+
+    private const val MALWARE_ATTACHMENT_EXPLANATION =
+        "A genuine colleague or organisation does not need an attachment relayed to someone else " +
+        "unopened, or opened specifically on a computer rather than your phone — that combination " +
+        "is a common way malware in a .zip, .exe, or macro-enabled file gets past a phone's more " +
+        "limited execution environment and onto a real desktop where it can actually run."
 
     private val ISOLATION_TACTICS_PATTERNS = listOf(
         """(that|the) (line|number) is (always )?busy""",
@@ -132,12 +149,35 @@ object OfflineRuleEngine {
         """पिन.{0,10}(नोट कर|लिख)""",
     ).map { Regex(it) }
 
+    private val MALWARE_ATTACHMENT_PATTERNS = listOf(
+        """(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}""" +
+            """(finance (manager|team|department)|accounts (team|department|manager)|""" +
+            """(your |the )?(manager|boss|supervisor|hr( team)?)).{0,120}open.{0,20}(on|in).{0,10}""" +
+            """(your |the )?(computer|pc|laptop|desktop)""",
+        """open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop).{0,120}(forward|send).{0,25}""" +
+            """(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}(finance (manager|team|department)|""" +
+            """accounts (team|department|manager)|(your |the )?(manager|boss|supervisor|hr( team)?))""",
+        """(finance manager|accounts (team|department|manager)|(company|apni company) ke (finance|accounts))""" +
+            """.{0,50}(ko|ke liye)?.{0,25}forward kar ?(dijiye|do|kijiye|karein|ke)?.{0,120}""" +
+            """(computer|pc|laptop|desktop) (par|pe) open ?(kijiye|karo|kariye|kar dijiye|karein)?""",
+        """(computer|pc|laptop|desktop) (par|pe) open ?(kijiye|karo|kariye|kar dijiye|karein)?.{0,120}""" +
+            """(finance manager|accounts (team|department|manager)|(company|apni company) ke (finance|accounts))""" +
+            """.{0,50}(ko|ke liye)?.{0,25}forward kar ?(dijiye|do|kijiye|karein|ke)?""",
+        """(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,150}""" +
+            """\.(zip|exe|scr|js|docm|xlsm|bat)\b""",
+        """\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}(forward|send).{0,25}""" +
+            """(this|it|the.{0,15}(attachment|file|document|statement|zip))""",
+        """forward kar ?(dijiye|do|kijiye|karein|ke)?.{0,150}\.(zip|exe|scr|js|docm|xlsm|bat)\b""",
+        """\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}forward kar ?(dijiye|do|kijiye|karein|ke)?""",
+    ).map { Regex(it) }
+
     /**
      * Returns the first matching near-deterministic category, or null if
      * none matched. Order (isolation_tactics, otp_readout_request,
-     * card_collection_request) mirrors HIGH_RISK_PATTERNS' dict order in
-     * ml/detector.py; since any single match is already treated as certain,
-     * which one is reported first has no effect on the resulting risk level.
+     * card_collection_request, malware_attachment_delivery) mirrors
+     * HIGH_RISK_PATTERNS' dict order in ml/detector.py; since any single
+     * match is already treated as certain, which one is reported first has
+     * no effect on the resulting risk level.
      */
     fun check(text: String): Match? {
         val lowered = text.lowercase()
@@ -160,6 +200,14 @@ object OfflineRuleEngine {
                 "card_collection_request",
                 "Arranges in-person collection of your card, or asks you to keep the PIN ready",
                 CARD_COLLECTION_EXPLANATION,
+            )
+        }
+        if (MALWARE_ATTACHMENT_PATTERNS.any { it.containsMatchIn(lowered) }) {
+            return Match(
+                "malware_attachment_delivery",
+                "Asks you to forward an attachment (e.g. to a finance/accounts contact) and open it " +
+                    "on a computer, or names a risky file type (.zip/.exe/.docm/etc.)",
+                MALWARE_ATTACHMENT_EXPLANATION,
             )
         }
         return null

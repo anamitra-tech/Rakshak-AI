@@ -6,6 +6,7 @@ import uuid
 from email.message import EmailMessage
 from pathlib import Path
 
+import requests
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
@@ -45,6 +46,73 @@ SESSION = FraudSessionDetector(DETECTOR)
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
 TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+
+# Real gap found 2026-07-12: neither webhook here ever extracted anything
+# about an attached media item (only Body/From, and for /webhook, NumMedia
+# for geo-logging only) — a "Statement of Account6.25.zip ... forward kar
+# dijiye ... computer par open kijiye" message reached the classifier as
+# caption text ALONE, with no way for any pattern (including
+# malware_attachment_delivery, see ml/detector.py) to ever see the risky
+# ".zip" extension unless the sender happened to type it into the caption
+# themselves. Twilio's webhook reliably provides MediaContentType{N} for
+# every attached media item (documented, stable API surface); it does NOT
+# reliably provide the sender's original filename as a plain form field —
+# that requires a live HTTP fetch of MediaUrl{N} and reading a
+# Content-Disposition header, which may or may not be present depending on
+# how the media was relayed. _media_descriptor() below tries that fetch
+# best-effort (short timeout, never raises, degrades to a MIME-derived
+# extension guess on any failure) rather than assuming either the fetch
+# always works or that it's not worth attempting.
+_RISKY_MIME_TO_EXT = {
+    "application/zip": ".zip",
+    "application/x-zip-compressed": ".zip",
+    "application/x-msdownload": ".exe",
+    "application/x-ms-dos-executable": ".exe",
+    "application/x-msdos-program": ".exe",
+    "application/vnd.ms-excel.sheet.macroenabled.12": ".xlsm",
+    "application/vnd.ms-word.document.macroenabled.12": ".docm",
+    "application/javascript": ".js",
+    "text/javascript": ".js",
+    "application/x-javascript": ".js",
+}
+
+
+def _media_descriptor(media_url: str, content_type: str) -> str | None:
+    """Returns a short bracketed string to append to the message text sent
+    to the classifier (e.g. "[Attached file: Statement of Account6.25.zip]"
+    or, if the real filename couldn't be fetched, "[Attached file type:
+    .zip]") — or None if there's no media or nothing informative to add.
+    Never raises; a failed fetch degrades to the MIME-derived guess, never
+    blocks the reply."""
+    if not media_url or not content_type:
+        return None
+
+    filename = None
+    if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+        try:
+            resp = requests.head(
+                media_url, auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+                timeout=5, allow_redirects=True,
+            )
+            disposition = resp.headers.get("Content-Disposition", "")
+            m = re.search(r'filename="?([^";]+)"?', disposition)
+            if m:
+                filename = m.group(1).strip()
+        except Exception as e:
+            logging.info(f"_media_descriptor: filename fetch failed (falling back to MIME type): {e}")
+
+    if filename:
+        return f"[Attached file: {filename}]"
+
+    ext = _RISKY_MIME_TO_EXT.get(content_type.lower())
+    if ext:
+        return f"[Attached file type: {ext}]"
+
+    # Not a recognized risky type and no filename obtained — still note that
+    # *something* was attached, since even that bare fact is more than the
+    # classifier had before, without inventing a filename or extension.
+    return f"[Attachment, type: {content_type}]"
+
 
 _RISK_RANK = {"REAL": 0, "SUSPICIOUS": 1, "FRAUD": 2}
 
@@ -168,13 +236,33 @@ def _build_reply(decision: dict, lang: str) -> str:
 async def whatsapp_webhook(
     Body: str = Form(default=""),
     From: str = Form(default=""),
+    NumMedia: str = Form(default="0"),
+    MediaUrl0: str = Form(default=""),
+    MediaContentType0: str = Form(default=""),
 ):
     session_id = From.replace("whatsapp:", "")
     try:
         text = Body.strip()
-        if not text:
+        media_descriptor = (
+            _media_descriptor(MediaUrl0, MediaContentType0) if NumMedia != "0" else None
+        )
+        # A media-only message (attachment, no caption) used to be dropped
+        # here entirely — classify_text is what actually reaches the
+        # detector, so this only bails out when there's truly nothing at
+        # all to classify, not just no caption.
+        # A space, not a newline: HIGH_RISK_PATTERNS' .{0,N} gap patterns use
+        # plain "." (does not cross a newline by default), so joining with
+        # "\n" here would silently prevent any pattern needing to span the
+        # caption/descriptor boundary from ever matching — confirmed by
+        # testing before choosing a space.
+        classify_text = " ".join(p for p in (text, media_descriptor) if p)
+        if not classify_text:
             return Response(content="", media_type="application/xml")
 
+        # Feedback/language resolution intentionally use the raw caption
+        # (`text`), not classify_text — a media descriptor is never
+        # something the user typed and must never be misread as a feedback
+        # command or a language-detection signal.
         lang = _resolve_language(session_id, text)
 
         # Feedback on the verdict shown for the *previous* message, not a new
@@ -208,13 +296,13 @@ async def whatsapp_webhook(
             logging.info(f"whatsapp session={session_id} | feedback logged | correction={user_correction}")
             return Response(content="", media_type="application/xml")
 
-        text_analysis = analyze_transcript(text, DETECTOR)
-        session_analysis = SESSION.ingest(session_id, text)
+        text_analysis = analyze_transcript(classify_text, DETECTOR)
+        session_analysis = SESSION.ingest(session_id, classify_text)
         decision = _decide(text_analysis, session_analysis)
         reply = _build_reply(decision, lang)
 
         _last_verdict[session_id] = {
-            "original_text": text,
+            "original_text": classify_text,
             "verdict": decision["risk_level"],
             "rule_categories": text_analysis.get("rule_categories", []),
         }
@@ -386,6 +474,8 @@ async def webhook(
     FromCountry: str = Form(default=""),
     FromCity: str = Form(default=""),
     NumMedia: str = Form(default="0"),
+    MediaUrl0: str = Form(default=""),
+    MediaContentType0: str = Form(default=""),
 ):
     # Lazy import: bot.agent pulls in the RAG/embedding stack (BAAI/bge-m3,
     # ~2GB download on first use), which is unrelated to every other route in
@@ -395,11 +485,21 @@ async def webhook(
     from bot.agent import chat, _sessions
 
     try:
-        if not Body.strip():
+        # Same real gap as /whatsapp/webhook (see _media_descriptor's doc
+        # comment): without this, an attachment's filename/extension never
+        # reached chat() -> ScamDetector.predict() either.
+        media_descriptor = (
+            _media_descriptor(MediaUrl0, MediaContentType0) if NumMedia != "0" else None
+        )
+        # Space-joined, not newline-joined — see /whatsapp/webhook's
+        # classify_text for why (HIGH_RISK_PATTERNS' gap patterns don't
+        # cross a "\n" by default).
+        classify_text = " ".join(p for p in (Body.strip(), media_descriptor) if p)
+        if not classify_text:
             reply = "Please send a message."
         else:
             session_id = From.replace("whatsapp:", "")
-            result = chat(session_id, Body.strip())
+            result = chat(session_id, classify_text)
             reply = result["answer"]
 
             # ADDITION 3 — store Twilio geo metadata for graph indexing

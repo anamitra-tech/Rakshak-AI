@@ -1,13 +1,17 @@
 """
 Fails loudly if ml/detector.py's HIGH_RISK_PATTERNS for isolation_tactics /
-otp_readout_request / card_collection_request drift from their Kotlin mirror
-in android/app/src/main/java/com/rakshak/ai/intelligence/OfflineRuleEngine.kt.
+otp_readout_request / card_collection_request / malware_attachment_delivery
+drift from their Kotlin mirror in
+android/app/src/main/java/com/rakshak/ai/intelligence/OfflineRuleEngine.kt.
 
-These three categories are NEAR_DETERMINISTIC_RULES (see ml/detector.py) and
-are the only categories OfflineRuleEngine.kt ports for the Prahari-unreachable
-offline fallback (see its module doc comment). The two files are hand-
-maintained copies with no shared source of truth, so nothing stops them from
-silently diverging except this check.
+The first three are NEAR_DETERMINISTIC_RULES (see ml/detector.py); the
+fourth, malware_attachment_delivery (added 2026-07-12), is an explicit
+exception ported for the same reason — see OfflineRuleEngine.kt's module doc
+comment for why it's treated as deterministic-alone despite not being in
+NEAR_DETERMINISTIC_RULES. These four are the only categories
+OfflineRuleEngine.kt ports for the Prahari-unreachable offline fallback. The
+two files are hand-maintained copies with no shared source of truth, so
+nothing stops them from silently diverging except this check.
 
 Reads Python's pattern lists directly out of the live ml.detector module.
 Reads Kotlin's pattern lists by compiling the real OfflineRuleEngine.kt
@@ -40,11 +44,15 @@ KOTLIN_FILE = os.path.join(
     REPO_ROOT, "android", "app", "src", "main", "java",
     "com", "rakshak", "ai", "intelligence", "OfflineRuleEngine.kt",
 )
-CATEGORIES = ["isolation_tactics", "otp_readout_request", "card_collection_request"]
+CATEGORIES = [
+    "isolation_tactics", "otp_readout_request", "card_collection_request",
+    "malware_attachment_delivery",
+]
 FIELD_NAMES = {
     "isolation_tactics": "ISOLATION_TACTICS_PATTERNS",
     "otp_readout_request": "OTP_READOUT_PATTERNS",
     "card_collection_request": "CARD_COLLECTION_PATTERNS",
+    "malware_attachment_delivery": "MALWARE_ATTACHMENT_PATTERNS",
 }
 
 DUMPER_SOURCE = """
@@ -58,6 +66,7 @@ fun main() {
         "isolation_tactics" to "ISOLATION_TACTICS_PATTERNS",
         "otp_readout_request" to "OTP_READOUT_PATTERNS",
         "card_collection_request" to "CARD_COLLECTION_PATTERNS",
+        "malware_attachment_delivery" to "MALWARE_ATTACHMENT_PATTERNS",
     )
 
     fun jsonEscape(s: String): String {
@@ -282,7 +291,7 @@ def check():
     return False, (
         "PATTERN DRIFT DETECTED between ml/detector.py's HIGH_RISK_PATTERNS "
         "and android/.../OfflineRuleEngine.kt:\n\n" + "\n".join(lines) + "\n\n"
-        "These three categories are near-deterministic-alone rules the offline "
+        "These four categories are near-deterministic-alone rules the offline "
         "fallback relies on being an exact mirror of the online path (see both "
         "files' module docs). Fix the drift before committing."
     )
