@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Only the generated NCRP evidence PDF lives here — nothing else in
+         the app's cache dir is exposed via this provider. -->
+    <cache-path name="ncrp_evidence" path="ncrp_evidence/" />
+</paths>

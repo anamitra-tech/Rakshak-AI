@@ -5,20 +5,28 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.JsResult
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebChromeClient.FileChooserParams
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.rakshak.ai.BuildConfig
 import com.rakshak.ai.R
 import com.rakshak.ai.databinding.ActivityNcrpComplaintBinding
+import com.rakshak.ai.escalation.IncidentSummaryPdf
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -156,8 +164,29 @@ class NcrpComplaintActivity : AppCompatActivity() {
     private lateinit var binding: ActivityNcrpComplaintBinding
     private lateinit var suspectPhone: String
     private lateinit var incidentDescription: String
+    private lateinit var draftText: String
     private var incidentEpochMillis: Long = 0L
     private var ruleCategories: List<String> = emptyList()
+
+    // WebView file-chooser plumbing for the evidence-upload dialog (see
+    // setUpWebView's onShowFileChooser). Only ever set while a chooser is
+    // actually open; cleared the instant a result (or a cancellation) is
+    // delivered, since WebView expects exactly one onReceiveValue call per
+    // onShowFileChooser invocation.
+    private var pendingFileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private val systemFileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val callback = pendingFileChooserCallback
+        pendingFileChooserCallback = null
+        val data = result.data
+        val uris = if (result.resultCode == RESULT_OK && data != null) {
+            WebChromeClient.FileChooserParams.parseResult(result.resultCode, data)
+        } else {
+            null
+        }
+        callback?.onReceiveValue(uris)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -169,7 +198,7 @@ class NcrpComplaintActivity : AppCompatActivity() {
         ruleCategories = intent.getStringArrayListExtra(EXTRA_RULE_CATEGORIES).orEmpty()
         incidentDescription = intent.getStringExtra(EXTRA_DESCRIPTION).orEmpty()
         incidentEpochMillis = intent.getLongExtra(EXTRA_INCIDENT_EPOCH_MILLIS, System.currentTimeMillis())
-        val draftText = intent.getStringExtra(EXTRA_DRAFT_TEXT).orEmpty()
+        draftText = intent.getStringExtra(EXTRA_DRAFT_TEXT).orEmpty()
 
         binding.summaryText.text = draftText
         binding.summaryToggle.setOnClickListener {
@@ -196,6 +225,12 @@ class NcrpComplaintActivity : AppCompatActivity() {
         // either way — this app does not read anything the site stores).
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
+        // Debug-build-only: lets chrome://inspect attach to this WebView for
+        // direct DOM/script inspection during development. Never enabled in a
+        // release build — this is a real remote-debugging surface.
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
         webView.addJavascriptInterface(FillResultBridge(), JS_BRIDGE_NAME)
         // Surfaces the page's own console.log/warn/error into adb logcat under
         // this activity's tag — diagnostic only, never used to read page
@@ -204,6 +239,77 @@ class NcrpComplaintActivity : AppCompatActivity() {
             override fun onConsoleMessage(message: ConsoleMessage): Boolean {
                 Log.i(TAG, "ncrp_console [${message.messageLevel()}] ${message.message()} " +
                     "(${message.sourceId()}:${message.lineNumber()})")
+                return true
+            }
+
+            // Without this override, the page's own window.alert() calls
+            // (e.g. NCRP's own "please provide at least one supporting
+            // evidence" check) are silently swallowed by WebView — no
+            // dialog, no indication anything happened. Surfacing the site's
+            // own message here is the fix, not working around the check.
+            override fun onJsAlert(
+                view: WebView,
+                url: String?,
+                message: String?,
+                result: JsResult,
+            ): Boolean {
+                AlertDialog.Builder(this@NcrpComplaintActivity)
+                    .setMessage(message)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
+                    .setOnCancelListener { result.cancel() }
+                    .show()
+                return true
+            }
+
+            // Only ever invoked by WebView itself, in response to the user's
+            // own tap on NCRP's real evidence file-input control — nothing
+            // here triggers this callback. Offers the app-generated incident
+            // summary PDF as one option alongside the normal system file
+            // picker; the user chooses, nothing is substituted silently.
+            override fun onShowFileChooser(
+                webView: WebView,
+                filePathCallback: ValueCallback<Array<Uri>>,
+                fileChooserParams: FileChooserParams,
+            ): Boolean {
+                // Diagnostic logging — confirms whether WebView invokes this
+                // callback at all versus something failing silently inside
+                // it (a WebChromeClient callback throwing does not always
+                // surface as a visible crash).
+                Log.i(TAG, "ncrp_file_chooser_invoked")
+                try {
+                    // WebView expects exactly one onReceiveValue call per
+                    // onShowFileChooser — cancel any previous, still-open
+                    // chooser before starting a new one.
+                    pendingFileChooserCallback?.onReceiveValue(null)
+                    pendingFileChooserCallback = filePathCallback
+
+                    AlertDialog.Builder(this@NcrpComplaintActivity)
+                        .setTitle(R.string.ncrp_evidence_chooser_title)
+                        .setItems(
+                            arrayOf(
+                                getString(R.string.ncrp_evidence_chooser_generated_option),
+                                getString(R.string.ncrp_evidence_chooser_browse_option),
+                            ),
+                        ) { _, which ->
+                            Log.i(TAG, "ncrp_file_chooser_option_selected which=$which")
+                            if (which == 0) {
+                                deliverGeneratedEvidencePdf()
+                            } else {
+                                systemFileChooserLauncher.launch(fileChooserParams.createIntent())
+                            }
+                        }
+                        .setOnCancelListener {
+                            Log.i(TAG, "ncrp_file_chooser_dialog_cancelled")
+                            pendingFileChooserCallback?.onReceiveValue(null)
+                            pendingFileChooserCallback = null
+                        }
+                        .show()
+                    Log.i(TAG, "ncrp_file_chooser_dialog_shown")
+                } catch (e: Exception) {
+                    Log.e(TAG, "ncrp_file_chooser_error", e)
+                    pendingFileChooserCallback = null
+                    filePathCallback.onReceiveValue(null)
+                }
                 return true
             }
         }
@@ -274,6 +380,32 @@ class NcrpComplaintActivity : AppCompatActivity() {
             // a couple seconds would mean the engine itself never ran the
             // script at all (not observed in testing, but handled).
             Log.i(TAG, "ncrp_autofill_eval_returned $returnValue")
+        }
+    }
+
+    /**
+     * Generates [IncidentSummaryPdf] from the same [draftText] already shown
+     * in the summary panel and sent in the Tier 2 SMS, and delivers it as
+     * the file-chooser result. Only ever called from the evidence-chooser
+     * dialog in [setUpWebView] — i.e. only after the user has both tapped
+     * NCRP's own upload control and explicitly picked this option over
+     * browsing for their own file.
+     */
+    private fun deliverGeneratedEvidencePdf() {
+        val callback = pendingFileChooserCallback
+        pendingFileChooserCallback = null
+        if (callback == null) return
+        try {
+            val uri = IncidentSummaryPdf.generate(
+                context = this,
+                title = getString(R.string.ncrp_evidence_pdf_title),
+                bodyText = draftText,
+            )
+            callback.onReceiveValue(arrayOf(uri))
+        } catch (e: Exception) {
+            Log.e(TAG, "ncrp_evidence_pdf_generation_failed", e)
+            Toast.makeText(this, R.string.ncrp_evidence_pdf_error, Toast.LENGTH_LONG).show()
+            callback.onReceiveValue(null)
         }
     }
 

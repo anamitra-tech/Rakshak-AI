@@ -159,6 +159,24 @@
             android:name=".escalation.SmsDeliveryReceiver"
             android:exported="false" />
 
+        <!--
+          Exposes only the app-generated NCRP evidence PDF (see
+          IncidentSummaryPdf) as a content:// Uri, so it can be offered as a
+          file-chooser option inside NcrpComplaintActivity's WebView without
+          a raw file:// path (blocked by FileUriExposedException on modern
+          Android). Nothing else in the app's storage is reachable through
+          this provider — see res/xml/file_paths.xml.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>
