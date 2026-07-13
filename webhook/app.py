@@ -216,6 +216,20 @@ def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
     (confirmed via the exact error: `Error opening data file "...tessdata"
     /ben.traineddata`, quotes and all). TESSDATA_PREFIX has no such
     quoting/tokenizing step.
+
+    Tries a cascade of --psm (page segmentation mode) values, not just the
+    library default (psm 3, fully-automatic layout analysis). Real bug this
+    fixed: psm 3 found zero text blocks at all for a real Bengali test image
+    (confirmed empty output, not a confidence/accuracy issue -- `tsv` output
+    showed no block/line/word entries whatsoever, i.e. layout analysis
+    itself failed to segment the image), even though the same traineddata
+    file (verified byte-identical to the upstream tessdata_fast release --
+    not a bad/truncated download) correctly recognized the same text under
+    psm 6 (uniform block) and psm 13 (raw line, no layout analysis at all).
+    English/Tamil test images did not hit this with the plain default, but
+    nothing rules out other scripts/layouts (e.g. a tightly-cropped
+    single-line screenshot) hitting the same segmentation gap -- so every
+    lang goes through the same cascade rather than special-casing Bengali.
     """
     import pytesseract
     from PIL import Image
@@ -229,9 +243,11 @@ def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
             pytesseract.pytesseract.tesseract_cmd = _TESSERACT_WINDOWS_CMD
         os.environ["TESSDATA_PREFIX"] = _TESSDATA_DIR
         pil_image = Image.open(_io.BytesIO(image_bytes)).convert("RGB")
-        text = pytesseract.image_to_string(pil_image, lang=lang)
-        text = text.strip()
-        return text or None
+        for psm in (3, 6, 11, 13):
+            text = pytesseract.image_to_string(pil_image, lang=lang, config=f"--psm {psm}").strip()
+            if text:
+                return text
+        return None
     except Exception as e:
         logging.error(f"_run_tesseract_ocr failed lang={lang}: {e}")
         return None
