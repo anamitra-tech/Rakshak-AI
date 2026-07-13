@@ -1,7 +1,23 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// SARVAM_API_KEY already exists server-side in the repo root .env for the
+// Python webhook, but Android builds don't read .env -- this is a separate,
+// per-machine copy in local.properties (gitignored, never committed), same
+// posture as sdk.dir. (Google Cloud Vision was considered for the OCR cloud
+// fallback and rejected -- needs a billing account, unavailable for this
+// project -- so there's no equivalent key here for that; see
+// ocr/CloudOcrClient.kt, which calls Prahari's own self-hosted Tesseract
+// endpoint instead.)
+val localProperties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val sarvamApiKey: String = localProperties.getProperty("SARVAM_API_KEY", "")
 
 android {
     namespace = "com.rakshak.ai"
@@ -13,6 +29,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0-phase1"
+        buildConfigField("String", "SARVAM_API_KEY", "\"$sarvamApiKey\"")
     }
 
     buildTypes {
@@ -57,7 +74,14 @@ dependencies {
     // text ever leaves the device for this.
     implementation("com.google.mlkit:language-id:17.0.6")
     // On-device OCR for the "Upload screenshot" option on the "Check a
-    // call/message" screen (see ocr/ScreenshotOcrHelper.kt) -- Latin script
-    // only, same bundled-model/no-network posture as language-id above.
+    // call/message" screen (see ocr/ScreenshotOcrHelper.kt) -- Latin script,
+    // same bundled-model/no-network posture as language-id above.
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    // Devanagari-script OCR (Hindi, Marathi) -- ML Kit v2 ships script
+    // recognizers as separate artifacts; this is NOT covered by the Latin
+    // artifact above. Still no coverage for Bengali/Tamil/Telugu/Kannada/
+    // Malayalam/Gujarati/Punjabi/Odia/Urdu scripts -- ML Kit has no artifact
+    // for any of those at all (only Latin/Chinese/Devanagari/Japanese/Korean
+    // exist), see ocr/CloudOcrClient.kt for the online fallback.
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
 }

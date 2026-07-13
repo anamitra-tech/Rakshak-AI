@@ -30,3 +30,12 @@ pdfplumber>=0.11
 # job path when audio exceeds the sync endpoint's 30s limit).
 easyocr>=1.7
 sarvamai>=0.1
+
+# Android app's /ocr/tesseract endpoint (webhook/app.py) — self-hosted OCR
+# fallback for the 9 scripts ML Kit has no on-device recognizer for
+# (Bengali/Tamil/Telugu/Kannada/Malayalam/Gujarati/Punjabi/Odia/Urdu).
+# Google Cloud Vision was ruled out (needs a billing account, unavailable
+# for this project). Requires the Tesseract 5 binary installed separately
+# (not pip-installable) plus tessdata/ language packs — see tessdata/.gitignore.
+pytesseract>=0.3.10
+Pillow>=10.0

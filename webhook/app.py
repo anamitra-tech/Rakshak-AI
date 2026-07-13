@@ -8,7 +8,7 @@ from email.message import EmailMessage
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, File, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from twilio.rest import Client as TwilioRestClient
@@ -188,6 +188,53 @@ def _get_ocr_reader():
         logging.info("Initializing EasyOCR reader (first use — downloads models if not cached)...")
         _ocr_reader = easyocr.Reader(["en"], gpu=False)
     return _ocr_reader
+
+
+_TESSDATA_DIR = os.path.join(_ROOT, "tessdata")
+_TESSERACT_SUPPORTED_LANGS = {"ben", "tam", "tel", "kan", "mal", "guj", "pan", "ori", "urd", "eng"}
+# Windows install location from `winget install UB-Mannheim.TesseractOCR` --
+# not on PATH by default. Left alone (pytesseract's own PATH lookup) on
+# Linux/prod where tesseract is installed via the system package manager.
+_TESSERACT_WINDOWS_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+
+def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
+    """Self-hosted OCR for the Android app's cloud-OCR fallback
+    (ocr/CloudOcrClient.kt) — the 9 scripts ML Kit has no on-device
+    recognizer for (Bengali/Tamil/Telugu/Kannada/Malayalam/Gujarati/Punjabi/
+    Odia/Urdu). Google Cloud Vision was ruled out: it needs a billing
+    account, unavailable for this project (same constraint that blocked the
+    Meta WhatsApp Business API path earlier) — Tesseract 5 is free and
+    self-hosted instead. tessdata/ is a project-local directory (not the
+    system Program Files\\Tesseract-OCR\\tessdata one — no admin rights to
+    write there when this was set up).
+
+    Set via the TESSDATA_PREFIX env var, not a quoted `--tessdata-dir "..."`
+    config string — real bug hit while wiring this up: pytesseract passes
+    the config string through mostly unsplit, so the literal quote
+    characters ended up as part of the path tesseract tried to open
+    (confirmed via the exact error: `Error opening data file "...tessdata"
+    /ben.traineddata`, quotes and all). TESSDATA_PREFIX has no such
+    quoting/tokenizing step.
+    """
+    import pytesseract
+    from PIL import Image
+    import io as _io
+
+    if lang not in _TESSERACT_SUPPORTED_LANGS:
+        logging.error(f"_run_tesseract_ocr: unsupported lang {lang!r}")
+        return None
+    try:
+        if os.name == "nt" and os.path.exists(_TESSERACT_WINDOWS_CMD):
+            pytesseract.pytesseract.tesseract_cmd = _TESSERACT_WINDOWS_CMD
+        os.environ["TESSDATA_PREFIX"] = _TESSDATA_DIR
+        pil_image = Image.open(_io.BytesIO(image_bytes)).convert("RGB")
+        text = pytesseract.image_to_string(pil_image, lang=lang)
+        text = text.strip()
+        return text or None
+    except Exception as e:
+        logging.error(f"_run_tesseract_ocr failed lang={lang}: {e}")
+        return None
 
 
 def _download_media(media_url: str) -> bytes | None:
@@ -865,6 +912,39 @@ async def webhook(
 @app.get("/health")
 async def health():
     return {"status": "ok", "cards": 75}
+
+
+@app.post("/stt/sarvam")
+async def stt_sarvam(file: UploadFile = File(...)):
+    """Called by the Android app's SarvamApiClient.transcribeAndTranslate —
+    proxies through _transcribe_audio_sarvam (this file's own, already
+    battle-tested WhatsApp media-handling code) rather than having the
+    Android client call api.sarvam.ai directly. Real bug this fixed: the
+    Android client's own direct-to-Sarvam call had a hard client-side ~25s
+    recording cap and no fallback, so anything longer than the sync
+    endpoint's 30s limit just failed outright — this endpoint reuses the
+    sync-then-async-batch fallback (see _transcribe_audio_sarvam's own doc
+    comment) that already handles audio up to 2 hours, proven working
+    against real WhatsApp voice notes."""
+    audio_bytes = await file.read()
+    content_type = file.content_type or "audio/mp4"
+    transcript = _transcribe_audio_sarvam(audio_bytes, content_type)
+    if transcript is None:
+        return {"transcript": "", "found": False}
+    return {"transcript": transcript, "found": True}
+
+
+@app.post("/ocr/tesseract")
+async def ocr_tesseract(file: UploadFile = File(...), lang: str = Form(...)):
+    """Called by the Android app's ocr/CloudOcrClient.kt — online-only OCR
+    for the 9 scripts ML Kit's on-device recognizer doesn't cover. [lang]
+    is a 3-letter Tesseract code (ben/tam/tel/kan/mal/guj/pan/ori/urd),
+    mapped client-side from the app's spoken-language tag."""
+    image_bytes = await file.read()
+    text = _run_tesseract_ocr(image_bytes, lang)
+    if text is None:
+        return {"text": "", "found": False}
+    return {"text": text, "found": True}
 
 @app.get("/graph")
 async def graph_endpoint():

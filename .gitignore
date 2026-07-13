@@ -60,6 +60,11 @@ venv.bak/
 .env.*
 !.env.example
 
+# Tesseract language packs for /ocr/tesseract (webhook/app.py) — large
+# binary downloads, not source; each dev machine fetches its own via the
+# same winget/tessdata_fast download used to set this up.
+/tessdata/
+
 # IDEs
 .vscode/
 .idea/

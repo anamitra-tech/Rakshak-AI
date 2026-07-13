@@ -23,7 +23,11 @@ import com.rakshak.ai.intelligence.PrahariUnavailableException
 import com.rakshak.ai.intelligence.RiskLevel
 import com.rakshak.ai.intelligence.hasActiveNetworkConnection
 import com.rakshak.ai.intelligence.normalizePhoneNumber
+import com.rakshak.ai.ocr.CloudOcrClient
 import com.rakshak.ai.ocr.ScreenshotOcrHelper
+import com.rakshak.ai.sarvam.SarvamApiClient
+import com.rakshak.ai.sarvam.SarvamUnavailableException
+import com.rakshak.ai.stt.SarvamVoiceRecorder
 import com.rakshak.ai.stt.VoiceInputHelper
 import kotlinx.coroutines.launch
 
@@ -45,14 +49,32 @@ class CheckCallActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityCheckCallBinding
     private lateinit var voiceInput: VoiceInputHelper
+    private lateinit var sarvamRecorder: SarvamVoiceRecorder
     private lateinit var loadingOverlay: LoadingOverlay
     private var isListening = false
+
+    /** True once native on-device recognition has been ruled out (device
+     *  incapable, or a language/device error mid-session) and Sarvam's
+     *  online STT is being used instead — see [setUpVoiceInputButton] and
+     *  [VoiceInputHelper.Callback.onLanguageOrDeviceUnavailable] below. */
+    private var usingSarvamVoice = false
+
+    /**
+     * Language of whatever currently populates [ActivityCheckCallBinding.transcriptInput],
+     * for the Sarvam translate-to-English bridge in [runAnalysis] — Prahari's
+     * classifier training data doesn't cover Indic vocabulary outside
+     * English/Hindi (CLAUDE.md Section 6). Null means "assume compatible,
+     * don't translate" (typed/pasted input, or Sarvam-STT text that's
+     * already English via mode=translate). Set explicitly whenever OCR
+     * (on-device or cloud) fills the field with text in a specific script.
+     */
+    private var transcriptSourceLanguageTag: String? = null
 
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            startVoiceInput()
+            if (usingSarvamVoice) startSarvamRecording() else startVoiceInput()
         } else {
             showVoiceStatus(getString(R.string.check_call_voice_permission_denied))
         }
@@ -74,6 +96,7 @@ class CheckCallActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         voiceInput = VoiceInputHelper(this)
+        sarvamRecorder = SarvamVoiceRecorder(this)
         setUpVoiceInputButton()
         binding.screenshotUploadButton.setOnClickListener {
             screenshotPickerLauncher.launch("image/*")
@@ -89,25 +112,50 @@ class CheckCallActivity : AppCompatActivity() {
         binding.analyzeButton.setOnClickListener { runAnalysis() }
     }
 
-    /** Hides the mic option entirely on devices/OS versions that can't do
-     *  genuinely on-device recognition — typed input remains the only path,
-     *  never a crash, never a silent cloud fallback. See VoiceInputHelper.
-     *  Leaves a one-line explanation behind rather than just disappearing —
-     *  a mic button that's simply absent, with no message, reads as a bug
-     *  to a user who expected it, not a deliberate device/OS limitation. */
+    /**
+     * On-device recognition is tried first (free, no network, no audio ever
+     * leaves the device). If the device can't do on-device recognition at
+     * all, or a language/device error surfaces mid-session (see
+     * [onLanguageOrDeviceUnavailable] below), this switches to Sarvam's
+     * online STT ([usingSarvamVoice]) rather than just hiding the mic —
+     * only when online and [SarvamApiClient.isConfigured]. Only when neither
+     * path is available does the mic option disappear, with a one-line
+     * explanation left behind rather than just vanishing (a mic button
+     * that's simply absent, with no message, reads as a bug to a user who
+     * expected it, not a deliberate device/OS/connectivity limitation).
+     */
     private fun setUpVoiceInputButton() {
-        if (!voiceInput.isDeviceCapable()) {
+        if (!voiceInput.isDeviceCapable() && !SarvamApiClient.isConfigured()) {
             binding.voiceInputButton.visibility = View.GONE
             showVoiceStatus(getString(R.string.check_call_voice_unsupported_device))
             return
         }
+        if (!voiceInput.isDeviceCapable()) {
+            // Sarvam-only from the start (device incapable of on-device
+            // recognition at all) -- usingSarvamVoice is set up front here,
+            // same as the mid-session switch in onLanguageOrDeviceUnavailable
+            // below, so the single click listener below stays correct either way.
+            usingSarvamVoice = true
+            showVoiceStatus(getString(R.string.check_call_voice_sarvam_only_device))
+        }
+        // One listener, checking current mode at tap time -- NOT two
+        // separate closures bound once at setup. Real bug this replaced: a
+        // native-recognition attempt that fails mid-session flips
+        // usingSarvamVoice to true from inside onLanguageOrDeviceUnavailable,
+        // but the click listener registered here at onCreate time never got
+        // reassigned, so tapping "stop" still called voiceInput.stopListening()
+        // (a no-op on an already-dead recognizer) instead of
+        // stopSarvamRecordingAndUpload() -- the Sarvam recording ran to its
+        // full MAX_DURATION_MS cap every time instead of stopping on tap.
         binding.voiceInputButton.setOnClickListener {
-            if (isListening) {
-                voiceInput.stopListening()
-                isListening = false
-                binding.voiceInputButton.text = getString(R.string.check_call_voice_button)
-            } else {
-                requestMicAndStart()
+            when {
+                isListening && usingSarvamVoice -> stopSarvamRecordingAndUpload()
+                isListening -> {
+                    voiceInput.stopListening()
+                    isListening = false
+                    binding.voiceInputButton.text = getString(R.string.check_call_voice_button)
+                }
+                else -> requestMicAndStart()
             }
         }
     }
@@ -116,7 +164,7 @@ class CheckCallActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {
-            startVoiceInput()
+            if (usingSarvamVoice) startSarvamRecording() else startVoiceInput()
         } else {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -141,6 +189,10 @@ class CheckCallActivity : AppCompatActivity() {
             override fun onFinalResult(text: String) {
                 binding.transcriptInput.setText(text)
                 binding.transcriptInput.setSelection(text.length)
+                // Native recognizer echoes back text in whatever language it
+                // was asked to listen for -- same translate-before-Prahari
+                // rule as OCR applies here too (see runAnalysis).
+                transcriptSourceLanguageTag = app.settings.spokenLanguageTag
                 isListening = false
                 binding.voiceInputButton.text = getString(R.string.check_call_voice_button)
             }
@@ -153,13 +205,70 @@ class CheckCallActivity : AppCompatActivity() {
 
             override fun onLanguageOrDeviceUnavailable(message: String) {
                 isListening = false
-                // Don't invite a retry loop against a language/device gap
-                // that won't resolve itself — hide the option and let typed
-                // input carry the rest of this session.
-                binding.voiceInputButton.visibility = View.GONE
-                showVoiceStatus(message)
+                if (SarvamApiClient.isConfigured() && hasActiveNetworkConnection(this@CheckCallActivity)) {
+                    Log.i(TAG, "voice_input_switching_to_sarvam_fallback")
+                    usingSarvamVoice = true
+                    showVoiceStatus(getString(R.string.check_call_voice_sarvam_fallback_notice))
+                    startSarvamRecording()
+                } else {
+                    // No online fallback possible -- don't invite a retry
+                    // loop against a gap that won't resolve itself this
+                    // session; hide the option and let typed input carry
+                    // the rest of this session.
+                    binding.voiceInputButton.visibility = View.GONE
+                    showVoiceStatus(message)
+                }
             }
         })
+    }
+
+    /** Starts recording for [SarvamApiClient] upload (see [SarvamVoiceRecorder]) --
+     *  only reached once RECORD_AUDIO is already granted, either directly
+     *  (device incapable of on-device recognition) or after native
+     *  recognition itself failed mid-session. */
+    private fun startSarvamRecording() {
+        binding.voiceStatusText.visibility = View.GONE
+        val started = sarvamRecorder.startRecording(object : SarvamVoiceRecorder.Callback {
+            override fun onMaxDurationReached() {
+                Log.i(TAG, "sarvam_recording_max_duration_reached")
+                stopSarvamRecordingAndUpload()
+            }
+        })
+        if (!started) {
+            showVoiceStatus(getString(R.string.check_call_voice_start_failed))
+            return
+        }
+        isListening = true
+        binding.voiceInputButton.text = getString(R.string.check_call_voice_listening)
+    }
+
+    private fun stopSarvamRecordingAndUpload() {
+        isListening = false
+        binding.voiceInputButton.text = getString(R.string.check_call_voice_button)
+        val file = sarvamRecorder.stopRecording()
+        if (file == null) {
+            showVoiceStatus(getString(R.string.check_call_voice_no_match))
+            return
+        }
+        val app = application as RakshakApp
+        showVoiceStatus(getString(R.string.check_call_voice_sarvam_uploading))
+        lifecycleScope.launch {
+            try {
+                val transcript = SarvamApiClient.transcribeAndTranslate(file, app.settings.evidenceBaseUrl)
+                binding.transcriptInput.setText(transcript)
+                binding.transcriptInput.setSelection(transcript.length)
+                // mode=translate already returns English -- no further
+                // translation needed before this reaches Prahari.
+                transcriptSourceLanguageTag = "en-IN"
+                binding.voiceStatusText.visibility = View.GONE
+                Log.i(TAG, "sarvam_stt_success")
+            } catch (e: SarvamUnavailableException) {
+                Log.i(TAG, "sarvam_stt_failed msg=${e.message}")
+                showVoiceStatus(getString(R.string.check_call_voice_sarvam_failed))
+            } finally {
+                file.delete()
+            }
+        }
     }
 
     private fun showVoiceStatus(message: String) {
@@ -174,17 +283,45 @@ class CheckCallActivity : AppCompatActivity() {
      * before the user taps Check. Also saves the original image into the
      * shared evidence folder ([ScreenshotEvidenceStore]) regardless of
      * whether OCR found readable text, since the image itself may still be
-     * usable evidence on NCRP's form even if this app's on-device OCR
-     * (Latin script only — see [ScreenshotOcrHelper]) couldn't read it.
+     * usable evidence on NCRP's form even if no OCR path here could read it.
+     *
+     * Script routing: [ScreenshotOcrHelper.scriptFamilyFor] maps the app's
+     * configured spoken language to Latin/Devanagari (on-device, free, no
+     * network) or NONE (Bengali/Tamil/Telugu/Kannada/Malayalam/Gujarati/
+     * Punjabi/Odia/Urdu — ML Kit has no recognizer for these scripts at
+     * all). NONE routes to [CloudOcrClient] only when online; offline it
+     * shows the honest "needs internet" message rather than silently
+     * failing or guessing at Latin/Devanagari text that isn't there.
      */
     private fun handlePickedScreenshot(uri: Uri) {
         ScreenshotEvidenceStore.save(this, uri)
 
+        val app = application as RakshakApp
+        val preferredScript = ScreenshotOcrHelper.scriptFamilyFor(app.settings.spokenLanguageTag)
+
         showScreenshotStatus(getString(R.string.check_call_screenshot_processing))
-        ScreenshotOcrHelper.recognizeText(this, uri, object : ScreenshotOcrHelper.Callback {
-            override fun onSuccess(text: String) {
+        ScreenshotOcrHelper.recognizeText(this, uri, preferredScript, object : ScreenshotOcrHelper.Callback {
+            override fun onSuccess(text: String, matchedScript: ScreenshotOcrHelper.ScriptFamily) {
                 binding.transcriptInput.setText(text)
                 binding.transcriptInput.setSelection(text.length)
+                // Which recognizer actually matched decides the source
+                // language for runAnalysis's translate-before-Prahari bridge
+                // -- NOT necessarily preferredScript (see recognizeText's
+                // doc comment: a Latin-language-configured phone can still
+                // successfully OCR a forwarded Devanagari screenshot, and
+                // vice versa). Devanagari is ambiguous between Hindi and
+                // Marathi (ML Kit's recognizer doesn't distinguish); the
+                // app's own configured language disambiguates when it's
+                // one of the two, else defaults to Hindi (the more common
+                // case, and the one CLAUDE.md already documents as at least
+                // partially classifier-covered) -- a known, accepted
+                // approximation, not a guarantee.
+                transcriptSourceLanguageTag = when (matchedScript) {
+                    ScreenshotOcrHelper.ScriptFamily.LATIN -> "en-IN"
+                    ScreenshotOcrHelper.ScriptFamily.DEVANAGARI ->
+                        if (app.settings.spokenLanguageTag.startsWith("mr", ignoreCase = true)) "mr-IN" else "hi-IN"
+                    ScreenshotOcrHelper.ScriptFamily.NONE -> null // unreachable here
+                }
                 showScreenshotStatus(getString(R.string.check_call_screenshot_success))
             }
 
@@ -194,6 +331,43 @@ class CheckCallActivity : AppCompatActivity() {
 
             override fun onFailure(message: String) {
                 showScreenshotStatus(getString(R.string.check_call_screenshot_failed, message))
+            }
+
+            override fun onScriptNotSupportedOnDevice() {
+                if (!hasActiveNetworkConnection(this@CheckCallActivity)) {
+                    Log.i(TAG, "ocr_script_unsupported_offline")
+                    showScreenshotStatus(getString(R.string.check_call_screenshot_needs_internet))
+                    return
+                }
+                Log.i(TAG, "ocr_cloud_fallback_start")
+                showScreenshotStatus(getString(R.string.check_call_screenshot_cloud_processing))
+                CloudOcrClient.recognizeText(
+                    this@CheckCallActivity,
+                    uri,
+                    app.settings.evidenceBaseUrl,
+                    app.settings.spokenLanguageTag,
+                    object : CloudOcrClient.Callback {
+                        override fun onSuccess(text: String) {
+                            Log.i(TAG, "ocr_cloud_fallback_success")
+                            binding.transcriptInput.setText(text)
+                            binding.transcriptInput.setSelection(text.length)
+                            // Unambiguous here: cloud OCR was only ever reached
+                            // because preferredScript (the app's configured
+                            // language) has no on-device recognizer.
+                            transcriptSourceLanguageTag = app.settings.spokenLanguageTag
+                            showScreenshotStatus(getString(R.string.check_call_screenshot_success))
+                        }
+
+                        override fun onNoTextFound() {
+                            showScreenshotStatus(getString(R.string.check_call_screenshot_no_text_found))
+                        }
+
+                        override fun onFailure(message: String) {
+                            Log.i(TAG, "ocr_cloud_fallback_failed msg=$message")
+                            showScreenshotStatus(getString(R.string.check_call_screenshot_cloud_failed, message))
+                        }
+                    },
+                )
             }
         })
     }
@@ -205,6 +379,7 @@ class CheckCallActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         voiceInput.stopListening()
+        sarvamRecorder.stopAndDiscard()
         super.onDestroy()
     }
 
@@ -245,8 +420,35 @@ class CheckCallActivity : AppCompatActivity() {
                     Log.i(TAG, "analysis_no_network_detected elapsed_ms=${SystemClock.elapsedRealtime() - startMs}")
                     throw PrahariUnavailableException("No active network connection")
                 }
-                val textAnalysis = app.prahariApiClient.analyzeVoice(transcript)
-                val sessionAnalysis = app.prahariApiClient.analyzeSession(sessionId, transcript)
+                // Prahari's classifier training data doesn't cover Indic
+                // vocabulary outside English/Hindi (CLAUDE.md Section 6) --
+                // anything OCR/voice-sourced in a different script gets
+                // translated to English first via Sarvam. Typed/pasted text
+                // (transcriptSourceLanguageTag == null) is sent as-is: the
+                // user is responsible for what they type, same as before
+                // this bridge existed. A translation failure here degrades
+                // to analyzing the untranslated text rather than blocking
+                // the whole check -- worse classifier accuracy on that one
+                // check, not a broken flow.
+                var textForAnalysis = transcript
+                val sourceTag = transcriptSourceLanguageTag
+                if (sourceTag != null &&
+                    !sourceTag.startsWith("en", ignoreCase = true) &&
+                    !sourceTag.startsWith("hi", ignoreCase = true)
+                ) {
+                    if (SarvamApiClient.isConfigured()) {
+                        try {
+                            textForAnalysis = SarvamApiClient.translateToEnglish(transcript, sourceTag)
+                            Log.i(TAG, "translate_to_english_success source=$sourceTag")
+                        } catch (e: SarvamUnavailableException) {
+                            Log.i(TAG, "translate_to_english_failed source=$sourceTag msg=${e.message}")
+                        }
+                    } else {
+                        Log.i(TAG, "translate_to_english_skipped_not_configured source=$sourceTag")
+                    }
+                }
+                val textAnalysis = app.prahariApiClient.analyzeVoice(textForAnalysis)
+                val sessionAnalysis = app.prahariApiClient.analyzeSession(sessionId, textForAnalysis)
                 val lookup = app.callerLookupSource.lookup(phoneNumber)
                 val isTrustedContact = phoneNumber.isNotBlank() &&
                     app.settings.trustedContactPhone.isNotBlank() &&

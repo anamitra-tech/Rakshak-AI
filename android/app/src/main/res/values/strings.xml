@@ -49,11 +49,18 @@
     <string name="check_call_voice_recognizer_unset">On-device voice recognition isn\'t set up on this device. Please type instead.</string>
     <string name="check_call_voice_generic_error">Voice input isn\'t available right now. Please type instead.</string>
     <string name="check_call_voice_start_failed">Voice input could not be started. Please try again or type instead.</string>
+    <string name="check_call_voice_sarvam_only_device">Offline voice recognition isn\'t available on this device — voice input needs an internet connection here.</string>
+    <string name="check_call_voice_sarvam_fallback_notice">Offline voice recognition doesn\'t support this language on this device — trying online instead…</string>
+    <string name="check_call_voice_sarvam_uploading">Sending your voice to be understood online…</string>
+    <string name="check_call_voice_sarvam_failed">Couldn\'t understand that online. Please try again or type instead.</string>
     <string name="check_call_screenshot_button">🖼️ Upload a screenshot instead</string>
     <string name="check_call_screenshot_processing">Reading text from the screenshot…</string>
     <string name="check_call_screenshot_no_text_found">Couldn\'t find any readable text in that image. Please type or paste the message instead.</string>
     <string name="check_call_screenshot_failed">Couldn\'t read that image (%1$s). Please type or paste the message instead.</string>
     <string name="check_call_screenshot_success">Text extracted from the screenshot — review it below before checking.</string>
+    <string name="check_call_screenshot_cloud_processing">This language needs an internet connection to read — trying online…</string>
+    <string name="check_call_screenshot_needs_internet">Text extraction for this language needs an internet connection. Please connect and try again, or type/paste the message instead.</string>
+    <string name="check_call_screenshot_cloud_failed">Couldn\'t read that image online (%1$s). Please type or paste the message instead.</string>
 
     <string name="warning_notification_title">AbhayAI warning</string>
     <string name="warning_channel_name">Call warnings</string>
