@@ -26,6 +26,7 @@ import com.rakshak.ai.intelligence.normalizePhoneNumber
 import com.rakshak.ai.ocr.CloudOcrClient
 import com.rakshak.ai.ocr.ScreenshotOcrHelper
 import com.rakshak.ai.sarvam.SarvamApiClient
+import com.rakshak.ai.sarvam.SarvamLanguageCodes
 import com.rakshak.ai.sarvam.SarvamUnavailableException
 import com.rakshak.ai.stt.SarvamVoiceRecorder
 import com.rakshak.ai.stt.VoiceInputHelper
@@ -420,25 +421,51 @@ class CheckCallActivity : AppCompatActivity() {
                     Log.i(TAG, "analysis_no_network_detected elapsed_ms=${SystemClock.elapsedRealtime() - startMs}")
                     throw PrahariUnavailableException("No active network connection")
                 }
-                // Prahari's classifier training data doesn't cover Indic
-                // vocabulary outside English/Hindi (CLAUDE.md Section 6) --
-                // anything OCR/voice-sourced in a different script gets
-                // translated to English first via Sarvam. Typed/pasted text
-                // (transcriptSourceLanguageTag == null) is sent as-is: the
-                // user is responsible for what they type, same as before
-                // this bridge existed. A translation failure here degrades
-                // to analyzing the untranslated text rather than blocking
-                // the whole check -- worse classifier accuracy on that one
-                // check, not a broken flow.
+                // Real bug fixed here: this used to also skip translation for
+                // sourceTag == "hi-IN", on the mistaken assumption that
+                // "Prahari's classifier covers Hindi" meant *any* Hindi input
+                // was already usable. It doesn't -- ml.detector's patterns
+                // (CLAUDE.md Section 6.2's second documented gap) are
+                // Latin-script Hinglish only, zero native-script examples for
+                // any of the 12 target languages, not just Devanagari. Since
+                // Devanagari-matched OCR/native-recognizer text is tagged
+                // "hi-IN" (see onSuccess's matchedScript handling above), that
+                // old check sent genuine Devanagari Hindi straight to the
+                // classifier unmodified -- it never matched any pattern,
+                // Latin or otherwise. Only "en-IN" (already English, from a
+                // Latin OCR match or Sarvam STT's mode=translate output) skips
+                // translation now.
+                //
+                // Generalized further: typed/pasted text used to be sent as-is
+                // whenever transcriptSourceLanguageTag was null (no OCR/voice
+                // metadata to key off), on the theory that "the user is
+                // responsible for what they type." That was still keying the
+                // decision off *input source* rather than *script* -- a user
+                // pasting a forwarded Bengali/Tamil/etc. scam message directly
+                // into the field hit the exact same bug this comment
+                // originally described for Devanagari, just via a different
+                // path. SarvamLanguageCodes.detectNativeScriptTag scans the
+                // actual text content for any of the 12 languages' native
+                // scripts as a fallback when there's no source-tag metadata,
+                // so this is now genuinely script-based, not source-based. A
+                // translation failure here degrades to analyzing the
+                // untranslated text rather than blocking the whole check --
+                // worse classifier accuracy on that one check, not a broken
+                // flow.
                 var textForAnalysis = transcript
                 val sourceTag = transcriptSourceLanguageTag
-                if (sourceTag != null &&
-                    !sourceTag.startsWith("en", ignoreCase = true) &&
-                    !sourceTag.startsWith("hi", ignoreCase = true)
-                ) {
+                    ?: SarvamLanguageCodes.detectNativeScriptTag(transcript)
+                // Set only once translateToEnglish actually succeeds -- used
+                // below to translate the decision's headline/reasons back for
+                // display+speech. Left null on failure or "already English"
+                // so a translation error can't cascade into translating an
+                // English-language decision through a pointless round trip.
+                var translatedFromTag: String? = null
+                if (sourceTag != null && !sourceTag.startsWith("en", ignoreCase = true)) {
                     if (SarvamApiClient.isConfigured()) {
                         try {
                             textForAnalysis = SarvamApiClient.translateToEnglish(transcript, sourceTag)
+                            translatedFromTag = sourceTag
                             Log.i(TAG, "translate_to_english_success source=$sourceTag")
                         } catch (e: SarvamUnavailableException) {
                             Log.i(TAG, "translate_to_english_failed source=$sourceTag msg=${e.message}")
@@ -454,8 +481,32 @@ class CheckCallActivity : AppCompatActivity() {
                     app.settings.trustedContactPhone.isNotBlank() &&
                     normalizePhoneNumber(phoneNumber) == normalizePhoneNumber(app.settings.trustedContactPhone)
                 val decision = DecisionAgent.decide(lookup, textAnalysis, sessionAnalysis, isTrustedContact)
+                // Translate the decision back into the source language here,
+                // once, right after it's built -- every downstream consumer
+                // (WarningActivity's TTS speak() + on-screen text,
+                // SafeResultActivity, AutoEscalationCountdownActivity) just
+                // reads decision.headline/reasons already, so this is the
+                // only place this needs wiring in, not each of them.
+                // WarningActivity's ML-Kit language-id-driven voice selection
+                // (CLAUDE.md Section 11.2) already picks the right TTS voice
+                // for whatever script the text turns out to be in.
+                val finalDecision = if (translatedFromTag != null) {
+                    try {
+                        val translatedHeadline = SarvamApiClient.translateFromEnglish(decision.headline, translatedFromTag)
+                        val translatedReasons = decision.reasons.map {
+                            SarvamApiClient.translateFromEnglish(it, translatedFromTag)
+                        }
+                        Log.i(TAG, "translate_from_english_success target=$translatedFromTag")
+                        decision.copy(headline = translatedHeadline, reasons = translatedReasons)
+                    } catch (e: SarvamUnavailableException) {
+                        Log.i(TAG, "translate_from_english_failed target=$translatedFromTag msg=${e.message}")
+                        decision
+                    }
+                } else {
+                    decision
+                }
                 Log.i(TAG, "analysis_online_success elapsed_ms=${SystemClock.elapsedRealtime() - startMs}")
-                routeToOutcome(decision, phoneNumber, transcript)
+                routeToOutcome(finalDecision, phoneNumber, transcript)
             } catch (e: PrahariUnavailableException) {
                 Log.i(TAG, "analysis_prahari_unavailable elapsed_ms=${SystemClock.elapsedRealtime() - startMs} msg=${e.message}")
                 // Prahari unreachable — fall back to OfflineEvaluator, which

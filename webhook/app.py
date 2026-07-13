@@ -399,6 +399,89 @@ def _is_audio_content_type(content_type: str) -> bool:
     return bool(content_type) and content_type.lower().startswith("audio/")
 
 
+def _translate_text_sarvam(text: str, source_lang: str, target_lang: str) -> str | None:
+    """Sarvam /translate — the server-side twin of the Android app's
+    SarvamApiClient.translateToEnglish/translateFromEnglish (same endpoint,
+    same request shape). None if SARVAM_API_KEY isn't configured or the call
+    fails for any reason — callers must fall back to the untranslated text,
+    never block on this."""
+    if not SARVAM_API_KEY:
+        logging.info("_translate_text_sarvam: SARVAM_API_KEY not set, skipping")
+        return None
+    try:
+        resp = requests.post(
+            "https://api.sarvam.ai/translate",
+            headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"},
+            data=json.dumps({
+                "input": text,
+                "source_language_code": source_lang,
+                "target_language_code": target_lang,
+            }, ensure_ascii=False).encode("utf-8"),
+            timeout=15,
+        )
+        resp.raise_for_status()
+        translated = (resp.json().get("translated_text") or "").strip()
+        return translated or None
+    except Exception as e:
+        logging.error(f"_translate_text_sarvam failed ({source_lang}->{target_lang}): {e}")
+        return None
+
+
+# Unicode script blocks for all 12 target languages' native (non-Latin)
+# scripts. Devanagari is shared by Hindi/Marathi and Bengali script is shared
+# by Bengali/Assamese (both ambiguous — default to the more common of the
+# pair, same accepted approximation the Android app's OCR script routing
+# already makes); Arabic script covers Urdu. English/Hinglish stay Latin and
+# are intentionally not in this list — ml.detector's patterns already cover
+# both without translation.
+_SCRIPT_RANGES: list[tuple[re.Pattern, str]] = [
+    # Devanagari (Hindi/Marathi) -- deliberately excludes U+0964/U+0965
+    # (danda / double danda). Real bug found while testing this fix: those
+    # two codepoints live in the Devanagari Unicode block but are shared
+    # punctuation reused as a sentence-final mark across several other
+    # Brahmic scripts (Bengali in particular) -- a Bengali message ending in
+    # "।" was misdetected as Devanagari/Hindi on a naive full-block check,
+    # so it was never actually translated from Bengali at all.
+    (re.compile(r"[ऀ-ॣ०-ॿ]"), "hi-IN"),
+    (re.compile(r"[ঀ-৿]"), "bn-IN"),  # Bengali (Bengali/Assamese)
+    (re.compile(r"[਀-੿]"), "pa-IN"),  # Gurmukhi (Punjabi)
+    (re.compile(r"[઀-૿]"), "gu-IN"),  # Gujarati
+    (re.compile(r"[଀-୿]"), "od-IN"),  # Odia (Sarvam uses "od-IN", not BCP-47 "or-IN")
+    (re.compile(r"[஀-௿]"), "ta-IN"),  # Tamil
+    (re.compile(r"[ఀ-౿]"), "te-IN"),  # Telugu
+    (re.compile(r"[ಀ-೿]"), "kn-IN"),  # Kannada
+    (re.compile(r"[ഀ-ൿ]"), "ml-IN"),  # Malayalam
+    (re.compile(r"[؀-ۿݐ-ݿ]"), "ur-IN"),  # Arabic script (Urdu)
+]
+
+
+def _detect_native_script_lang(text: str) -> str | None:
+    """Returns the Sarvam source-language code for the first native Indic/
+    Urdu script found in `text`, or None if `text` is pure Latin script
+    (English or Romanized Hinglish — ml.detector's patterns cover both
+    directly, no translation needed).
+
+    Real bug this replaces (memory note, 2026-07-13): the previous check
+    here keyed off *language* ("is this Hindi?" via a Devanagari-only regex,
+    then treated Hindi as "already handled" because Prahari's classifier
+    docs mention Hindi support) rather than *script* ("is ml.detector's
+    Latin-script-only pattern set even capable of matching this text at
+    all?"). ml.detector's patterns (including malware_attachment_delivery)
+    are Romanized Hinglish/English only — zero native-script training data,
+    per CLAUDE.md Section 6.2's documented gap — so ANY native-script input
+    across all 12 target languages, not just Devanagari Hindi, never matched
+    a single pattern. This function is script-based and general across all
+    12: it does not special-case Hindi, and treating any one of these 12
+    scripts as "already compatible" because it's technically the same
+    language family as Hindi or loosely resembles a known keyword is exactly
+    the bug being fixed.
+    """
+    for pattern, sarvam_code in _SCRIPT_RANGES:
+        if pattern.search(text):
+            return sarvam_code
+    return None
+
+
 # Real bug found 2026-07-13: when Sarvam STT failed (observed cause: audio
 # over its 30s synchronous-endpoint limit — the batch API would be needed for
 # longer files, not wired up here), _extract_media_content correctly returned
@@ -483,7 +566,12 @@ _ACTION_HI = {
 # _sessions (no DB layer exists anywhere in this project; consistent with
 # that). "en" | "hi" | "both" (default).
 _lang_prefs: dict[str, str] = {}
-_DEVANAGARI_RE = re.compile(r"[ऀ-ॿ]")
+# Excludes U+0964/U+0965 (danda / double danda) -- see _SCRIPT_RANGES' doc
+# comment above: those two codepoints live in the Devanagari block but are
+# shared punctuation reused by several other Brahmic scripts (Bengali in
+# particular), so a naive full-block check misclassifies a Bengali message
+# ending in "।" as Hindi for this reply-language-preference system too.
+_DEVANAGARI_RE = re.compile(r"[ऀ-ॣ०-ॿ]")
 _LANG_COMMANDS = {
     "english": "en", "eng": "en",
     "hindi": "hi", "hi": "hi", "hindi mein": "hi",
@@ -661,10 +749,81 @@ async def whatsapp_webhook(
             logging.info(f"whatsapp session={session_id} | feedback logged | correction={user_correction}")
             return Response(content="", media_type="application/xml")
 
-        text_analysis = analyze_transcript(classify_text, DETECTOR)
-        session_analysis = SESSION.ingest(session_id, classify_text)
+        # Real bug fixed 2026-07-13, generalized 2026-07-13: classify_text
+        # used to reach the detector completely untranslated. ml.detector's
+        # patterns (including malware_attachment_delivery) are Latin-script
+        # Hinglish only -- CLAUDE.md Section 6.2's second documented gap,
+        # zero native-script training examples -- so a genuine native-script
+        # caption never matched any pattern at all, regardless of content or
+        # which of the 12 target languages it was in. The first fix here was
+        # itself a real bug: it only checked Devanagari, on the mistaken
+        # assumption that "Hindi is Devanagari-script" meant every other
+        # language's native script was a separate, lower-priority gap. It
+        # isn't -- ml.detector has zero native-script training data for any
+        # of them. _detect_native_script_lang checks all 12 scripts, not
+        # just Devanagari. Only the caption (`text`) is translated here, not
+        # the already-English media_descriptor (OCR'd image text in a
+        # non-Latin script is a separate, still-open gap -- _ocr_image is
+        # Latin-script EasyOCR, unrelated to this fix; Sarvam STT audio is
+        # already English via mode=translate, see _transcribe_audio_sarvam).
+        # Falls back to the untranslated caption on any translation failure
+        # rather than blocking the whole check.
+        text_for_detector = classify_text
+        translated_this_turn = False
+        translated_source_lang = _detect_native_script_lang(text)
+        if translated_source_lang:
+            translated_caption = _translate_text_sarvam(text, translated_source_lang, "en-IN")
+            if translated_caption:
+                text_for_detector = " ".join(p for p in (translated_caption, media_descriptor) if p)
+                translated_this_turn = True
+                logging.info(
+                    f"whatsapp session={session_id} | translated caption "
+                    f"({translated_source_lang}) to English for classification"
+                )
+            else:
+                logging.info(f"whatsapp session={session_id} | translation failed, classifying untranslated text")
+
+        text_analysis = analyze_transcript(text_for_detector, DETECTOR)
+        session_analysis = SESSION.ingest(session_id, text_for_detector)
         decision = _decide(text_analysis, session_analysis)
-        reply = _build_reply(decision, lang)
+
+        # Translate the reasons back to Hindi before building the reply --
+        # the reply-side twin of the translate-in step above, reusing the
+        # same Sarvam /translate call (mirrors the Android app's
+        # translateFromEnglish step in CheckCallActivity.kt's runAnalysis,
+        # which was flagged as unused dead code before this). Scoped to
+        # lang == "hi": the "both" bilingual reply already shows the English
+        # reasons as part of its dual-language format, and translating them
+        # there is a separate, unrequested design decision.
+        reply_decision = decision
+        if translated_this_turn and lang == "hi":
+            translated_reasons = [_translate_text_sarvam(r, "en-IN", "hi-IN") for r in decision["reasons"]]
+            if all(translated_reasons):
+                reply_decision = {**decision, "reasons": translated_reasons}
+            else:
+                logging.info(f"whatsapp session={session_id} | reason translate-back failed, using English reasons")
+
+        # _build_reply only has hardcoded templates for "en"/"hi"/"both" --
+        # for the other 9 native scripts (Bengali, Tamil, Telugu, Kannada,
+        # Malayalam, Gujarati, Punjabi, Odia, Urdu; Marathi routes to hi-IN
+        # above per the same Devanagari-ambiguity approximation the Android
+        # app makes), build the plain-English reply (not the en+hi bilingual
+        # default -- a Tamil sender doesn't need Hindi mixed in) and
+        # translate the whole thing via Sarvam, same best-effort/English-
+        # fallback pattern as the hi-specific reasons translation above.
+        general_native_lang = (
+            translated_source_lang
+            if translated_this_turn and translated_source_lang not in ("hi-IN", "en-IN")
+            else None
+        )
+        reply = _build_reply(reply_decision, "en" if general_native_lang else lang)
+        if general_native_lang:
+            translated_reply = _translate_text_sarvam(reply, "en-IN", general_native_lang)
+            if translated_reply:
+                reply = translated_reply
+                logging.info(f"whatsapp session={session_id} | translated full reply to {general_native_lang}")
+            else:
+                logging.info(f"whatsapp session={session_id} | full-reply translate-back failed, sending English reply")
 
         _last_verdict[session_id] = {
             "original_text": classify_text,
@@ -878,8 +1037,46 @@ async def webhook(
             reply = "Please send a message."
         else:
             session_id = From.replace("whatsapp:", "")
-            result = chat(session_id, classify_text)
+
+            # Same real bug as /whatsapp/webhook (see that handler's matching
+            # doc comment), generalized the same way: chat() ->
+            # retrieve_and_respond() -> ScamDetector.predict() only ever
+            # sees Latin-script Hinglish patterns (including
+            # malware_attachment_delivery) -- a genuine native-script Body,
+            # in any of the 12 target languages (not just Devanagari Hindi),
+            # never matched anything. Translate the caption portion to
+            # English before calling chat(); translate the reply back
+            # afterward into whatever script was actually detected, reusing
+            # the same Sarvam /translate call both directions (mirrors the
+            # Android app's translateToEnglish/translateFromEnglish pair in
+            # CheckCallActivity.kt's runAnalysis). Falls back to the
+            # untranslated text/reply on any translation failure rather than
+            # blocking the whole check.
+            text_for_chat = classify_text
+            translated_this_turn = False
+            translated_source_lang = _detect_native_script_lang(Body)
+            if translated_source_lang:
+                translated_caption = _translate_text_sarvam(Body.strip(), translated_source_lang, "en-IN")
+                if translated_caption:
+                    text_for_chat = " ".join(p for p in (translated_caption, media_descriptor) if p)
+                    translated_this_turn = True
+                    logging.info(
+                        f"webhook session={session_id} | translated caption "
+                        f"({translated_source_lang}) to English for chat()"
+                    )
+                else:
+                    logging.info(f"webhook session={session_id} | translation failed, chatting with untranslated text")
+
+            result = chat(session_id, text_for_chat)
             reply = result["answer"]
+
+            if translated_this_turn:
+                translated_reply = _translate_text_sarvam(reply, "en-IN", translated_source_lang)
+                if translated_reply:
+                    reply = translated_reply
+                    logging.info(f"webhook session={session_id} | translated reply back to {translated_source_lang}")
+                else:
+                    logging.info(f"webhook session={session_id} | reply translate-back failed, sending English reply")
 
             # ADDITION 3 — store Twilio geo metadata for graph indexing
             twilio_metadata = {
