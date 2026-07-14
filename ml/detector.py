@@ -280,13 +280,24 @@ HIGH_RISK_PATTERNS = {
     # risky-extension pairing does not require a role, since an
     # executable/archive/macro-enabled extension is already a strong,
     # rare-in-legitimate-chat signal on its own.
+    #
+    # "email" added 2026-07-15: traced live via the WhatsApp/Twilio pipeline
+    # test across all 12 languages — Sarvam's Hindi->English translation of
+    # a genuine malware-attachment scam sentence ("...अग्रेषित करें...")
+    # consistently (3/3) rendered the forward verb as "email", a legitimate
+    # English synonym for "forward this as an attachment" that the
+    # forward|send alternation didn't cover, so an otherwise-correct
+    # translation scored REAL instead of FRAUD. Only added to the
+    # English-language forward|send alternation, not the Hinglish
+    # "forward kar" patterns, since Sarvam only ever produces English output
+    # here.
     "malware_attachment_delivery": [
-        r"(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}(finance (manager|team|department)|accounts (team|department|manager)|(your |the )?(manager|boss|supervisor|hr( team)?)).{0,120}open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop)",
-        r"open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop).{0,120}(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}(finance (manager|team|department)|accounts (team|department|manager)|(your |the )?(manager|boss|supervisor|hr( team)?))",
+        r"(forward|send|email).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}(finance (manager|team|department)|accounts (team|department|manager)|(your |the )?(manager|boss|supervisor|hr( team)?)).{0,120}open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop)",
+        r"open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop).{0,120}(forward|send|email).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}(finance (manager|team|department)|accounts (team|department|manager)|(your |the )?(manager|boss|supervisor|hr( team)?))",
         r"(finance manager|accounts (team|department|manager)|(company|apni company) ke (finance|accounts)).{0,50}(ko|ke liye)?.{0,25}forward kar ?(dijiye|do|kijiye|karein|ke)?.{0,120}(computer|pc|laptop|desktop) (par|pe) open ?(kijiye|karo|kariye|kar dijiye|karein)?",
         r"(computer|pc|laptop|desktop) (par|pe) open ?(kijiye|karo|kariye|kar dijiye|karein)?.{0,120}(finance manager|accounts (team|department|manager)|(company|apni company) ke (finance|accounts)).{0,50}(ko|ke liye)?.{0,25}forward kar ?(dijiye|do|kijiye|karein|ke)?",
-        r"(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,150}\.(zip|exe|scr|js|docm|xlsm|bat)\b",
-        r"\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip))",
+        r"(forward|send|email).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,150}\.(zip|exe|scr|js|docm|xlsm|bat)\b",
+        r"\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}(forward|send|email).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip))",
         r"forward kar ?(dijiye|do|kijiye|karein|ke)?.{0,150}\.(zip|exe|scr|js|docm|xlsm|bat)\b",
         r"\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}forward kar ?(dijiye|do|kijiye|karein|ke)?",
     ],

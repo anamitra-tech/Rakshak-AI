@@ -152,11 +152,11 @@ object OfflineRuleEngine {
     ).map { Regex(it) }
 
     private val MALWARE_ATTACHMENT_PATTERNS = listOf(
-        """(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}""" +
+        """(forward|send|email).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}""" +
             """(finance (manager|team|department)|accounts (team|department|manager)|""" +
             """(your |the )?(manager|boss|supervisor|hr( team)?)).{0,120}open.{0,20}(on|in).{0,10}""" +
             """(your |the )?(computer|pc|laptop|desktop)""",
-        """open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop).{0,120}(forward|send).{0,25}""" +
+        """open.{0,20}(on|in).{0,10}(your |the )?(computer|pc|laptop|desktop).{0,120}(forward|send|email).{0,25}""" +
             """(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,60}(finance (manager|team|department)|""" +
             """accounts (team|department|manager)|(your |the )?(manager|boss|supervisor|hr( team)?))""",
         """(finance manager|accounts (team|department|manager)|(company|apni company) ke (finance|accounts))""" +
@@ -165,9 +165,9 @@ object OfflineRuleEngine {
         """(computer|pc|laptop|desktop) (par|pe) open ?(kijiye|karo|kariye|kar dijiye|karein)?.{0,120}""" +
             """(finance manager|accounts (team|department|manager)|(company|apni company) ke (finance|accounts))""" +
             """.{0,50}(ko|ke liye)?.{0,25}forward kar ?(dijiye|do|kijiye|karein|ke)?""",
-        """(forward|send).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,150}""" +
+        """(forward|send|email).{0,25}(this|it|the.{0,15}(attachment|file|document|statement|zip)).{0,150}""" +
             """\.(zip|exe|scr|js|docm|xlsm|bat)\b""",
-        """\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}(forward|send).{0,25}""" +
+        """\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}(forward|send|email).{0,25}""" +
             """(this|it|the.{0,15}(attachment|file|document|statement|zip))""",
         """forward kar ?(dijiye|do|kijiye|karein|ke)?.{0,150}\.(zip|exe|scr|js|docm|xlsm|bat)\b""",
         """\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}forward kar ?(dijiye|do|kijiye|karein|ke)?""",

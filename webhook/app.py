@@ -420,19 +420,32 @@ def _translate_text_sarvam(text: str, source_lang: str, target_lang: str) -> str
     SarvamApiClient.translateToEnglish/translateFromEnglish (same endpoint,
     same request shape). None if SARVAM_API_KEY isn't configured or the call
     fails for any reason — callers must fall back to the untranslated text,
-    never block on this."""
+    never block on this.
+
+    Real bug traced live via the Android app's identical client-side call
+    (SarvamApiClient.kt): Sarvam's /translate defaults to the "mayura:v1"
+    model when no `model` field is sent, and mayura:v1 flatly rejects Urdu
+    with HTTP 400 ("Language 'ur-IN' is not supported in mayura:v1. Please
+    switch to sarvam-translate:v1 to use this language.") — every Urdu
+    WhatsApp message would have silently fallen back to the untranslated-
+    text path. Scoped to Urdu only, same as the Android fix, since only
+    Urdu was confirmed broken under the default model.
+    """
     if not SARVAM_API_KEY:
         logging.info("_translate_text_sarvam: SARVAM_API_KEY not set, skipping")
         return None
+    body = {
+        "input": text,
+        "source_language_code": source_lang,
+        "target_language_code": target_lang,
+    }
+    if source_lang.lower() == "ur-in" or target_lang.lower() == "ur-in":
+        body["model"] = "sarvam-translate:v1"
     try:
         resp = requests.post(
             "https://api.sarvam.ai/translate",
             headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"},
-            data=json.dumps({
-                "input": text,
-                "source_language_code": source_lang,
-                "target_language_code": target_lang,
-            }, ensure_ascii=False).encode("utf-8"),
+            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
             timeout=15,
         )
         resp.raise_for_status()
