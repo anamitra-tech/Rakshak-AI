@@ -21,17 +21,28 @@ class PrahariHttpApiClient(
     // (OkHttp's unset default) with no overall cap — that combination let a
     // single call wait upwards of 13s (worst case ~5s+10s if the stalling
     // phase happened to be write, not just connect+read) with a static
-    // "Checking with Prahari…" spinner and no cancel option, before this
-    // was ever tested against anything but instant-refusal (server fully
-    // down). callTimeout() is the real fix here — it caps the ENTIRE call
-    // (connect+write+read combined) regardless of which phase stalls, so a
-    // rural/patchy connection gets a bounded ~5s fallback instead of a
-    // best-case-per-phase sum that could still run well past it.
+    // "Checking with Prahari…" spinner and no cancel option. callTimeout()
+    // caps the ENTIRE call (connect+write+read combined) regardless of
+    // which phase stalls.
+    //
+    // Real bug found live: the original 5s callTimeout here was only ever
+    // tested against instant-refusal (server fully down), never against a
+    // real, reachable, correctly-answering server. /analyze_voice's Gemini-
+    // backed llm_explanation step alone measured 4.2-5.1s across several
+    // live calls during this session's testing (see PrahariTextAnalysis's
+    // reason field, generated server-side by casefile/case_generator.py's
+    // LLM layer) -- a 5s callTimeout left essentially no margin, so a
+    // correctly-classified FRAUD response routinely arrived a few hundred
+    // ms too late and the app fell back to OfflineEvaluator (which doesn't
+    // carry every rule category server-side rules do) instead of showing
+    // the real, correct verdict. 15s gives real headroom over the observed
+    // worst case instead of a number picked before any live latency data
+    // existed.
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .writeTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(4, TimeUnit.SECONDS)
-        .callTimeout(5, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .callTimeout(15, TimeUnit.SECONDS)
         .build(),
 ) : PrahariApiClient {
 

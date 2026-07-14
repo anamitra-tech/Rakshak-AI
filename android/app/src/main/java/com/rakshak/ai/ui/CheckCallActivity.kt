@@ -455,8 +455,36 @@ class CheckCallActivity : AppCompatActivity() {
                 // flow.
                 var textForAnalysis = transcript
                 Log.i(TAG, "DIAG_transcript_before_translate text=${transcript.replace("\n", "\\n")}")
-                val sourceTag = transcriptSourceLanguageTag
-                    ?: SarvamLanguageCodes.detectNativeScriptTag(transcript)
+                // Real bug traced live: ScreenshotOcrHelper's on-device
+                // recognizers don't reject text that isn't actually in the
+                // script they're modeled for -- ML Kit's Devanagari
+                // recognizer, tried first because the phone was still
+                // configured for Hindi from an earlier test, happily
+                // returned real, non-empty BENGALI text for a Bengali
+                // screenshot instead of coming back empty. That mislabeled
+                // transcriptSourceLanguageTag as "hi-IN" even though the
+                // extracted characters were genuinely Bengali, which sent
+                // the wrong source language to Sarvam's translate (silently
+                // passed the text through untranslated) AND translated the
+                // reply back into the wrong language. The actual Unicode
+                // content of the text is ground truth here, not which
+                // recognizer/metadata claimed to have matched -- so content
+                // detection now overrides OCR/voice metadata whenever it
+                // finds a native script at all, falling back to the
+                // metadata tag only for pure-Latin text (where content
+                // detection has nothing to go on, e.g. genuine English OCR
+                // or Sarvam STT's mode=translate output).
+                val contentDetectedTag = SarvamLanguageCodes.detectNativeScriptTag(transcript)
+                val sourceTag = when {
+                    contentDetectedTag == null -> transcriptSourceLanguageTag
+                    // detectNativeScriptTag can't distinguish Marathi from
+                    // Hindi (both Devanagari) -- preserve the existing
+                    // disambiguation-by-configured-language for that one
+                    // pair, same as the OCR-metadata path used to do.
+                    contentDetectedTag == "hi-IN" && app.settings.spokenLanguageTag.startsWith("mr", ignoreCase = true) -> "mr-IN"
+                    else -> contentDetectedTag
+                }
+                Log.i(TAG, "DIAG_source_tag_resolved metadataTag=$transcriptSourceLanguageTag contentDetectedTag=$contentDetectedTag resolvedTag=$sourceTag")
                 // Set only once translateToEnglish actually succeeds -- used
                 // below to translate the decision's headline/reasons back for
                 // display+speech. Left null on failure or "already English"
