@@ -71,13 +71,30 @@ object SarvamLanguageCodes {
      * patterns can match this text at all — they can't, for any native
      * script, not just Devanagari). General across all 12 languages; does
      * not special-case any one of them.
+     *
+     * Real bug fixed 2026-07-15, traced live via a Hindi OCR test: this used
+     * to return on the FIRST script match found while scanning codepoints in
+     * text order, so a single stray misread character (ML Kit's Devanagari
+     * recognizer hallucinating one Bengali glyph "যা" from a forwarded-
+     * message icon at the very start of an otherwise all-Devanagari message
+     * — a real, already-diagnosed OCR artifact, not a state leak) overrode
+     * the actual, overwhelmingly-dominant script of the real message.
+     * Confirmed live: metadataTag=hi-IN (correct) got overridden to
+     * contentDetectedTag=bn-IN (wrong) purely because of that one leading
+     * character. Now a majority vote across the whole text — whichever
+     * script has the most matching codepoints wins — so one stray glyph
+     * can't outvote dozens of genuine same-script characters.
      */
     fun detectNativeScriptTag(text: String): String? {
+        val counts = mutableMapOf<String, Int>()
         for (codePoint in text.codePoints()) {
             for ((range, tag) in SCRIPT_RANGES) {
-                if (codePoint in range) return tag
+                if (codePoint in range) {
+                    counts[tag] = (counts[tag] ?: 0) + 1
+                    break
+                }
             }
         }
-        return null
+        return counts.maxByOrNull { it.value }?.key
     }
 }

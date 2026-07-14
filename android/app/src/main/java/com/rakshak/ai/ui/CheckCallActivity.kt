@@ -385,6 +385,41 @@ class CheckCallActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    /**
+     * Cleans OCR text before it's handed to Sarvam's translate -- real bug
+     * traced live with a Tamil malware-attachment test: Sarvam's Tamil
+     * translation reliably (reproduced 3/3) dropped the sentence's trailing
+     * action verb ("forward"/"send" -- Tamil is SOV, so the verb sits at
+     * the very end) whenever either (a) OCR noise (misread icons/filename/
+     * timestamp fragments) was present anywhere in the same translate call,
+     * or (b) the real sentence's own line-wrap newlines were sent as
+     * literal '\n' rather than spaces -- confirmed independently for each
+     * factor, and confirmed the combination below fixes the real failing
+     * case (and doesn't change output for Hindi/Bengali/Telugu, verified
+     * against every OCR sample captured this session).
+     *
+     * Noise removal exploits a real, observed OCR-layout artifact: a
+     * genuine multi-line sentence Tesseract/ML Kit could actually read
+     * comes back as a tightly-packed block with no blank lines between its
+     * wrapped lines, while misread fragments it couldn't group into that
+     * block each come back as their own isolated single-line "paragraph"
+     * surrounded by blank lines. Dropping isolated single-line paragraphs
+     * (only when at least one multi-line block exists to prefer) removes
+     * the noise without needing to guess at what counts as "real text" --
+     * Hindi/Bengali's OCR output here never had blank-line breaks at all,
+     * so this step is a no-op for them.
+     */
+    private fun prepareForTranslation(text: String): String {
+        val paragraphs = text.split(Regex("\n\\s*\n+")).map { it.trim() }.filter { it.isNotEmpty() }
+        val candidate = if (paragraphs.size <= 1) {
+            text
+        } else {
+            val multiLineParagraphs = paragraphs.filter { it.lines().size > 1 }
+            if (multiLineParagraphs.isEmpty()) text else multiLineParagraphs.joinToString("\n\n")
+        }
+        return candidate.replace(Regex("\\s+"), " ").trim()
+    }
+
     private fun runAnalysis() {
         val transcript = binding.transcriptInput.text?.toString().orEmpty().trim()
         if (transcript.isEmpty()) {
@@ -494,7 +529,9 @@ class CheckCallActivity : AppCompatActivity() {
                 if (sourceTag != null && !sourceTag.startsWith("en", ignoreCase = true)) {
                     if (SarvamApiClient.isConfigured()) {
                         try {
-                            textForAnalysis = SarvamApiClient.translateToEnglish(transcript, sourceTag)
+                            val preparedTranscript = prepareForTranslation(transcript)
+                            Log.i(TAG, "DIAG_prepared_for_translate text=${preparedTranscript.replace("\n", "\\n")}")
+                            textForAnalysis = SarvamApiClient.translateToEnglish(preparedTranscript, sourceTag)
                             translatedFromTag = sourceTag
                             Log.i(TAG, "translate_to_english_success source=$sourceTag")
                             Log.i(TAG, "DIAG_transcript_after_translate text=${textForAnalysis.replace("\n", "\\n")}")

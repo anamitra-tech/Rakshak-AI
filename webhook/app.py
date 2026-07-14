@@ -491,11 +491,28 @@ def _detect_native_script_lang(text: str) -> str | None:
     scripts as "already compatible" because it's technically the same
     language family as Hindi or loosely resembles a known keyword is exactly
     the bug being fixed.
+
+    Real bug fixed 2026-07-15, traced live via the Android app's mirror of
+    this function (SarvamLanguageCodes.kt::detectNativeScriptTag): checking
+    patterns in a fixed priority order (Devanagari first) and returning on
+    the first one with ANY match let a single stray misread character
+    override the actual, overwhelmingly-dominant script of the real
+    message -- confirmed live with a real OCR result that was genuinely
+    all-Devanagari Hindi except for one stray misread Bengali glyph at the
+    very start, which used to make this return "bn-IN" instead of "hi-IN"
+    purely because Bengali's pattern happened to find a match too. Now
+    counts total codepoint matches per script across the whole text and
+    returns whichever script actually has the most characters, not
+    whichever is checked first or appears earliest.
     """
+    best_lang = None
+    best_count = 0
     for pattern, sarvam_code in _SCRIPT_RANGES:
-        if pattern.search(text):
-            return sarvam_code
-    return None
+        count = len(pattern.findall(text))
+        if count > best_count:
+            best_count = count
+            best_lang = sarvam_code
+    return best_lang
 
 
 # Real bug found 2026-07-13: when Sarvam STT failed (observed cause: audio
