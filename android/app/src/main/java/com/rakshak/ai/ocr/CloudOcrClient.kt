@@ -2,6 +2,8 @@ package com.rakshak.ai.ocr
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
@@ -39,6 +41,20 @@ object CloudOcrClient {
         fun onNoTextFound()
         fun onFailure(message: String)
     }
+
+    // Real crash traced live: OkHttp's enqueue() callbacks run on its own
+    // internal dispatcher thread, not the caller's (main) thread -- unlike
+    // ML Kit's on-device recognizers (Play Services Tasks post completion
+    // back to the calling/main thread automatically), so this was the only
+    // OCR path in CheckCallActivity where the caller's Callback touched
+    // views (setText, status text) off the main thread. Never surfaced
+    // before this session because this is the first time a real network
+    // request to /ocr/tesseract actually completed with a matched result --
+    // every earlier attempt either used on-device OCR or errored before
+    // reaching a callback. Posting through mainHandler makes every Callback
+    // method (onSuccess/onNoTextFound/onFailure) main-thread-safe at the
+    // source, so no call site has to remember to do it itself.
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -101,7 +117,7 @@ object CloudOcrClient {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e(TAG, "cloud_ocr_request_failed", e)
                 tempFile.delete()
-                callback.onFailure(e.message ?: "Online text extraction request failed.")
+                mainHandler.post { callback.onFailure(e.message ?: "Online text extraction request failed.") }
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -110,19 +126,21 @@ object CloudOcrClient {
                     if (!resp.isSuccessful) {
                         val msg = "Online text extraction failed (HTTP ${resp.code})"
                         Log.e(TAG, "$msg body=${resp.body?.string()?.take(500)}")
-                        callback.onFailure(msg)
+                        mainHandler.post { callback.onFailure(msg) }
                         return
                     }
                     val json = try {
                         JSONObject(resp.body?.string().orEmpty())
                     } catch (e: Exception) {
                         Log.e(TAG, "cloud_ocr_parse_failed", e)
-                        callback.onFailure("Could not parse the text-extraction response.")
+                        mainHandler.post { callback.onFailure("Could not parse the text-extraction response.") }
                         return
                     }
                     val found = json.optBoolean("found", false)
                     val text = json.optString("text").trim()
-                    if (!found || text.isEmpty()) callback.onNoTextFound() else callback.onSuccess(text)
+                    mainHandler.post {
+                        if (!found || text.isEmpty()) callback.onNoTextFound() else callback.onSuccess(text)
+                    }
                 }
             }
         })

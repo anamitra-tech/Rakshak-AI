@@ -232,8 +232,20 @@ def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
     lang goes through the same cascade rather than special-casing Bengali.
     """
     import pytesseract
-    from PIL import Image
+    from PIL import Image, ImageFile
     import io as _io
+
+    # Real bug traced live via the Android app's cloud-OCR fallback: a
+    # genuine forwarded-screenshot JPEG (re-saved/cropped by some upstream
+    # app) was missing its trailing EOI marker -- lenient viewers (and
+    # Android's own bitmap decoder, which is why the phone displayed it
+    # fine) don't care, but Pillow does by default and raises `OSError:
+    # image file is truncated (N bytes not processed)` on `.load()`,
+    # which `.convert("RGB")` below triggers. Confirmed the pixel data
+    # Pillow can recover is still enough for Tesseract to read the real
+    # message text once this is set -- a few missing trailing bytes
+    # shouldn't block OCR on an otherwise-intact image.
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
 
     if lang not in _TESSERACT_SUPPORTED_LANGS:
         logging.error(f"_run_tesseract_ocr: unsupported lang {lang!r}")
@@ -280,8 +292,12 @@ def _ocr_image(image_bytes: bytes) -> str | None:
     either) over a downloaded image. None on failure or no text found."""
     try:
         import numpy as np
-        from PIL import Image
+        from PIL import Image, ImageFile
         import io as _io
+
+        # Same truncated-JPEG tolerance as _run_tesseract_ocr -- see its
+        # comment for the real, live-traced bug this fixes.
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
 
         pil_image = Image.open(_io.BytesIO(image_bytes)).convert("RGB")
         if max(pil_image.size) > _OCR_MAX_DIMENSION:
