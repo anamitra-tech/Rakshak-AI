@@ -408,6 +408,23 @@ class CheckCallActivity : AppCompatActivity() {
      * the noise without needing to guess at what counts as "real text" --
      * Hindi/Bengali's OCR output here never had blank-line breaks at all,
      * so this step is a no-op for them.
+     *
+     * Real bug fixed 2026-07-15, traced live with a Punjabi test: Tesseract
+     * doesn't always put a blank line between OCR noise (header digits/
+     * symbols) and the real sentence -- here it grouped 3 noise lines
+     * together with the first real line into a single multi-line
+     * "paragraph", so the isolated-single-line check above couldn't isolate
+     * them. That noise (near-zero real letters -- Gurmukhi digits and
+     * symbols aren't Unicode letters) survived into the translate call and
+     * Sarvam's translation dropped the object pronoun ("Forward to the
+     * Finance Manager" instead of "Forward this to..."), which no longer
+     * matched ml.detector's malware_attachment_delivery pattern. Now also
+     * drops individual lines within an already-kept multi-line paragraph
+     * if they have fewer than 3 real letters (any script) -- verified
+     * against every OCR sample captured this session: removes exactly the
+     * 3 noise lines from the Punjabi case, changes nothing for
+     * Hindi/Bengali/Telugu/Tamil since every real sentence line in those
+     * samples has far more than 3 letters.
      */
     private fun prepareForTranslation(text: String): String {
         val paragraphs = text.split(Regex("\n\\s*\n+")).map { it.trim() }.filter { it.isNotEmpty() }
@@ -415,7 +432,15 @@ class CheckCallActivity : AppCompatActivity() {
             text
         } else {
             val multiLineParagraphs = paragraphs.filter { it.lines().size > 1 }
-            if (multiLineParagraphs.isEmpty()) text else multiLineParagraphs.joinToString("\n\n")
+            if (multiLineParagraphs.isEmpty()) {
+                text
+            } else {
+                multiLineParagraphs.joinToString("\n\n") { paragraph ->
+                    val lines = paragraph.lines()
+                    val keptLines = lines.filter { line -> line.count { it.isLetter() } >= 3 }
+                    if (keptLines.isEmpty()) paragraph else keptLines.joinToString("\n")
+                }
+            }
         }
         return candidate.replace(Regex("\\s+"), " ").trim()
     }

@@ -73,12 +73,32 @@ object SarvamApiClient {
             translate(text, "en-IN", SarvamLanguageCodes.toSarvamCode(targetLanguageTag))
         }
 
+    // Real bug traced live: Sarvam's /translate defaults to the "mayura:v1"
+    // model when no `model` field is sent, and mayura:v1 flatly rejects
+    // Urdu with HTTP 400 ("Language 'ur-IN' is not supported in mayura:v1.
+    // Please switch to sarvam-translate:v1 to use this language.") -- every
+    // Urdu check silently fell back to analyzing/replying in untranslated
+    // Urdu (no translate_to_english_success, no translate_from_english),
+    // which read as "never replies in Urdu at all". Confirmed
+    // sarvam-translate:v1 translates Urdu correctly and, separately,
+    // doesn't regress Hindi's already-working output -- scoped to Urdu only
+    // rather than switched for all 12 languages, since only Urdu was
+    // confirmed broken and the other 11 aren't re-verified against this
+    // model.
+    private fun modelFor(sourceCode: String, targetCode: String): String? =
+        if (sourceCode.equals("ur-IN", ignoreCase = true) || targetCode.equals("ur-IN", ignoreCase = true)) {
+            "sarvam-translate:v1"
+        } else {
+            null
+        }
+
     private fun translate(text: String, sourceCode: String, targetCode: String): String {
         requireConfigured()
         val body = JSONObject()
             .put("input", text)
             .put("source_language_code", sourceCode)
             .put("target_language_code", targetCode)
+            .apply { modelFor(sourceCode, targetCode)?.let { put("model", it) } }
             .toString()
         val request = Request.Builder()
             .url("$BASE_URL/translate")
