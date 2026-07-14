@@ -303,6 +303,7 @@ class CheckCallActivity : AppCompatActivity() {
         showScreenshotStatus(getString(R.string.check_call_screenshot_processing))
         ScreenshotOcrHelper.recognizeText(this, uri, preferredScript, object : ScreenshotOcrHelper.Callback {
             override fun onSuccess(text: String, matchedScript: ScreenshotOcrHelper.ScriptFamily) {
+                Log.i(TAG, "DIAG_ocr_extracted_text script=$matchedScript text=${text.replace("\n", "\\n")}")
                 binding.transcriptInput.setText(text)
                 binding.transcriptInput.setSelection(text.length)
                 // Which recognizer actually matched decides the source
@@ -453,6 +454,7 @@ class CheckCallActivity : AppCompatActivity() {
                 // worse classifier accuracy on that one check, not a broken
                 // flow.
                 var textForAnalysis = transcript
+                Log.i(TAG, "DIAG_transcript_before_translate text=${transcript.replace("\n", "\\n")}")
                 val sourceTag = transcriptSourceLanguageTag
                     ?: SarvamLanguageCodes.detectNativeScriptTag(transcript)
                 // Set only once translateToEnglish actually succeeds -- used
@@ -467,6 +469,7 @@ class CheckCallActivity : AppCompatActivity() {
                             textForAnalysis = SarvamApiClient.translateToEnglish(transcript, sourceTag)
                             translatedFromTag = sourceTag
                             Log.i(TAG, "translate_to_english_success source=$sourceTag")
+                            Log.i(TAG, "DIAG_transcript_after_translate text=${textForAnalysis.replace("\n", "\\n")}")
                         } catch (e: SarvamUnavailableException) {
                             Log.i(TAG, "translate_to_english_failed source=$sourceTag msg=${e.message}")
                         }
@@ -475,6 +478,7 @@ class CheckCallActivity : AppCompatActivity() {
                     }
                 }
                 val textAnalysis = app.prahariApiClient.analyzeVoice(textForAnalysis)
+                Log.i(TAG, "DIAG_analyze_voice_result rawLabel=${textAnalysis.rawLabel} score=${textAnalysis.score} reason=${textAnalysis.reason}")
                 val sessionAnalysis = app.prahariApiClient.analyzeSession(sessionId, textForAnalysis)
                 val lookup = app.callerLookupSource.lookup(phoneNumber)
                 val isTrustedContact = phoneNumber.isNotBlank() &&

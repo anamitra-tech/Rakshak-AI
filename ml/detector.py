@@ -365,7 +365,20 @@ SOFT_SIGNAL_CATEGORIES = {"credential_request", "urgency_coercion"}
 
 
 def _rule_signals(text):
-    t = text.lower()
+    # Real bug traced via the Android OCR->Sarvam-translate->analyze_voice
+    # path: HIGH_RISK_PATTERNS' cross-clause gaps (`.{0,120}` etc.) rely on
+    # `.` matching any character, but Python's `re` module (no re.DOTALL
+    # here) never lets `.` match a literal `\n`. Screenshot OCR text is
+    # naturally multi-line, and Sarvam's translation preserves those line
+    # breaks -- so a single continuous sentence like "...for verification.
+    # Please open it on the computer" becomes "...for verification.\nPlease
+    # open it on the computer" and every pattern spanning that gap silently
+    # stops matching, even though the semantic content is unchanged. Collapse
+    # all whitespace (not just lowercase) before rule-matching so line breaks
+    # from OCR/translated/pasted multi-line text can't break proximity
+    # matching -- the ML pipeline in predict() still sees the original,
+    # un-collapsed text; only this rule-matching copy is normalized.
+    t = re.sub(r"\s+", " ", text.lower())
     hits = {}
     for cat, pats in HIGH_RISK_PATTERNS.items():
         matched = [p for p in pats if re.search(p, t)]
