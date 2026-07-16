@@ -26,6 +26,18 @@ HIGH_RISK_PATTERNS = {
         r"investigat(ing|ion).{0,20}(your|aapke|aapka) case",
         r"court (appearance|mein sunwai|sunwaayi)",
         r"arrest (ki )?notification",
+        # Added 2026-07-16: real, live-observed false negative (SAFE, 0.49)
+        # on an actual translated Gujarati digital-arrest scam
+        # ("From the Jasi Cyber Crime Cell... your Aadhaar card... illegal
+        # financial transactions... do not inform anyone... confirm your
+        # identity within 30 minutes") -- generic institutional phrasing for
+        # a police cyber-fraud unit, distinct from CBI/ED/customs (already
+        # covered above) but the same authority-impersonation pattern.
+        # Chakshu/Sanchar Saathi tracks this as its own impersonation
+        # variant (see CLAUDE.md Section 6.3's cross-reference), same
+        # justification as telecom_impersonation being split out from this
+        # category rather than folded in as a synonym list of one sentence.
+        r"cyber\s*crime\s*(cell|branch|police|wing|department)",
     ],
     "credential_request": [
         r"\botp\b", r"\bcvv\b", r"\bpin\b", r"\bupi\s*pin\b", r"share.*(otp|pin|cvv)",
