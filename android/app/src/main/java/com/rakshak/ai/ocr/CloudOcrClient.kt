@@ -28,10 +28,21 @@ import java.util.concurrent.TimeUnit
  * path earlier). No API key here; only network reachability to Prahari.
  *
  * The image bytes leave the device for this call (to your own Prahari
- * instance, not a third party) — that's exactly why this is only ever
+ * instance, not a third party) — that's exactly why this was only ever
  * invoked when [ScreenshotOcrHelper] reports the script isn't covered
- * on-device, never as a first choice, and only when the caller has already
+ * on-device, never as a first choice, and only when the caller had already
  * confirmed network connectivity.
+ *
+ * 2026-07-16: currently unreferenced. A real accuracy audit (CLAUDE.md
+ * Section 13) found this exact 9-script Tesseract path unreliable enough
+ * (under-called scores, false negatives on Telugu/Tamil, hallucinated
+ * translations on Urdu) that `CheckCallActivity`'s
+ * `onScriptNotSupportedOnDevice` no longer calls it — those 9 languages
+ * redirect straight to typed/voice input instead, same policy as
+ * webhook/app.py's `_OCR_RELIABLE_LANGUAGES` gate for WhatsApp. Left in
+ * place (not deleted) since the underlying `/ocr/tesseract` endpoint is
+ * unchanged and this could be re-wired back in if OCR accuracy for these
+ * scripts improves later — see CLAUDE.md Section 13 before doing so.
  */
 object CloudOcrClient {
     private const val TAG = "CloudOcrClient"

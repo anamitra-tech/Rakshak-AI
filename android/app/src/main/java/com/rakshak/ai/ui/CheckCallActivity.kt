@@ -23,7 +23,6 @@ import com.rakshak.ai.intelligence.PrahariUnavailableException
 import com.rakshak.ai.intelligence.RiskLevel
 import com.rakshak.ai.intelligence.hasActiveNetworkConnection
 import com.rakshak.ai.intelligence.normalizePhoneNumber
-import com.rakshak.ai.ocr.CloudOcrClient
 import com.rakshak.ai.ocr.ScreenshotOcrHelper
 import com.rakshak.ai.sarvam.SarvamApiClient
 import com.rakshak.ai.sarvam.SarvamLanguageCodes
@@ -290,9 +289,19 @@ class CheckCallActivity : AppCompatActivity() {
      * configured spoken language to Latin/Devanagari (on-device, free, no
      * network) or NONE (Bengali/Tamil/Telugu/Kannada/Malayalam/Gujarati/
      * Punjabi/Odia/Urdu — ML Kit has no recognizer for these scripts at
-     * all). NONE routes to [CloudOcrClient] only when online; offline it
-     * shows the honest "needs internet" message rather than silently
-     * failing or guessing at Latin/Devanagari text that isn't there.
+     * all).
+     *
+     * 2026-07-16: NONE no longer falls back to cloud OCR ([CloudOcrClient],
+     * still present but currently unreferenced — see its doc comment). A
+     * real accuracy audit (CLAUDE.md Section 13) found Tesseract unreliable
+     * for exactly these 9 languages/scripts — under-called to SUSPICIOUS,
+     * outright false negatives on Telugu/Tamil, and Urdu's OCR text was bad
+     * enough that translating it hallucinated a fabricated story — while a
+     * follow-up real test showed Sarvam STT (voice input, already available
+     * for all 12 languages via the mic button on this screen) performs far
+     * better for the same languages. So OCR is skipped entirely for these 9,
+     * same policy as webhook/app.py's `_OCR_RELIABLE_LANGUAGES` gate for
+     * WhatsApp — never attempted, not attempted-then-discarded.
      */
     private fun handlePickedScreenshot(uri: Uri) {
         ScreenshotEvidenceStore.save(this, uri)
@@ -336,39 +345,16 @@ class CheckCallActivity : AppCompatActivity() {
             }
 
             override fun onScriptNotSupportedOnDevice() {
-                if (!hasActiveNetworkConnection(this@CheckCallActivity)) {
-                    Log.i(TAG, "ocr_script_unsupported_offline")
-                    showScreenshotStatus(getString(R.string.check_call_screenshot_needs_internet))
-                    return
-                }
-                Log.i(TAG, "ocr_cloud_fallback_start")
-                showScreenshotStatus(getString(R.string.check_call_screenshot_cloud_processing))
-                CloudOcrClient.recognizeText(
-                    this@CheckCallActivity,
-                    uri,
-                    app.settings.evidenceBaseUrl,
-                    app.settings.spokenLanguageTag,
-                    object : CloudOcrClient.Callback {
-                        override fun onSuccess(text: String) {
-                            Log.i(TAG, "ocr_cloud_fallback_success")
-                            binding.transcriptInput.setText(text)
-                            binding.transcriptInput.setSelection(text.length)
-                            // Unambiguous here: cloud OCR was only ever reached
-                            // because preferredScript (the app's configured
-                            // language) has no on-device recognizer.
-                            transcriptSourceLanguageTag = app.settings.spokenLanguageTag
-                            showScreenshotStatus(getString(R.string.check_call_screenshot_success))
-                        }
-
-                        override fun onNoTextFound() {
-                            showScreenshotStatus(getString(R.string.check_call_screenshot_no_text_found))
-                        }
-
-                        override fun onFailure(message: String) {
-                            Log.i(TAG, "ocr_cloud_fallback_failed msg=$message")
-                            showScreenshotStatus(getString(R.string.check_call_screenshot_cloud_failed, message))
-                        }
-                    },
+                // OCR is disabled outright for this language (CLAUDE.md
+                // Section 13) -- no cloud-OCR attempt, no network check,
+                // just the redirect message. See handlePickedScreenshot's
+                // doc comment for why.
+                Log.i(TAG, "ocr_skipped_unreliable_language tag=${app.settings.spokenLanguageTag}")
+                showScreenshotStatus(
+                    getString(
+                        R.string.check_call_screenshot_ocr_unreliable,
+                        ocrUnreliableLanguageName(app.settings.spokenLanguageTag),
+                    )
                 )
             }
         })
@@ -377,6 +363,23 @@ class CheckCallActivity : AppCompatActivity() {
     private fun showScreenshotStatus(message: String) {
         binding.screenshotStatusText.text = message
         binding.screenshotStatusText.visibility = View.VISIBLE
+    }
+
+    /** English display name for [R.string.check_call_screenshot_ocr_unreliable]'s
+     *  placeholder -- only reachable for the 9 tags [ScreenshotOcrHelper.scriptFamilyFor]
+     *  maps to [ScreenshotOcrHelper.ScriptFamily.NONE] (see CLAUDE.md Section 13's
+     *  table); English/Hindi/Marathi never reach this callback at all. */
+    private fun ocrUnreliableLanguageName(tag: String): String = when {
+        tag.startsWith("bn", ignoreCase = true) -> "Bengali"
+        tag.startsWith("gu", ignoreCase = true) -> "Gujarati"
+        tag.startsWith("kn", ignoreCase = true) -> "Kannada"
+        tag.startsWith("ml", ignoreCase = true) -> "Malayalam"
+        tag.startsWith("pa", ignoreCase = true) -> "Punjabi"
+        tag.startsWith("or", ignoreCase = true) -> "Odia"
+        tag.startsWith("te", ignoreCase = true) -> "Telugu"
+        tag.startsWith("ta", ignoreCase = true) -> "Tamil"
+        tag.startsWith("ur", ignoreCase = true) -> "Urdu"
+        else -> "this language"
     }
 
     override fun onDestroy() {

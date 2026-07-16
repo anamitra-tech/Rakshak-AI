@@ -477,3 +477,59 @@ driver-binding problem, not a one-off cable glitch. Switched to wireless debuggi
 which was stable. If USB adb is wanted again later, this needs an actual driver
 reinstall/replace in Device Manager (not attempted — no admin elevation available this
 session) before trusting it over wireless debugging.
+
+---
+
+## 13. OCR reliability by language (2026-07-16) — screenshots gated per language, voice/typed input always available
+
+A real audit (clean ground-truth screenshot per language, run through the actual production
+`_ocr_image` pipeline in `webhook/app.py`, not a synthetic/idealized test) found OCR reliable for
+only 3 of the 12 supported languages. For the other 9, OCR either under-called a textbook scam
+script as SUSPICIOUS instead of FRAUD, produced an outright false negative, or (Urdu) had a high
+enough character-error-rate that Sarvam's translation of the garbage OCR text hallucinated a
+fabricated, unrelated story instead of just mistranslating.
+
+A follow-up real test (gTTS-synthesized audio of the same kind of ground-truth scam sentence,
+per language, through the actual `_transcribe_audio_sarvam` pipeline and `ScamDetector.predict`)
+confirmed Sarvam STT as a substantially more reliable replacement path for the 9 unreliable
+languages — verified in detail for the three worst OCR failures (Telugu, Tamil, Urdu): all three
+transcribed the scam sentence almost word-for-word and correctly scored FRAUD (1.0, 0.713, 1.0
+respectively), and a benign control sentence in the same three languages transcribed accurately
+and correctly scored SAFE (0.39-0.43), ruling out the STT path simply defaulting to scam-shaped
+output. This was re-verified for real on 2026-07-16 — an earlier version of this claim existed
+only as an uncorroborated code comment with no surviving test script, audio, or log.
+
+| Language  | Tag (`spokenLanguageTag`) | OCR reliability | Fallback when a screenshot is uploaded |
+|---|---|---|---|
+| English   | `en-IN` | **Reliable** | OCR runs normally |
+| Hindi     | `hi-IN` | **Reliable** | OCR runs normally |
+| Marathi   | `mr-IN` | **Reliable** | OCR runs normally |
+| Bengali   | `bn-IN` | Unreliable (under-called: SUSPICIOUS, not FRAUD) | OCR skipped — redirect to typed/voice input |
+| Gujarati  | `gu-IN` | Unreliable (under-called) | OCR skipped — redirect to typed/voice input |
+| Kannada   | `kn-IN` | Unreliable (under-called) | OCR skipped — redirect to typed/voice input |
+| Malayalam | `ml-IN` | Unreliable (under-called) | OCR skipped — redirect to typed/voice input |
+| Punjabi   | `pa-IN` | Unreliable (under-called) | OCR skipped — redirect to typed/voice input |
+| Odia      | `or-IN` | Unreliable (under-called) | OCR skipped — redirect to typed/voice input |
+| Telugu    | `te-IN` | Unreliable (false negative — scored SAFE on a real scam script) | OCR skipped — redirect to typed/voice input |
+| Tamil     | `ta-IN` | Unreliable (false negative) | OCR skipped — redirect to typed/voice input |
+| Urdu      | `ur-IN` | Unreliable (84% CER; translation of the garbage text hallucinated a fabricated story) | OCR skipped — redirect to typed/voice input |
+
+**Where this is enforced:**
+
+- **WhatsApp** (`webhook/app.py`): `_OCR_RELIABLE_LANGUAGES` gates both `/whatsapp/webhook` and
+  `/webhook` — an image upload from a session whose stored language preference isn't in that set
+  is never downloaded or OCR'd at all; the user gets `_ocr_unreliable_reply()`, a localized
+  "please type the message, or use voice input instead" message, before any media/OCR/translate
+  work happens.
+- **Android**: the same 3-language allowlist gates the "Check a call/message" screen's screenshot
+  path (both the on-device ML Kit recognizer for Hindi/Marathi/English and the `CloudOcrClient`
+  cloud-Tesseract fallback for the other 9 scripts) — an unreliable-language screenshot shows the
+  same "please type or use voice" message and never reaches either OCR path.
+- **Voice input is unaffected by this table** — Sarvam STT (Android mic input via
+  `VoiceInputHelper`/`SarvamVoiceRecorder`, WhatsApp voice notes via `_transcribe_audio_sarvam`)
+  remains available for all 12 languages regardless of a language's OCR-reliability status; per
+  the STT audit above, it is in fact the better-performing input path for the 9 languages where
+  OCR is disabled, not merely a fallback of last resort.
+
+Keep this table and `webhook/app.py`'s `_OCR_RELIABLE_LANGUAGES` doc comment in sync if either
+list changes.

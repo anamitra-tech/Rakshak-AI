@@ -191,14 +191,19 @@ def _get_ocr_reader():
 
 
 _TESSDATA_DIR = os.path.join(_ROOT, "tessdata")
-_TESSERACT_SUPPORTED_LANGS = {"ben", "tam", "tel", "kan", "mal", "guj", "pan", "ori", "urd", "eng"}
+# "hin" added 2026-07-15 for _ocr_image's WhatsApp-media cascade only (see
+# its doc comment) -- CloudOcrClient.kt's tesseractLangFor() never requests
+# "hin" (Hindi/Marathi go through ML Kit's on-device Devanagari recognizer
+# on Android, never reaching this endpoint), so this is unreachable from
+# the Android /ocr/tesseract path and doesn't change its behavior.
+_TESSERACT_SUPPORTED_LANGS = {"ben", "tam", "tel", "kan", "mal", "guj", "pan", "ori", "urd", "hin", "eng"}
 # Windows install location from `winget install UB-Mannheim.TesseractOCR` --
 # not on PATH by default. Left alone (pytesseract's own PATH lookup) on
 # Linux/prod where tesseract is installed via the system package manager.
 _TESSERACT_WINDOWS_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
-def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
+def _run_tesseract_ocr_with_confidence(image_bytes: bytes, lang: str) -> tuple[str | None, float]:
     """Self-hosted OCR for the Android app's cloud-OCR fallback
     (ocr/CloudOcrClient.kt) — the 9 scripts ML Kit has no on-device
     recognizer for (Bengali/Tamil/Telugu/Kannada/Malayalam/Gujarati/Punjabi/
@@ -230,8 +235,21 @@ def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
     nothing rules out other scripts/layouts (e.g. a tightly-cropped
     single-line screenshot) hitting the same segmentation gap -- so every
     lang goes through the same cascade rather than special-casing Bengali.
+
+    Also returns Tesseract's own average per-word confidence for the
+    winning psm attempt (0.0 if nothing was found) — added for _ocr_image's
+    multi-language cascade (see its doc comment): traced live that Tesseract,
+    given an explicit `lang`, always constrains its output to that
+    language's character set, so a WRONG language still returns confident-
+    looking, script-valid garbage rather than an error or a script mismatch.
+    Confirmed on a real Punjabi test image: the correct language (pan)
+    scored avg_conf=93.0, while all 8 wrong languages scored 15-45 despite
+    each producing script-"valid" text — confidence, not script validity,
+    is what actually distinguishes a real read from forced-wrong-language
+    noise here.
     """
     import pytesseract
+    from pytesseract import Output
     from PIL import Image, ImageFile
     import io as _io
 
@@ -249,7 +267,7 @@ def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
 
     if lang not in _TESSERACT_SUPPORTED_LANGS:
         logging.error(f"_run_tesseract_ocr: unsupported lang {lang!r}")
-        return None
+        return None, 0.0
     try:
         if os.name == "nt" and os.path.exists(_TESSERACT_WINDOWS_CMD):
             pytesseract.pytesseract.tesseract_cmd = _TESSERACT_WINDOWS_CMD
@@ -258,11 +276,24 @@ def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
         for psm in (3, 6, 11, 13):
             text = pytesseract.image_to_string(pil_image, lang=lang, config=f"--psm {psm}").strip()
             if text:
-                return text
-        return None
+                data = pytesseract.image_to_data(
+                    pil_image, lang=lang, config=f"--psm {psm}", output_type=Output.DICT,
+                )
+                confs = [int(c) for c in data["conf"] if c not in ("-1", -1)]
+                avg_conf = sum(confs) / len(confs) if confs else 0.0
+                return text, avg_conf
+        return None, 0.0
     except Exception as e:
         logging.error(f"_run_tesseract_ocr failed lang={lang}: {e}")
-        return None
+        return None, 0.0
+
+
+def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
+    """Text-only convenience wrapper around
+    _run_tesseract_ocr_with_confidence for callers (the Android app's
+    /ocr/tesseract endpoint) that don't need the confidence score."""
+    text, _ = _run_tesseract_ocr_with_confidence(image_bytes, lang)
+    return text
 
 
 def _download_media(media_url: str) -> bytes | None:
@@ -286,10 +317,98 @@ _OCR_MAX_DIMENSION = 1280  # phone-camera photos (3000px+) cost real seconds of
 # 1280px on the long edge is still legible after detection/recognition.
 
 
+# The 9 scripts CloudOcrClient.kt cascades through for the Android app's
+# cloud-OCR fallback, plus "hin" (Devanagari, covers Marathi too by the same
+# ambiguous-script approximation used everywhere else in this project) --
+# real bug traced live: a Hindi WhatsApp test image was confidently
+# misread as Gujarati (guj, confidence 65.2, script-valid but semantically
+# meaningless output) with no Devanagari option in the cascade at all.
+# Android doesn't need "hin" here since ML Kit's on-device Devanagari
+# recognizer already covers Hindi/Marathi there before ever reaching this
+# server -- but this WhatsApp path has no on-device recognizer of any kind,
+# so it needs its own Devanagari coverage. hin.traineddata downloaded from
+# the same tessdata_fast source as every other language here (see
+# _run_tesseract_ocr_with_confidence's doc comment).
+_OCR_CASCADE_LANGS = ["ben", "tam", "tel", "kan", "mal", "guj", "pan", "ori", "urd", "hin"]
+_OCR_LOW_CONFIDENCE_THRESHOLD = 0.5
+# Real bug fixed 2026-07-15, traced live via an actual Punjabi WhatsApp
+# screenshot (a forwarded-attachment card: "Statement of Account6.25.zip
+# ZIP - 29 MB", a "Punjabi" filename label, and a "1:40 pm" timestamp, all
+# genuine high-confidence English UI chrome, sitting alongside the actual
+# Gurmukhi scam text EasyOCR forced through its English model). The actual
+# scam-text fragments scored 0.026 and 0.066 confidence individually -- a
+# clear forced-wrong-script misread -- but AVERAGING across all fragments
+# (the three high-confidence English chrome fragments at 0.93-0.99 each)
+# pulled the mean up to ~0.60, comfortably above _OCR_LOW_CONFIDENCE_THRESHOLD,
+# so the Tesseract cascade never even ran and the garbled EasyOCR text (which
+# is what actually reached the classifier) was returned as if it were a
+# confident, complete read. Confirmed live: the "pan" Tesseract cascade entry
+# alone scored 72.95 confidence and correctly read the real Gurmukhi message.
+# A single genuinely garbled fragment is real signal regardless of how many
+# unrelated, correctly-read English fragments (filenames/timestamps/"ZIP"/
+# "MB" labels -- near-universal in forwarded-attachment screenshots
+# regardless of the scam text's actual language) surround it, so the gate
+# now also checks the WORST individual fragment, not just the mean. 0.15 is
+# a conservative floor -- every genuinely-forced-wrong-script fragment
+# checked across the real Punjabi/Bengali/Marathi/Gujarati/Odia test images
+# scored under 0.16 (0.012-0.153), while every legitimately-read fragment
+# checked (English UI chrome, plain English test image) scored 0.68-0.996 --
+# a wide, comfortably-separated gap in the real data, not a guess.
+_OCR_MIN_FRAGMENT_CONFIDENCE_THRESHOLD = 0.15
+# Tesseract's 0-100 avg-confidence scale (see
+# _run_tesseract_ocr_with_confidence). Checked against 3 real test images:
+# correct-language confidence was 93-95 (Punjabi), 86 (Telugu), and as low
+# as 45.6 (Bengali) -- while every WRONG language attempt across all three
+# stayed at or below 45 (mostly under 33). 40 sits in the gap between the
+# lowest real match seen (45.6) and the highest wrong match seen (~45,
+# close enough to the real Bengali match that this floor is a real, if
+# imperfect, cutoff, not a hard guarantee — the highest-confidence
+# candidate is used regardless of this floor per _ocr_image's fallback
+# logic, so this only controls the log-level confidence framing, not
+# whether a Tesseract read is trusted at all.
+_TESSERACT_CASCADE_MIN_CONFIDENCE = 40.0
+
+
 def _ocr_image(image_bytes: bytes) -> str | None:
-    """Runs on-device-equivalent OCR (English/Latin script only, same scope
-    as the Android app's ScreenshotOcrHelper — no Devanagari support here
-    either) over a downloaded image. None on failure or no text found."""
+    """Runs on-device-equivalent OCR (English/Latin script via EasyOCR)
+    over a downloaded image, falling back to the same 9-language Tesseract
+    cascade CloudOcrClient.kt uses (plus Devanagari/"hin", which the
+    Android app doesn't need server-side — see _OCR_CASCADE_LANGS) when
+    EasyOCR's English-only read doesn't look confident. None on failure or
+    no text found.
+
+    Real bug traced live via an actual WhatsApp message: a Punjabi malware-
+    attachment screenshot sent to the Twilio sandbox came back as pure
+    garbage ("faayr aad feng ra &4a} & &d84 Aena...") because this function
+    only ever ran EasyOCR's English-only reader, with no fallback at all --
+    unlike the Android app's CloudOcrClient, which already cascades through
+    9 non-Latin Tesseract languages. EasyOCR forced to read Gurmukhi glyphs
+    through an English-only model produced confident-looking Latin noise,
+    not an error, so there was nothing to catch before this fix.
+
+    EasyOCR's own per-detection confidence (available via detail=1,
+    discarded before this fix by using detail=0/paragraph=True, which drops
+    confidence entirely) is a principled signal that the English read
+    wasn't right, not a heuristic guess. Below _OCR_LOW_CONFIDENCE_THRESHOLD
+    (mean) OR _OCR_MIN_FRAGMENT_CONFIDENCE_THRESHOLD (worst single fragment
+    -- see that constant's doc comment for the real dilution bug this second
+    check fixes: a forwarded-attachment screenshot's high-confidence English
+    filename/size/timestamp chrome can pull the mean above the first
+    threshold even while the actual scam text sits at near-zero confidence),
+    tries each language in _OCR_CASCADE_LANGS and picks whichever produces
+    the HIGHEST Tesseract confidence -- not whichever comes first, and NOT
+    validated by script/language of the result (tried that first; abandoned
+    it after finding, on the same real Punjabi image, that Tesseract given
+    an explicit `lang` always constrains its output to that language's
+    character set, so every wrong language ALSO produced script-"valid"
+    text for the Bengali-alphabet request, Telugu-alphabet request, etc. --
+    script validity doesn't distinguish a real read from forced-wrong-
+    language noise here, only Tesseract's own confidence does). Falls back
+    to the best (even low-confidence) Tesseract result if one was found at
+    all, since any real-script read beats a definite English-model misread
+    of non-Latin glyphs; only falls back to the original EasyOCR text when
+    literally no Tesseract candidate produced anything.
+    """
     try:
         import numpy as np
         from PIL import Image, ImageFile
@@ -307,9 +426,51 @@ def _ocr_image(image_bytes: bytes) -> str | None:
 
         image = np.array(pil_image)
         reader = _get_ocr_reader()
-        lines = reader.readtext(image, detail=0, paragraph=True)
-        text = " ".join(line.strip() for line in lines if line.strip())
-        return text or None
+        detections = reader.readtext(image, detail=1, paragraph=False)
+        easy_text = " ".join(t.strip() for _, t, _ in detections if t.strip())
+        confidences = [c for _, _, c in detections]
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        min_confidence = min(confidences) if confidences else 0.0
+
+        if (
+            easy_text
+            and avg_confidence >= _OCR_LOW_CONFIDENCE_THRESHOLD
+            and min_confidence >= _OCR_MIN_FRAGMENT_CONFIDENCE_THRESHOLD
+        ):
+            return easy_text
+
+        logging.info(
+            f"_ocr_image: EasyOCR result low-confidence (avg={avg_confidence:.2f}, "
+            f"min={min_confidence:.2f}, text={easy_text!r}), trying Tesseract cascade"
+        )
+        best_lang, best_text, best_conf = None, None, -1.0
+        for tess_lang in _OCR_CASCADE_LANGS:
+            candidate, conf = _run_tesseract_ocr_with_confidence(image_bytes, tess_lang)
+            if not candidate:
+                continue
+            if conf > best_conf:
+                best_lang, best_text, best_conf = tess_lang, candidate, conf
+
+        # Real bug fixed here: a real Bengali test image's correct match
+        # (ben) scored only 45.6 confidence -- comfortably the best of the
+        # 9 (next-highest was 32.0), but below an earlier, too-tight fixed
+        # threshold, which fell back to EasyOCR's English-model garbage
+        # instead of preferring the best (even if not "confident enough")
+        # Tesseract candidate. Any real Tesseract read beats a definite
+        # English-model misread of non-Latin glyphs -- only fall back to
+        # EasyOCR's text when NO Tesseract candidate produced anything at
+        # all.
+        if best_text is not None:
+            if best_conf >= _TESSERACT_CASCADE_MIN_CONFIDENCE:
+                logging.info(f"_ocr_image: Tesseract cascade picked lang={best_lang} confidence={best_conf:.1f}")
+            else:
+                logging.info(
+                    f"_ocr_image: Tesseract cascade best guess lang={best_lang} "
+                    f"confidence={best_conf:.1f} (below floor, using anyway over EasyOCR)"
+                )
+            return best_text
+
+        return easy_text or None
     except Exception as e:
         logging.error(f"_ocr_image failed: {e}")
         return None
@@ -551,11 +712,17 @@ _AUDIO_UNANALYZED_HI = (
 )
 
 
-def _audio_unanalyzed_reply(lang: str) -> str:
-    if lang == "en":
+def _audio_unanalyzed_reply(lang_tag: str) -> str:
+    """`lang_tag` is the user's STORED language preference (one of the 12
+    BCP-47 tags in _LANGUAGE_MENU), same decoupling as _reply_in_preference —
+    not whatever language the (failed) voice message happened to be in."""
+    if lang_tag == "en-IN":
         return "⚠️ COULD NOT ANALYZE\n" + _AUDIO_UNANALYZED_EN
-    if lang == "hi":
+    if lang_tag == "hi-IN":
         return "⚠️ जांच नहीं हो पाई\n" + _AUDIO_UNANALYZED_HI
+    translated = _translate_text_sarvam(_AUDIO_UNANALYZED_EN, "en-IN", _to_sarvam_lang_code(lang_tag))
+    if translated:
+        return "⚠️ COULD NOT ANALYZE\n" + translated
     return "⚠️ COULD NOT ANALYZE / जांच नहीं हो पाई\n" + _AUDIO_UNANALYZED_EN + "\n\n" + _AUDIO_UNANALYZED_HI
 
 
@@ -610,19 +777,88 @@ _ACTION_HI = {
 
 # In-memory per-number language preference — same pattern as bot.agent's
 # _sessions (no DB layer exists anywhere in this project; consistent with
-# that). "en" | "hi" | "both" (default).
+# that). Keyed by session_id (WhatsApp number), valued by one of the 12
+# BCP-47 tags in _LANGUAGE_MENU below. Shared across both WhatsApp routes
+# (/whatsapp/webhook and /webhook) so a preference set via either one is
+# honored by both, since Twilio's session_id (From.replace("whatsapp:", ""))
+# is computed identically in both handlers.
 _lang_prefs: dict[str, str] = {}
-# Excludes U+0964/U+0965 (danda / double danda) -- see _SCRIPT_RANGES' doc
-# comment above: those two codepoints live in the Devanagari block but are
-# shared punctuation reused by several other Brahmic scripts (Bengali in
-# particular), so a naive full-block check misclassifies a Bengali message
-# ending in "।" as Hindi for this reply-language-preference system too.
-_DEVANAGARI_RE = re.compile(r"[ऀ-ॣ०-ॿ]")
-_LANG_COMMANDS = {
-    "english": "en", "eng": "en",
-    "hindi": "hi", "hi": "hi", "hindi mein": "hi",
-    "both": "both", "donon": "both", "दोनों": "both",
-}
+
+# Same 12 target languages/BCP-47 tags as the Android app's
+# FamilySetupActivity.spokenLanguages and SarvamLanguageCodes, reordered
+# Hindi-first/English-second for this first-contact WhatsApp menu — Android's
+# Spinner stays English-first, a distinct UI convention for a calm, one-time
+# family-setup screen, not a first-contact chat prompt (CLAUDE.md 9.2).
+_LANGUAGE_MENU: list[tuple[str, str, str]] = [
+    ("hi-IN", "हिन्दी", "Hindi"),
+    ("en-IN", "English", "English"),
+    ("bn-IN", "বাংলা", "Bengali"),
+    ("mr-IN", "मराठी", "Marathi"),
+    ("te-IN", "తెలుగు", "Telugu"),
+    ("ta-IN", "தமிழ்", "Tamil"),
+    ("gu-IN", "ગુજરાતી", "Gujarati"),
+    ("ur-IN", "اردو", "Urdu"),
+    ("kn-IN", "ಕನ್ನಡ", "Kannada"),
+    ("ml-IN", "മലയാളം", "Malayalam"),
+    ("pa-IN", "ਪੰਜਾਬੀ", "Punjabi"),
+    ("or-IN", "ଓଡ଼ିଆ", "Odia"),
+]
+
+_LANGUAGE_INTRO = (
+    "🛡️ *Namaste! I'm AbhayAI.*\n\n"
+    "Apni bhasha chuniye / Please select your language:\n\n"
+    + "\n".join(
+        f"{i}. {native}" if native == english else f"{i}. {native} ({english})"
+        for i, (_tag, native, english) in enumerate(_LANGUAGE_MENU, start=1)
+    )
+    + "\n\nReply with a number (1-12) to select your language."
+)
+
+# Built from _LANGUAGE_MENU so it can never drift out of sync with it: each
+# language is selectable by its menu number, its English name, or its native
+# self-name (all lowercased for matching).
+_LANGUAGE_ALIASES: dict[str, str] = {}
+for _i, (_tag, _native, _english) in enumerate(_LANGUAGE_MENU, start=1):
+    _LANGUAGE_ALIASES[str(_i)] = _tag
+    _LANGUAGE_ALIASES[_english.lower()] = _tag
+    _LANGUAGE_ALIASES[_native.lower()] = _tag
+
+
+def _to_sarvam_lang_code(tag: str) -> str:
+    """Mirrors the Android app's SarvamLanguageCodes.toSarvamCode: Sarvam
+    uses "od-IN" for Odia, not the standard BCP-47 "or-IN" this project's
+    preference store otherwise uses throughout."""
+    return "od-IN" if tag.lower() == "or-in" else tag
+
+
+def _parse_language_selection(text: str) -> str | None:
+    """None if `text` isn't a recognized language-selection reply (a menu
+    number 1-12, an English language name, or a native self-name); else the
+    selected BCP-47 tag."""
+    return _LANGUAGE_ALIASES.get(text.strip().lower())
+
+
+def _language_confirmation_reply(lang_tag: str) -> str:
+    english_name = next(english for tag, _native, english in _LANGUAGE_MENU if tag == lang_tag)
+    confirmation = (
+        f"Language set to {english_name}. "
+        "You can now send a suspicious call, message, or screenshot and I'll check it for you."
+    )
+    if lang_tag == "en-IN":
+        return confirmation
+    translated = _translate_text_sarvam(confirmation, "en-IN", _to_sarvam_lang_code(lang_tag))
+    return translated or confirmation
+
+
+def _send_whatsapp_reply(to: str, body: str) -> None:
+    if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN):
+        logging.error(f"TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN not set — reply computed but not sent: {body!r}")
+        return
+    try:
+        client = TwilioRestClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        client.messages.create(from_=TWILIO_WHATSAPP_FROM, to=to, body=body)
+    except Exception as e:
+        logging.error(f"_send_whatsapp_reply failed: {e}")
 
 # In-memory per-number "last verdict shown" — same no-DB-layer pattern as
 # _lang_prefs above. Holds just enough to log a correction if the very next
@@ -648,19 +884,6 @@ def _resolve_feedback(text: str) -> bool | None:
     return None
 
 
-def _resolve_language(session_id: str, text: str) -> str:
-    stripped = text.strip().lower()
-    if stripped in _LANG_COMMANDS:
-        _lang_prefs[session_id] = _LANG_COMMANDS[stripped]
-        return _lang_prefs[session_id]
-    if session_id in _lang_prefs:
-        return _lang_prefs[session_id]
-    if _DEVANAGARI_RE.search(text):
-        _lang_prefs[session_id] = "hi"
-        return "hi"
-    return "both"
-
-
 def _decide(text_analysis: dict, session_analysis: dict) -> dict:
     """Mirrors android/.../intelligence/DecisionAgent.kt's decide(), minus the
     phone-lookup signal (no CNAP/Sanchar Saathi source for a WhatsApp number)."""
@@ -678,35 +901,118 @@ def _decide(text_analysis: dict, session_analysis: dict) -> dict:
 
 
 def _build_reply(decision: dict, lang: str) -> str:
+    """Builds the plain English ("en") or hardcoded Hindi ("hi") template
+    reply. Every other target language is produced by _reply_in_preference
+    translating the "en" build via Sarvam instead of a hardcoded template."""
     level = decision["risk_level"]
     tag, headline_en, headline_hi = _HEADLINES[level]
     action_en, action_hi = _ACTION_EN[level], _ACTION_HI[level]
     reasons = decision["reasons"]
 
     lines = [tag]
-    if lang == "en":
-        lines.append(headline_en)
-    elif lang == "hi":
-        lines.append(headline_hi)
-    else:
-        lines.append(headline_en)
-        lines.append(headline_hi)
+    lines.append(headline_hi if lang == "hi" else headline_en)
 
     if reasons:
         lines.append("")
-        lines.append("Why / क्यों:" if lang == "both" else ("Why:" if lang == "en" else "क्यों:"))
+        lines.append("क्यों:" if lang == "hi" else "Why:")
         lines.extend(f"• {r}" for r in reasons)
 
     lines.append("")
-    if lang == "en":
-        lines.append(action_en)
-    elif lang == "hi":
-        lines.append(action_hi)
-    else:
-        lines.append(action_en)
-        lines.append(action_hi)
+    lines.append(action_hi if lang == "hi" else action_en)
 
     return "\n".join(lines)
+
+
+def _reply_in_preference(decision: dict, lang_tag: str) -> str:
+    """Builds the WhatsApp risk-verdict reply in the user's STORED language
+    preference — decoupled entirely from whatever language the input
+    (message text or OCR'd/transcribed media) was actually in. Previously
+    this mirrored the input's detected script (translated_source_lang /
+    general_native_lang), so a Tamil screenshot from a user who had
+    selected Hindi got a Tamil reply instead of Hindi — this is the fix."""
+    if lang_tag == "en-IN":
+        return _build_reply(decision, "en")
+
+    if lang_tag == "hi-IN":
+        translated_reasons = [_translate_text_sarvam(r, "en-IN", "hi-IN") for r in decision["reasons"]]
+        if not decision["reasons"] or all(translated_reasons):
+            return _build_reply({**decision, "reasons": translated_reasons}, "hi")
+        logging.info("whatsapp | reason translate-to-Hindi failed, using Hindi headline/English reasons")
+        return _build_reply(decision, "hi")
+
+    # Every other target language has no hardcoded template -- translate the
+    # whole English reply via Sarvam, same best-effort/English-fallback
+    # pattern used throughout this file.
+    english_reply = _build_reply(decision, "en")
+    translated = _translate_text_sarvam(english_reply, "en-IN", _to_sarvam_lang_code(lang_tag))
+    if translated:
+        return translated
+    logging.info(f"whatsapp | reply translate to {lang_tag} failed, sending English reply")
+    return english_reply
+
+
+def _translate_reply_to_preference(reply_text: str, lang_tag: str) -> str:
+    """/webhook's twin of _reply_in_preference: chat()'s reply is a single
+    free-form string (no structured reasons list to special-case), so this
+    just translates the whole thing into the user's STORED preference —
+    never whatever language the input happened to be in. English
+    preference is returned as-is; any translation failure falls back to
+    the original (English/Hinglish) text rather than blocking."""
+    if lang_tag == "en-IN":
+        return reply_text
+    translated = _translate_text_sarvam(reply_text, "en-IN", _to_sarvam_lang_code(lang_tag))
+    return translated or reply_text
+
+
+# Real, measured OCR-accuracy audit (2026-07-15, rendered clean ground-truth
+# text through the actual production _ocr_image pipeline, one real scam
+# sentence per language): only English, Hindi, and Marathi came back
+# reliable (CER under 8%, correct FRAUD classification). The other 9 -- most
+# of which route through Tesseract's non-Latin cascade -- ranged from
+# "directionally right but under-called" (Bengali/Gujarati/Kannada/
+# Malayalam/Punjabi/Odia landed SUSPICIOUS, not FRAUD, on a textbook scam
+# script) to genuinely broken (Telugu/Tamil scored REAL -- a false
+# negative -- and Urdu's 84% character error rate was bad enough that
+# Sarvam's translation of the garbage OCR text didn't just mistranslate, it
+# hallucinated a fabricated, unrelated story).
+#
+# 2026-07-16 re-verification: a prior version of this comment claimed a
+# gTTS-generated-audio STT test had already confirmed Sarvam STT as the
+# reliable replacement path, with specific per-language scores -- but no
+# test script, audio file, or log for that claim survived anywhere in this
+# repo, so it was re-run for real instead of trusted as-is (a one-off verification
+# script, not committed / not part of the app). Real, measured result for
+# the three worst
+# OCR failures specifically: a real digital-arrest-scam ground-truth
+# sentence per language (native script) -> gTTS audio -> the actual
+# _transcribe_audio_sarvam() (mode=translate, unmocked, live Sarvam API) ->
+# ScamDetector.predict() on the returned transcript. Telugu: transcript
+# matched the ground truth almost word-for-word, FRAUD score=1.0. Tamil:
+# transcript matched almost word-for-word, FRAUD score=0.713 (a real FRAUD
+# verdict, not merely SUSPICIOUS). Urdu: transcript matched (CBI expanded to
+# "Central Bureau of Investigation" but meaning intact), FRAUD score=1.0. A
+# follow-up benign-message sanity check (a harmless "coming home for dinner"
+# sentence, same three languages) transcribed accurately and correctly
+# scored SAFE (0.39-0.43) in all three -- ruling out the STT path just
+# always outputting scam-shaped text regardless of input. Net: Sarvam STT is
+# a substantially more reliable path than OCR for these languages, evidence
+# now real rather than assumed. Mirrored in CLAUDE.md's "OCR reliability by
+# language" table -- keep both in sync if this list changes.
+_OCR_RELIABLE_LANGUAGES = {"en-IN", "hi-IN", "mr-IN"}
+
+_OCR_UNRELIABLE_TEMPLATE_EN = (
+    "Text recognition for {language} isn't reliable enough yet — please type the message, "
+    "or use voice input instead."
+)
+
+
+def _ocr_unreliable_reply(lang_tag: str) -> str:
+    english_name = next(english for tag, _native, english in _LANGUAGE_MENU if tag == lang_tag)
+    message = _OCR_UNRELIABLE_TEMPLATE_EN.format(language=english_name)
+    if lang_tag == "en-IN":
+        return message
+    translated = _translate_text_sarvam(message, "en-IN", _to_sarvam_lang_code(lang_tag))
+    return translated or message
 
 
 @app.post("/whatsapp/webhook")
@@ -720,6 +1026,43 @@ async def whatsapp_webhook(
     session_id = From.replace("whatsapp:", "")
     try:
         text = Body.strip()
+
+        # First-contact / language-change gate, before any media/OCR work or
+        # classification: a bare menu number or language name (English name
+        # or native self-name) always sets/changes the stored preference and
+        # short-circuits with a confirmation, whether this is the user's
+        # very first message or a later request to switch language. A
+        # session with no stored preference yet gets the selection menu
+        # instead of having its message silently classified in the wrong
+        # (or no) language.
+        selected_tag = _parse_language_selection(text)
+        if selected_tag:
+            _lang_prefs[session_id] = selected_tag
+            _send_whatsapp_reply(From, _language_confirmation_reply(selected_tag))
+            logging.info(f"whatsapp session={session_id} | language set to {selected_tag}")
+            return Response(content="", media_type="application/xml")
+        if session_id not in _lang_prefs:
+            _send_whatsapp_reply(From, _LANGUAGE_INTRO)
+            logging.info(f"whatsapp session={session_id} | first contact, sent language menu")
+            return Response(content="", media_type="application/xml")
+        lang_tag = _lang_prefs[session_id]
+
+        # Real, measured OCR-accuracy gate (see _OCR_RELIABLE_LANGUAGES' doc
+        # comment): for the 9 languages where OCR was proven unreliable
+        # (under-called or outright false-negative on a textbook scam
+        # screenshot), never run OCR and classify whatever garbage comes out
+        # of it -- that's exactly the silently-wrong-verdict failure mode
+        # audited today. Redirect to typed/voice input instead, before
+        # spending any OCR/translate/classify work on the image at all.
+        if (
+            NumMedia != "0"
+            and MediaContentType0.lower().startswith("image/")
+            and lang_tag not in _OCR_RELIABLE_LANGUAGES
+        ):
+            _send_whatsapp_reply(From, _ocr_unreliable_reply(lang_tag))
+            logging.info(f"whatsapp session={session_id} | image upload blocked, OCR unreliable for {lang_tag}")
+            return Response(content="", media_type="application/xml")
+
         media_descriptor = None
         audio_unanalyzed = False
         if NumMedia != "0":
@@ -734,20 +1077,12 @@ async def whatsapp_webhook(
                 media_descriptor = _media_descriptor(MediaUrl0, MediaContentType0)
             logging.info(f"whatsapp session={session_id} | media_descriptor={media_descriptor!r}")
 
-        # Feedback/language resolution intentionally use the raw caption
-        # (`text`), not classify_text — a media descriptor is never
-        # something the user typed and must never be misread as a feedback
-        # command or a language-detection signal.
-        lang = _resolve_language(session_id, text)
-
         # An audio message that failed to transcribe must never be silently
         # classified off just its filename note — see _AUDIO_UNANALYZED_EN's
         # doc comment for the real false-SAFE-verdict bug this replaces.
         if audio_unanalyzed:
-            reply = _audio_unanalyzed_reply(lang)
-            if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
-                client = TwilioRestClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-                client.messages.create(from_=TWILIO_WHATSAPP_FROM, to=From, body=reply)
+            reply = _audio_unanalyzed_reply(lang_tag)
+            _send_whatsapp_reply(From, reply)
             logging.info(f"whatsapp session={session_id} | audio unanalyzed, sent honest could-not-process reply")
             return Response(content="", media_type="application/xml")
 
@@ -788,10 +1123,15 @@ async def whatsapp_webhook(
             )
             del _last_verdict[session_id]
 
-            thanks = "Thanks — recorded." if lang != "hi" else "धन्यवाद — दर्ज कर लिया गया।"
-            if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
-                client = TwilioRestClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-                client.messages.create(from_=TWILIO_WHATSAPP_FROM, to=From, body=thanks)
+            if lang_tag == "en-IN":
+                thanks = "Thanks — recorded."
+            elif lang_tag == "hi-IN":
+                thanks = "धन्यवाद — दर्ज कर लिया गया।"
+            else:
+                thanks = _translate_text_sarvam(
+                    "Thanks — recorded.", "en-IN", _to_sarvam_lang_code(lang_tag)
+                ) or "Thanks — recorded."
+            _send_whatsapp_reply(From, thanks)
             logging.info(f"whatsapp session={session_id} | feedback logged | correction={user_correction}")
             return Response(content="", media_type="application/xml")
 
@@ -807,23 +1147,33 @@ async def whatsapp_webhook(
         # language's native script was a separate, lower-priority gap. It
         # isn't -- ml.detector has zero native-script training data for any
         # of them. _detect_native_script_lang checks all 12 scripts, not
-        # just Devanagari. Only the caption (`text`) is translated here, not
-        # the already-English media_descriptor (OCR'd image text in a
-        # non-Latin script is a separate, still-open gap -- _ocr_image is
-        # Latin-script EasyOCR, unrelated to this fix; Sarvam STT audio is
-        # already English via mode=translate, see _transcribe_audio_sarvam).
-        # Falls back to the untranslated caption on any translation failure
-        # rather than blocking the whole check.
+        # just Devanagari.
+        #
+        # Real bug fixed 2026-07-15: this used to detect/translate script
+        # only in the caption (`text`), never in `media_descriptor` (OCR'd
+        # image text), on the assumption that _ocr_image was Latin-script
+        # EasyOCR only and native-script OCR output was "a separate,
+        # still-open gap." That assumption stopped being true once
+        # _ocr_image gained its Tesseract cascade for the 10 non-Latin
+        # scripts (see _ocr_image's doc comment) -- confirmed live with a
+        # real Hindi bank-KYC scam screenshot: OCR correctly extracted
+        # "आपका बैंक खाता 24 घंटे में ब्लॉक हो जाएगा, तुरंत OTP भेजें" into
+        # media_descriptor, but with no caption at all (`text` == ""),
+        # _detect_native_script_lang(text) returned None and the whole
+        # Devanagari OCR text reached ml.detector's Latin-only patterns
+        # completely untranslated, scoring a confident SAFE/REAL verdict on
+        # an actual scam message. Now detects/translates across the full
+        # classify_text (caption + media_descriptor together), not the
+        # caption alone. Falls back to the untranslated text on any
+        # translation failure rather than blocking the whole check.
         text_for_detector = classify_text
-        translated_this_turn = False
-        translated_source_lang = _detect_native_script_lang(text)
+        translated_source_lang = _detect_native_script_lang(classify_text)
         if translated_source_lang:
-            translated_caption = _translate_text_sarvam(text, translated_source_lang, "en-IN")
-            if translated_caption:
-                text_for_detector = " ".join(p for p in (translated_caption, media_descriptor) if p)
-                translated_this_turn = True
+            translated_text = _translate_text_sarvam(classify_text, translated_source_lang, "en-IN")
+            if translated_text:
+                text_for_detector = translated_text
                 logging.info(
-                    f"whatsapp session={session_id} | translated caption "
+                    f"whatsapp session={session_id} | translated classify_text "
                     f"({translated_source_lang}) to English for classification"
                 )
             else:
@@ -833,43 +1183,13 @@ async def whatsapp_webhook(
         session_analysis = SESSION.ingest(session_id, text_for_detector)
         decision = _decide(text_analysis, session_analysis)
 
-        # Translate the reasons back to Hindi before building the reply --
-        # the reply-side twin of the translate-in step above, reusing the
-        # same Sarvam /translate call (mirrors the Android app's
-        # translateFromEnglish step in CheckCallActivity.kt's runAnalysis,
-        # which was flagged as unused dead code before this). Scoped to
-        # lang == "hi": the "both" bilingual reply already shows the English
-        # reasons as part of its dual-language format, and translating them
-        # there is a separate, unrequested design decision.
-        reply_decision = decision
-        if translated_this_turn and lang == "hi":
-            translated_reasons = [_translate_text_sarvam(r, "en-IN", "hi-IN") for r in decision["reasons"]]
-            if all(translated_reasons):
-                reply_decision = {**decision, "reasons": translated_reasons}
-            else:
-                logging.info(f"whatsapp session={session_id} | reason translate-back failed, using English reasons")
-
-        # _build_reply only has hardcoded templates for "en"/"hi"/"both" --
-        # for the other 9 native scripts (Bengali, Tamil, Telugu, Kannada,
-        # Malayalam, Gujarati, Punjabi, Odia, Urdu; Marathi routes to hi-IN
-        # above per the same Devanagari-ambiguity approximation the Android
-        # app makes), build the plain-English reply (not the en+hi bilingual
-        # default -- a Tamil sender doesn't need Hindi mixed in) and
-        # translate the whole thing via Sarvam, same best-effort/English-
-        # fallback pattern as the hi-specific reasons translation above.
-        general_native_lang = (
-            translated_source_lang
-            if translated_this_turn and translated_source_lang not in ("hi-IN", "en-IN")
-            else None
-        )
-        reply = _build_reply(reply_decision, "en" if general_native_lang else lang)
-        if general_native_lang:
-            translated_reply = _translate_text_sarvam(reply, "en-IN", general_native_lang)
-            if translated_reply:
-                reply = translated_reply
-                logging.info(f"whatsapp session={session_id} | translated full reply to {general_native_lang}")
-            else:
-                logging.info(f"whatsapp session={session_id} | full-reply translate-back failed, sending English reply")
+        # Reply language is the user's STORED preference (lang_tag), never
+        # whatever language the input happened to be in — see
+        # _reply_in_preference's doc comment for the bug this replaces (a
+        # Tamil screenshot from a Hindi-preference user used to get a Tamil
+        # reply because this used to key off translated_source_lang/
+        # general_native_lang, the *input's* detected script, instead).
+        reply = _reply_in_preference(decision, lang_tag)
 
         _last_verdict[session_id] = {
             "original_text": classify_text,
@@ -879,17 +1199,10 @@ async def whatsapp_webhook(
 
         logging.info(
             f"whatsapp session={session_id} | risk={decision['risk_level']} | "
-            f"active_session={session_analysis.get('active_scam_session')} | lang={lang}"
+            f"active_session={session_analysis.get('active_scam_session')} | lang={lang_tag}"
         )
 
-        if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
-            client = TwilioRestClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-            client.messages.create(from_=TWILIO_WHATSAPP_FROM, to=From, body=reply)
-        else:
-            logging.error(
-                "TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN not set — reply computed but not sent: "
-                f"{reply!r}"
-            )
+        _send_whatsapp_reply(From, reply)
     except Exception as e:
         logging.error(f"whatsapp_webhook error for session={session_id}: {e}")
 
@@ -1054,7 +1367,38 @@ async def webhook(
     # /whatsapp/webhook and /health which don't need it at all.
     from bot.agent import chat, _sessions
 
+    session_id = From.replace("whatsapp:", "")
     try:
+        text = Body.strip()
+
+        # Same first-contact / language-change gate as /whatsapp/webhook
+        # (shared _lang_prefs store, keyed identically off session_id) —
+        # see that handler's matching doc comment for why this runs before
+        # any media/OCR work or classification.
+        selected_tag = _parse_language_selection(text)
+        if selected_tag:
+            _lang_prefs[session_id] = selected_tag
+            _send_whatsapp_reply(From, _language_confirmation_reply(selected_tag))
+            logging.info(f"webhook session={session_id} | language set to {selected_tag}")
+            return Response(content="", media_type="application/xml")
+        if session_id not in _lang_prefs:
+            _send_whatsapp_reply(From, _LANGUAGE_INTRO)
+            logging.info(f"webhook session={session_id} | first contact, sent language menu")
+            return Response(content="", media_type="application/xml")
+        lang_tag = _lang_prefs[session_id]
+
+        # Same real, measured OCR-reliability gate as /whatsapp/webhook --
+        # see _OCR_RELIABLE_LANGUAGES' doc comment for the audit this is
+        # based on.
+        if (
+            NumMedia != "0"
+            and MediaContentType0.lower().startswith("image/")
+            and lang_tag not in _OCR_RELIABLE_LANGUAGES
+        ):
+            _send_whatsapp_reply(From, _ocr_unreliable_reply(lang_tag))
+            logging.info(f"webhook session={session_id} | image upload blocked, OCR unreliable for {lang_tag}")
+            return Response(content="", media_type="application/xml")
+
         # Same real gap as /whatsapp/webhook (see _media_descriptor's doc
         # comment): without this, an attachment's filename/extension never
         # reached chat() -> ScamDetector.predict() either. As of 2026-07-13,
@@ -1073,56 +1417,53 @@ async def webhook(
         # Space-joined, not newline-joined — see /whatsapp/webhook's
         # classify_text for why (HIGH_RISK_PATTERNS' gap patterns don't
         # cross a "\n" by default).
-        classify_text = " ".join(p for p in (Body.strip(), media_descriptor) if p)
+        classify_text = " ".join(p for p in (text, media_descriptor) if p)
         if audio_unanalyzed:
             # Same real bug as /whatsapp/webhook (see _AUDIO_UNANALYZED_EN's
             # doc comment) — never let chat() classify off a bare filename
             # note when the actual speech was never transcribed.
-            reply = _audio_unanalyzed_reply("both")
+            reply = _audio_unanalyzed_reply(lang_tag)
         elif not classify_text:
-            reply = "Please send a message."
+            reply = _translate_reply_to_preference("Please send a message.", lang_tag)
         else:
-            session_id = From.replace("whatsapp:", "")
-
             # Same real bug as /whatsapp/webhook (see that handler's matching
             # doc comment), generalized the same way: chat() ->
             # retrieve_and_respond() -> ScamDetector.predict() only ever
             # sees Latin-script Hinglish patterns (including
             # malware_attachment_delivery) -- a genuine native-script Body,
             # in any of the 12 target languages (not just Devanagari Hindi),
-            # never matched anything. Translate the caption portion to
-            # English before calling chat(); translate the reply back
-            # afterward into whatever script was actually detected, reusing
-            # the same Sarvam /translate call both directions (mirrors the
-            # Android app's translateToEnglish/translateFromEnglish pair in
-            # CheckCallActivity.kt's runAnalysis). Falls back to the
-            # untranslated text/reply on any translation failure rather than
-            # blocking the whole check.
+            # never matched anything. Translates across the full
+            # classify_text (caption + media_descriptor together), not the
+            # caption alone -- same real bug (and fix) as /whatsapp/webhook:
+            # OCR'd image text can now itself be native-script (Tesseract
+            # cascade, see _ocr_image), and a media-only message with no
+            # caption at all used to skip translation entirely since
+            # _detect_native_script_lang(text) on an empty caption always
+            # returns None. Mirrors the Android app's translateToEnglish step
+            # in CheckCallActivity.kt's runAnalysis. Falls back to the
+            # untranslated text on translation failure rather than blocking
+            # the whole check.
             text_for_chat = classify_text
-            translated_this_turn = False
-            translated_source_lang = _detect_native_script_lang(Body)
+            translated_source_lang = _detect_native_script_lang(classify_text)
             if translated_source_lang:
-                translated_caption = _translate_text_sarvam(Body.strip(), translated_source_lang, "en-IN")
-                if translated_caption:
-                    text_for_chat = " ".join(p for p in (translated_caption, media_descriptor) if p)
-                    translated_this_turn = True
+                translated_text = _translate_text_sarvam(classify_text, translated_source_lang, "en-IN")
+                if translated_text:
+                    text_for_chat = translated_text
                     logging.info(
-                        f"webhook session={session_id} | translated caption "
+                        f"webhook session={session_id} | translated classify_text "
                         f"({translated_source_lang}) to English for chat()"
                     )
                 else:
                     logging.info(f"webhook session={session_id} | translation failed, chatting with untranslated text")
 
             result = chat(session_id, text_for_chat)
-            reply = result["answer"]
 
-            if translated_this_turn:
-                translated_reply = _translate_text_sarvam(reply, "en-IN", translated_source_lang)
-                if translated_reply:
-                    reply = translated_reply
-                    logging.info(f"webhook session={session_id} | translated reply back to {translated_source_lang}")
-                else:
-                    logging.info(f"webhook session={session_id} | reply translate-back failed, sending English reply")
+            # Reply language is the user's STORED preference (lang_tag),
+            # never whatever language the input was in -- see
+            # _translate_reply_to_preference's doc comment for the bug this
+            # replaces (this used to translate back into
+            # translated_source_lang, the *input's* detected script).
+            reply = _translate_reply_to_preference(result["answer"], lang_tag)
 
             # ADDITION 3 — store Twilio geo metadata for graph indexing
             twilio_metadata = {
@@ -1157,14 +1498,7 @@ async def webhook(
     # reply is delivered as soon as it's computed, regardless of whether
     # Twilio is still waiting on the original webhook connection.
     reply = reply.strip('"').strip("'")
-    if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
-        try:
-            client = TwilioRestClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-            client.messages.create(from_=TWILIO_WHATSAPP_FROM, to=From, body=reply)
-        except Exception as e:
-            logging.error(f"webhook reply send failed: {e}")
-    else:
-        logging.error(f"TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN not set — reply computed but not sent: {reply!r}")
+    _send_whatsapp_reply(From, reply)
 
     return Response(content="", media_type="application/xml")
 

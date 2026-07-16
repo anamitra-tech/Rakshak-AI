@@ -58,9 +58,7 @@
     <string name="check_call_screenshot_no_text_found">Couldn\'t find any readable text in that image. Please type or paste the message instead.</string>
     <string name="check_call_screenshot_failed">Couldn\'t read that image (%1$s). Please type or paste the message instead.</string>
     <string name="check_call_screenshot_success">Text extracted from the screenshot — review it below before checking.</string>
-    <string name="check_call_screenshot_cloud_processing">This language needs an internet connection to read — trying online…</string>
-    <string name="check_call_screenshot_needs_internet">Text extraction for this language needs an internet connection. Please connect and try again, or type/paste the message instead.</string>
-    <string name="check_call_screenshot_cloud_failed">Couldn\'t read that image online (%1$s). Please type or paste the message instead.</string>
+    <string name="check_call_screenshot_ocr_unreliable">Text recognition for %1$s isn\'t reliable enough yet — please type the message, or use voice input instead.</string>
 
     <string name="warning_notification_title">AbhayAI warning</string>
     <string name="warning_channel_name">Call warnings</string>

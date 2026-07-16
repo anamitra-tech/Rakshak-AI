@@ -18,9 +18,12 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
  *
  * ML Kit v2 has NO recognizer at all — not a config gap, a hard product
  * limitation — for Bengali, Tamil, Telugu, Kannada, Malayalam, Gujarati,
- * Gurmukhi (Punjabi), Odia, or Perso-Arabic (Urdu) scripts. For those,
- * [ScriptFamily.NONE] tells the caller to fall back to [ocr.CloudOcrClient]
- * (online-only) rather than silently returning nothing.
+ * Gurmukhi (Punjabi), Odia, or Perso-Arabic (Urdu) scripts. [ScriptFamily.NONE]
+ * tells the caller so it can react explicitly rather than silently getting
+ * nothing back — as of 2026-07-16 `CheckCallActivity` treats NONE as
+ * "OCR unreliable for this language, redirect to typed/voice input" (CLAUDE.md
+ * Section 13), not "try the online OCR fallback" ([ocr.CloudOcrClient], left
+ * in place but currently unreferenced — see its doc comment).
  */
 object ScreenshotOcrHelper {
     private const val TAG = "ScreenshotOcrHelper"
@@ -55,9 +58,10 @@ object ScreenshotOcrHelper {
          *  which means the recognizer itself errored. */
         fun onNoTextFound()
         fun onFailure(message: String)
-        /** Neither on-device recognizer applies to [preferredScript] — caller
-         *  should try [ocr.CloudOcrClient] if online, or show the honest
-         *  offline-unavailable message if not. */
+        /** Neither on-device recognizer applies to [preferredScript] — as of
+         *  2026-07-16 (CLAUDE.md Section 13) callers treat this as "OCR is
+         *  unreliable for this language," redirecting to typed/voice input,
+         *  rather than trying an online OCR fallback. */
         fun onScriptNotSupportedOnDevice()
     }
 
