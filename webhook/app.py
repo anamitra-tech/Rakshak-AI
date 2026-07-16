@@ -8,7 +8,7 @@ from email.message import EmailMessage
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI, Request, Form, File, UploadFile
+from fastapi import FastAPI, Request, Form, File, UploadFile, BackgroundTasks
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from twilio.rest import Client as TwilioRestClient
@@ -1015,64 +1015,81 @@ def _ocr_unreliable_reply(lang_tag: str) -> str:
     return translated or message
 
 
-@app.post("/whatsapp/webhook")
-async def whatsapp_webhook(
-    Body: str = Form(default=""),
-    From: str = Form(default=""),
-    NumMedia: str = Form(default="0"),
-    MediaUrl0: str = Form(default=""),
-    MediaContentType0: str = Form(default=""),
-):
-    session_id = From.replace("whatsapp:", "")
+_ANALYZING_IMAGE_TEMPLATE_EN = "Analyzing your image, one moment…"
+_ANALYZING_AUDIO_TEMPLATE_EN = "Analyzing your voice message, one moment…"
+
+
+def _analyzing_reply(lang_tag: str, is_audio: bool) -> str:
+    """Sent immediately, before any OCR/STT/translate/classify work starts,
+    for any media message that reaches this far (i.e. wasn't already
+    redirected by the OCR-reliability gate above). Real, live-observed bug
+    this exists for (2026-07-16): a real WhatsApp image needing the full
+    EasyOCR->Tesseract-cascade->Sarvam-translate chain took 35s+, and that
+    one specific message got NO reply at all, not even the usual delayed
+    async one -- Twilio's own message log confirmed total silence, worse
+    than a wrong answer. Sending this first guarantees the user sees
+    *something* immediately, independent of whether the slow work that
+    follows (now itself backgrounded -- see _process_whatsapp_message's doc
+    comment) finishes, is delayed, or is later found to have failed."""
+    message = _ANALYZING_AUDIO_TEMPLATE_EN if is_audio else _ANALYZING_IMAGE_TEMPLATE_EN
+    if lang_tag == "en-IN":
+        return message
+    translated = _translate_text_sarvam(message, "en-IN", _to_sarvam_lang_code(lang_tag))
+    return translated or message
+
+
+def _process_whatsapp_message(
+    session_id: str,
+    From: str,
+    text: str,
+    lang_tag: str,
+    NumMedia: str,
+    MediaUrl0: str,
+    MediaContentType0: str,
+) -> None:
+    """The slow half of /whatsapp/webhook -- OCR/STT, translate, classify,
+    and the real verdict reply -- scheduled as a BackgroundTask so it runs
+    AFTER the webhook's TwiML response has already been sent, not inside
+    the request/response cycle Twilio is waiting on.
+
+    Real, live-observed bug this replaces (2026-07-16): this used to run
+    inline, before returning to Twilio. A multi-language Tesseract OCR
+    cascade measured at 35.5s (see CLAUDE.md Section 13) blew past Twilio's
+    own webhook response window (Twilio logged error 11200, "HTTP retrieval
+    failure") -- and for the slowest real case, worse than that: no reply of
+    any kind ever reached the user, confirmed via Twilio's own message log
+    showing total silence where three earlier, faster (~15-20s) 11200s in
+    the same conversation still got their real reply moments later.
+    Mechanism: uvicorn cancels the in-flight ASGI task if the underlying
+    connection is torn down while the app is still producing a response
+    (Twilio/ngrok give up and close their end); a request still executing
+    *inside that same task* when the connection drops can be killed
+    mid-flight, losing the reply it was about to send. Running this as a
+    BackgroundTask means the original request task already produced its
+    (empty) response and exited before this function even starts -- there
+    is no in-flight request task left for a dropped connection to cancel.
+
+    Also sends an immediate "Analyzing..." acknowledgment (see
+    _analyzing_reply) before any of the slow work below starts, for any
+    media message -- so the user sees *something* right away even if the
+    slow work that follows is delayed, or (as happened live) fails softly.
+    """
     try:
-        text = Body.strip()
+        has_media = NumMedia != "0"
+        is_audio = has_media and _is_audio_content_type(MediaContentType0)
+        if has_media:
+            _send_whatsapp_reply(From, _analyzing_reply(lang_tag, is_audio))
 
-        # First-contact / language-change gate, before any media/OCR work or
-        # classification: a bare menu number or language name (English name
-        # or native self-name) always sets/changes the stored preference and
-        # short-circuits with a confirmation, whether this is the user's
-        # very first message or a later request to switch language. A
-        # session with no stored preference yet gets the selection menu
-        # instead of having its message silently classified in the wrong
-        # (or no) language.
-        selected_tag = _parse_language_selection(text)
-        if selected_tag:
-            _lang_prefs[session_id] = selected_tag
-            _send_whatsapp_reply(From, _language_confirmation_reply(selected_tag))
-            logging.info(f"whatsapp session={session_id} | language set to {selected_tag}")
-            return Response(content="", media_type="application/xml")
-        if session_id not in _lang_prefs:
-            _send_whatsapp_reply(From, _LANGUAGE_INTRO)
-            logging.info(f"whatsapp session={session_id} | first contact, sent language menu")
-            return Response(content="", media_type="application/xml")
-        lang_tag = _lang_prefs[session_id]
-
-        # Real, measured OCR-accuracy gate (see _OCR_RELIABLE_LANGUAGES' doc
-        # comment): for the 9 languages where OCR was proven unreliable
-        # (under-called or outright false-negative on a textbook scam
-        # screenshot), never run OCR and classify whatever garbage comes out
-        # of it -- that's exactly the silently-wrong-verdict failure mode
-        # audited today. Redirect to typed/voice input instead, before
-        # spending any OCR/translate/classify work on the image at all.
-        if (
-            NumMedia != "0"
-            and MediaContentType0.lower().startswith("image/")
-            and lang_tag not in _OCR_RELIABLE_LANGUAGES
-        ):
-            _send_whatsapp_reply(From, _ocr_unreliable_reply(lang_tag))
-            logging.info(f"whatsapp session={session_id} | image upload blocked, OCR unreliable for {lang_tag}")
-            return Response(content="", media_type="application/xml")
-
+        # Real content (OCR'd image text / translated voice message)
+        # first; only fall back to the type-only note if extraction
+        # wasn't possible (no key configured, download failed, no text
+        # found) or the attachment isn't an image/audio at all.
         media_descriptor = None
         audio_unanalyzed = False
-        if NumMedia != "0":
-            # Real content (OCR'd image text / translated voice message)
-            # first; only fall back to the type-only note if extraction
-            # wasn't possible (no key configured, download failed, no text
-            # found) or the attachment isn't an image/audio at all.
+        if has_media:
             media_descriptor = _extract_media_content(MediaUrl0, MediaContentType0)
             if media_descriptor is None:
-                if _is_audio_content_type(MediaContentType0):
+                if is_audio:
                     audio_unanalyzed = True
                 media_descriptor = _media_descriptor(MediaUrl0, MediaContentType0)
             logging.info(f"whatsapp session={session_id} | media_descriptor={media_descriptor!r}")
@@ -1084,7 +1101,7 @@ async def whatsapp_webhook(
             reply = _audio_unanalyzed_reply(lang_tag)
             _send_whatsapp_reply(From, reply)
             logging.info(f"whatsapp session={session_id} | audio unanalyzed, sent honest could-not-process reply")
-            return Response(content="", media_type="application/xml")
+            return
 
         # A media-only message (attachment, no caption) used to be dropped
         # here entirely — classify_text is what actually reaches the
@@ -1097,7 +1114,7 @@ async def whatsapp_webhook(
         # testing before choosing a space.
         classify_text = " ".join(p for p in (text, media_descriptor) if p)
         if not classify_text:
-            return Response(content="", media_type="application/xml")
+            return
 
         # Feedback on the verdict shown for the *previous* message, not a new
         # thing to classify — log it and stop, don't run it through the
@@ -1133,7 +1150,7 @@ async def whatsapp_webhook(
                 ) or "Thanks — recorded."
             _send_whatsapp_reply(From, thanks)
             logging.info(f"whatsapp session={session_id} | feedback logged | correction={user_correction}")
-            return Response(content="", media_type="application/xml")
+            return
 
         # Real bug fixed 2026-07-13, generalized 2026-07-13: classify_text
         # used to reach the detector completely untranslated. ml.detector's
@@ -1204,10 +1221,77 @@ async def whatsapp_webhook(
 
         _send_whatsapp_reply(From, reply)
     except Exception as e:
+        logging.error(f"whatsapp background processing error for session={session_id}: {e}")
+
+
+@app.post("/whatsapp/webhook")
+async def whatsapp_webhook(
+    background_tasks: BackgroundTasks,
+    Body: str = Form(default=""),
+    From: str = Form(default=""),
+    NumMedia: str = Form(default="0"),
+    MediaUrl0: str = Form(default=""),
+    MediaContentType0: str = Form(default=""),
+):
+    session_id = From.replace("whatsapp:", "")
+    try:
+        text = Body.strip()
+
+        # First-contact / language-change gate, before any media/OCR work or
+        # classification: a bare menu number or language name (English name
+        # or native self-name) always sets/changes the stored preference and
+        # short-circuits with a confirmation, whether this is the user's
+        # very first message or a later request to switch language. A
+        # session with no stored preference yet gets the selection menu
+        # instead of having its message silently classified in the wrong
+        # (or no) language.
+        selected_tag = _parse_language_selection(text)
+        if selected_tag:
+            _lang_prefs[session_id] = selected_tag
+            _send_whatsapp_reply(From, _language_confirmation_reply(selected_tag))
+            logging.info(f"whatsapp session={session_id} | language set to {selected_tag}")
+            return Response(content="", media_type="application/xml")
+        if session_id not in _lang_prefs:
+            _send_whatsapp_reply(From, _LANGUAGE_INTRO)
+            logging.info(f"whatsapp session={session_id} | first contact, sent language menu")
+            return Response(content="", media_type="application/xml")
+        lang_tag = _lang_prefs[session_id]
+
+        # Real, measured OCR-accuracy gate (see _OCR_RELIABLE_LANGUAGES' doc
+        # comment): for the 9 languages where OCR was proven unreliable
+        # (under-called or outright false-negative on a textbook scam
+        # screenshot), never run OCR and classify whatever garbage comes out
+        # of it -- that's exactly the silently-wrong-verdict failure mode
+        # audited today. Redirect to typed/voice input instead, before
+        # spending any OCR/translate/classify work on the image at all.
+        if (
+            NumMedia != "0"
+            and MediaContentType0.lower().startswith("image/")
+            and lang_tag not in _OCR_RELIABLE_LANGUAGES
+        ):
+            _send_whatsapp_reply(From, _ocr_unreliable_reply(lang_tag))
+            logging.info(f"whatsapp session={session_id} | image upload blocked, OCR unreliable for {lang_tag}")
+            return Response(content="", media_type="application/xml")
+
+        # Everything from here on (OCR/STT, translate, classify, and the
+        # real verdict reply) is genuinely slow -- measured 35s+ for a hard
+        # multi-language Tesseract cascade, and Sarvam's audio batch-job
+        # fallback can take up to 180s -- comfortably past Twilio's own
+        # webhook response window. Scheduled as a background task so this
+        # request always returns immediately regardless, and so a dropped
+        # Twilio/ngrok connection can no longer cancel the work mid-flight.
+        # See _process_whatsapp_message's doc comment for the real
+        # 2026-07-16 bug (Twilio error 11200, and worse, a genuinely
+        # unreplied message) this fixes.
+        background_tasks.add_task(
+            _process_whatsapp_message, session_id, From, text, lang_tag, NumMedia, MediaUrl0, MediaContentType0,
+        )
+    except Exception as e:
         logging.error(f"whatsapp_webhook error for session={session_id}: {e}")
 
-    # Acknowledge the webhook itself; the actual reply (if any) was already
-    # sent above via the Twilio REST API, not via this TwiML response.
+    # Acknowledge the webhook itself immediately; the real reply is sent
+    # later, out-of-band, via the Twilio REST API from the background task
+    # above (or, for the fast synchronous gates before it, already sent).
     return Response(content="", media_type="application/xml")
 
 
@@ -1349,17 +1433,29 @@ async def evidence_email(req: EmailEvidenceRequest):
         return {"success": False, "error": str(e)}
 
 
-@app.post("/webhook")
-async def webhook(
-    request: Request,
-    Body: str = Form(default=""),
-    From: str = Form(default=""),
-    FromCountry: str = Form(default=""),
-    FromCity: str = Form(default=""),
-    NumMedia: str = Form(default="0"),
-    MediaUrl0: str = Form(default=""),
-    MediaContentType0: str = Form(default=""),
-):
+def _process_webhook_message(
+    session_id: str,
+    From: str,
+    text: str,
+    lang_tag: str,
+    FromCountry: str,
+    FromCity: str,
+    NumMedia: str,
+    MediaUrl0: str,
+    MediaContentType0: str,
+) -> None:
+    """The slow half of /webhook -- media extraction, translate, chat()
+    (the RAG/LLM stack), and the real reply -- scheduled as a BackgroundTask
+    for exactly the same reason as /whatsapp/webhook's twin function (see
+    _process_whatsapp_message's doc comment for the full 2026-07-16 incident
+    this fixes): running it inline, before the webhook's TwiML response was
+    returned, meant a slow message could still be killed mid-flight by a
+    dropped Twilio/ngrok connection, losing the reply entirely -- the same
+    failure mode the 2026-07-13 fix below (REST-API delivery instead of
+    inline TwiML body) reduced the *frequency* of but didn't eliminate,
+    since the reply was still computed inside the same request task Twilio
+    could time out and disconnect from.
+    """
     # Lazy import: bot.agent pulls in the RAG/embedding stack (BAAI/bge-m3,
     # ~2GB download on first use), which is unrelated to every other route in
     # this file. Importing it at module load time meant a slow/failed model
@@ -1367,37 +1463,11 @@ async def webhook(
     # /whatsapp/webhook and /health which don't need it at all.
     from bot.agent import chat, _sessions
 
-    session_id = From.replace("whatsapp:", "")
     try:
-        text = Body.strip()
-
-        # Same first-contact / language-change gate as /whatsapp/webhook
-        # (shared _lang_prefs store, keyed identically off session_id) —
-        # see that handler's matching doc comment for why this runs before
-        # any media/OCR work or classification.
-        selected_tag = _parse_language_selection(text)
-        if selected_tag:
-            _lang_prefs[session_id] = selected_tag
-            _send_whatsapp_reply(From, _language_confirmation_reply(selected_tag))
-            logging.info(f"webhook session={session_id} | language set to {selected_tag}")
-            return Response(content="", media_type="application/xml")
-        if session_id not in _lang_prefs:
-            _send_whatsapp_reply(From, _LANGUAGE_INTRO)
-            logging.info(f"webhook session={session_id} | first contact, sent language menu")
-            return Response(content="", media_type="application/xml")
-        lang_tag = _lang_prefs[session_id]
-
-        # Same real, measured OCR-reliability gate as /whatsapp/webhook --
-        # see _OCR_RELIABLE_LANGUAGES' doc comment for the audit this is
-        # based on.
-        if (
-            NumMedia != "0"
-            and MediaContentType0.lower().startswith("image/")
-            and lang_tag not in _OCR_RELIABLE_LANGUAGES
-        ):
-            _send_whatsapp_reply(From, _ocr_unreliable_reply(lang_tag))
-            logging.info(f"webhook session={session_id} | image upload blocked, OCR unreliable for {lang_tag}")
-            return Response(content="", media_type="application/xml")
+        has_media = NumMedia != "0"
+        is_audio = has_media and _is_audio_content_type(MediaContentType0)
+        if has_media:
+            _send_whatsapp_reply(From, _analyzing_reply(lang_tag, is_audio))
 
         # Same real gap as /whatsapp/webhook (see _media_descriptor's doc
         # comment): without this, an attachment's filename/extension never
@@ -1407,10 +1477,10 @@ async def webhook(
         # falling back to the type-only note on any failure.
         media_descriptor = None
         audio_unanalyzed = False
-        if NumMedia != "0":
+        if has_media:
             media_descriptor = _extract_media_content(MediaUrl0, MediaContentType0)
             if media_descriptor is None:
-                if _is_audio_content_type(MediaContentType0):
+                if is_audio:
                     audio_unanalyzed = True
                 media_descriptor = _media_descriptor(MediaUrl0, MediaContentType0)
             logging.info(f"webhook from={From} | media_descriptor={media_descriptor!r}")
@@ -1487,18 +1557,68 @@ async def webhook(
 
     # Sent via the Twilio REST API (same pattern /whatsapp/webhook and
     # /evidence/whatsapp already use), not returned in the TwiML response
-    # body. Real gap found 2026-07-13: with media handling added, a cold
-    # RAG-stack + EasyOCR-reader load can take 20-30s+ (confirmed via a live
-    # test — bge-m3 weight loading alone took ~15s), which blew past
-    # whatever Twilio/ngrok waits for a webhook HTTP response. The reply
-    # this function computed was correct, but was silently lost — ngrok
-    # showed status_code=0 on the original connection even though this
-    # process logged "200 OK" for the response it tried to send into an
-    # already-abandoned connection. Sending via the REST API here means the
-    # reply is delivered as soon as it's computed, regardless of whether
-    # Twilio is still waiting on the original webhook connection.
+    # body -- and, as of 2026-07-16, computed inside a BackgroundTask rather
+    # than inline in the request handler, so a dropped Twilio/ngrok
+    # connection can no longer cancel this mid-flight and lose the reply
+    # entirely (see this function's doc comment).
     reply = reply.strip('"').strip("'")
     _send_whatsapp_reply(From, reply)
+
+
+@app.post("/webhook")
+async def webhook(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    Body: str = Form(default=""),
+    From: str = Form(default=""),
+    FromCountry: str = Form(default=""),
+    FromCity: str = Form(default=""),
+    NumMedia: str = Form(default="0"),
+    MediaUrl0: str = Form(default=""),
+    MediaContentType0: str = Form(default=""),
+):
+    session_id = From.replace("whatsapp:", "")
+    try:
+        text = Body.strip()
+
+        # Same first-contact / language-change gate as /whatsapp/webhook
+        # (shared _lang_prefs store, keyed identically off session_id) —
+        # see that handler's matching doc comment for why this runs before
+        # any media/OCR work or classification.
+        selected_tag = _parse_language_selection(text)
+        if selected_tag:
+            _lang_prefs[session_id] = selected_tag
+            _send_whatsapp_reply(From, _language_confirmation_reply(selected_tag))
+            logging.info(f"webhook session={session_id} | language set to {selected_tag}")
+            return Response(content="", media_type="application/xml")
+        if session_id not in _lang_prefs:
+            _send_whatsapp_reply(From, _LANGUAGE_INTRO)
+            logging.info(f"webhook session={session_id} | first contact, sent language menu")
+            return Response(content="", media_type="application/xml")
+        lang_tag = _lang_prefs[session_id]
+
+        # Same real, measured OCR-reliability gate as /whatsapp/webhook --
+        # see _OCR_RELIABLE_LANGUAGES' doc comment for the audit this is
+        # based on.
+        if (
+            NumMedia != "0"
+            and MediaContentType0.lower().startswith("image/")
+            and lang_tag not in _OCR_RELIABLE_LANGUAGES
+        ):
+            _send_whatsapp_reply(From, _ocr_unreliable_reply(lang_tag))
+            logging.info(f"webhook session={session_id} | image upload blocked, OCR unreliable for {lang_tag}")
+            return Response(content="", media_type="application/xml")
+
+        # Media extraction / translate / chat() / reply -- genuinely slow
+        # (RAG stack + LLM call, plus OCR/STT for attachments) -- scheduled
+        # as a background task for the same reason as /whatsapp/webhook.
+        # See _process_webhook_message's doc comment.
+        background_tasks.add_task(
+            _process_webhook_message,
+            session_id, From, text, lang_tag, FromCountry, FromCity, NumMedia, MediaUrl0, MediaContentType0,
+        )
+    except Exception as e:
+        logging.error(f"webhook error for session={session_id}: {e}")
 
     return Response(content="", media_type="application/xml")
 
