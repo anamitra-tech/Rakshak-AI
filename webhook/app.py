@@ -2,6 +2,7 @@ import base64
 import json
 import re
 import smtplib
+import threading
 import time
 import uuid
 from email.message import EmailMessage
@@ -784,6 +785,43 @@ _ACTION_HI = {
 # is computed identically in both handlers.
 _lang_prefs: dict[str, str] = {}
 
+# Real race confirmed 2026-07-16: /whatsapp/webhook and /webhook both run
+# their slow work (_process_whatsapp_message / _process_webhook_message) as
+# BackgroundTasks, which FastAPI dispatches via a thread pool for sync
+# callables -- so two messages from the SAME session_id, sent close
+# together, can run concurrently in separate threads. If the first
+# message's chat()/ml.session call is still waiting on a slow LLM response
+# when the second arrives, the second can read _sessions/SessionStore
+# before the first has written its result -- confirmed live: a rapid
+# follow-up during an active scam session saw bot.agent's "already active"
+# check as False (no prior scam recorded yet) purely because the earlier
+# turn hadn't finished, silently skipping the calm-guidance short-circuit
+# (its "trust but verify" fallback still produced a correct verdict, so
+# this was never a wrong-answer bug -- just lost the intended calmer UX for
+# exactly the rapid-fire-during-panic scenario this feature exists for).
+# This lock registry serializes background-task processing per session_id
+# (never across different sessions, which still run fully in parallel) so
+# messages from one user are always handled in the order they arrived.
+_session_locks: dict[str, threading.Lock] = {}
+_session_locks_guard = threading.Lock()
+
+
+def _get_session_lock(session_id: str) -> threading.Lock:
+    with _session_locks_guard:
+        lock = _session_locks.get(session_id)
+        if lock is None:
+            lock = threading.Lock()
+            _session_locks[session_id] = lock
+        return lock
+
+
+def _run_serialized_per_session(fn, session_id, *args) -> None:
+    """Wraps a BackgroundTask target so it only runs while holding this
+    session_id's lock -- see _session_locks' doc comment above."""
+    with _get_session_lock(session_id):
+        fn(session_id, *args)
+
+
 # Extracted to bot/languages.py so bot.agent.chat()'s LANGUAGE_CHANGE intent
 # can resolve free-text language mentions through the exact same table this
 # first-contact menu and _parse_language_selection use, instead of a second
@@ -1311,6 +1349,7 @@ async def whatsapp_webhook(
         # 2026-07-16 bug (Twilio error 11200, and worse, a genuinely
         # unreplied message) this fixes.
         background_tasks.add_task(
+            _run_serialized_per_session,
             _process_whatsapp_message, session_id, From, text, lang_tag, NumMedia, MediaUrl0, MediaContentType0,
         )
     except Exception as e:
@@ -1586,6 +1625,7 @@ def _process_webhook_message(
 
             logging.info(
                 f"session={session_id} | "
+                f"intent={result.get('intent')} | "
                 f"scam={result.get('scam_type')} | "
                 f"profile={result.get('profile')} | "
                 f"engine={result.get('engine')}"
@@ -1593,6 +1633,12 @@ def _process_webhook_message(
     except Exception as e:
         logging.error(f"Error: {e}")
         reply = "Kuch gadbad ho gayi. Seedha 1930 pe call karein."
+
+    # Twilio's own request/response log (below) never includes the message
+    # body, only headers -- logged separately here since a send failure
+    # (e.g. Twilio's daily cap, seen live 2026-07-16) previously left no way
+    # to see what the actual computed reply was without re-deriving it.
+    logging.info(f"session={session_id} | reply={reply!r}")
 
     # Sent via the Twilio REST API (same pattern /whatsapp/webhook and
     # /evidence/whatsapp already use), not returned in the TwiML response
@@ -1653,6 +1699,7 @@ async def webhook(
         # as a background task for the same reason as /whatsapp/webhook.
         # See _process_webhook_message's doc comment.
         background_tasks.add_task(
+            _run_serialized_per_session,
             _process_webhook_message,
             session_id, From, text, lang_tag, FromCountry, FromCity, NumMedia, MediaUrl0, MediaContentType0,
         )
