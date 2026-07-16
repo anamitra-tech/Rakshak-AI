@@ -1,52 +1,25 @@
+import json
+import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeoutError
 from datetime import datetime, timezone
 
 from llm.client import generate
 from rag.retriever import retrieve_and_respond
+from rag.legal_retriever import answer_legal_query
 from graph.entity_extractor import extract_all
+from ml.detector import _rule_signals
+from bot.calm_guidance import is_conversational_followup, CONVERSATIONAL_FOLLOWUP_EN
+from bot.languages import english_name_to_tag, english_name_for_tag
 
-# ── Intent keyword sets ───────────────────────────────────────────────────────
-
-_GREET_KW = {
-    "hi", "hello", "hey", "hola", "namaste", "namaskar",
-    "good morning", "good evening", "good afternoon",
-    "goodmorning", "howdy", "salam",
-}
-
-_ABOUT_KW = {
-    "what do you do", "who are you", "your purpose",
-    "kya karti", "aapka kaam", "tumhara kaam",
-    "what can you do", "tell me about yourself",
-}
-
-_FOLLOWUP_KW = {
-    "same call", "again", "phir se", "ek aur", "dobara",
-    "same number", "similar", "last time", "pehle bhi",
-    "ek aur call",
-    "they say", "they say they are real", "bol rahe hain",
-    "real hai", "sach mein", "pakka", "sure hai", "sure",
-    "genuine", "real don't worry", "woh bol rahe hain",
-    "real hain", "woh real hain", "actually real", "trust kar",
-}
-
-_SCAM_KW = {
-    "cbi", "ed", "police", "arrest", "warrant", "court",
-    "otp", "kyc", "bank", "account", "zip", "apk", "file",
-    "investment", "profit", "return", "trading", "crypto",
-    "qr", "scan", "payment", "upi", "lottery", "prize",
-    "won", "winner", "gift", "call aaya", "message aaya",
-    "aadhaar", "biometric", "sim", "sanchar", "hr ne bheja",
-}
-
-_INTENT_PROMPT = (
-    'Classify this message into exactly one intent: '
-    'greeting, about, scam_report, followup, unclear.\n'
-    'Message: "{message}"\n'
-    'Reply with only the intent word, nothing else.'
-)
+logger = logging.getLogger(__name__)
 
 # ── Personality strings ───────────────────────────────────────────────────────
+# Used only as the LAST-RESORT fallback if the direct-reply LLM call below
+# times out or fails entirely (see _direct_reply) — under normal operation
+# GREETING/GENERAL_CHAT now get a live, context-aware LLM reply instead of
+# always returning one of these fixed strings verbatim.
 
-GREETING = """🛡️ *Namaste! I'm AbhayAI.*
+GREETING_FALLBACK = """🛡️ *Namaste! I'm AbhayAI.*
 
 I help citizens identify scams — digital arrest calls, fake bank alerts, suspicious links, QR code fraud, and more.
 
@@ -57,27 +30,30 @@ Just tell me:
 
 I'll tell you if it's a scam and exactly what to do. 🔴🟢"""
 
-ABOUT = """🛡️ *AbhayAI — Digital Public Safety Assistant*
-
-I can detect:
-✓ Digital arrest scams (fake CBI/ED/Police)
-✓ Bank KYC/OTP fraud
-✓ Fake investment schemes
-✓ QR code payment scams
-✓ Lottery/prize fraud
-✓ Suspicious links
-✓ ZIP/APK malware delivery
-✓ Multi-call coordinated pressure
-
-Powered by MHA/I4C intelligence. Always free.
-Emergency: Call *1930* | Report: cybercrime.gov.in"""
-
-UNCLEAR = """I didn't quite understand that. You can:
+GENERAL_CHAT_FALLBACK = """I didn't quite understand that. You can:
 - Describe a suspicious call you received
 - Forward a message you're unsure about
 - Ask me what I do
 
 I'm here to help. 🛡️"""
+
+_DIRECT_REPLY_SYSTEM_CONTEXT = """\
+You are AbhayAI, a public safety assistant for Indian citizens that detects \
+scams (digital arrest calls, fake bank/KYC alerts, investment fraud, lottery \
+scams, QR code fraud, suspicious links, malware attachments). You are free, \
+powered by MHA/I4C intelligence. Emergency: 1930. Report: cybercrime.gov.in.
+
+Reply to the user's message below in 1-3 sentences, warm and direct, plain \
+language. If they're greeting you or making small talk, respond naturally \
+and briefly mention you can check a suspicious call/message/link if they \
+have one. Do not diagnose or discuss any scam here — that only happens when \
+the user actually describes or pastes a suspicious call/message.
+
+Conversation so far:
+{history}
+
+User: "{message}"\
+"""
 
 # ── Session memory ────────────────────────────────────────────────────────────
 
@@ -231,39 +207,166 @@ def is_verification_lure(message: str) -> bool:
     return any(kw in m for kw in VERIFICATION_LURE_KW)
 
 
-# ── Intent detection ──────────────────────────────────────────────────────────
+# ── Intent classification (LLM-based, replaces keyword/.startswith() routing) ─
+#
+# One LLM call per message, given the last few turns of history plus the new
+# message, classifying into exactly one of 6 intents. This is the router
+# item 1 of the rebuild asked for. It NEVER decides a scam verdict — that
+# stays entirely with ml.detector.ScamDetector, called only from the
+# SCAM_CHECK branch (or its ACTIVE_SESSION_FOLLOWUP fallback) below.
+#
+# MANDATORY SAFETY BACKSTOP (see chat()): before this classifier ever runs,
+# a message is force-routed to SCAM_CHECK regardless of what the LLM would
+# say if ml.detector's deterministic rule layer fires on it (_rule_signals).
+# Without this, an LLM misreading a live scam message as GENERAL_CHAT or
+# INFORMATIONAL_QUERY (plausible — scam scripts often arrive phrased as
+# questions, "what happens if I don't pay?") would silently skip
+# ScamDetector.predict() entirely, which is the one regression the mandatory
+# eval gate (see eval_rag_testset.py) can't catch after the fact once a
+# message has already been routed away from the detector. This backstop is
+# what makes "zero change to scam-detection behavior" enforceable rather
+# than just hoped-for.
 
-_GREETING_REMAINDER_MAX_LEN = 15
+_VALID_INTENTS = {
+    "greeting", "language_change", "scam_check",
+    "active_session_followup", "informational_query", "general_chat",
+}
+
+_INTENT_PROMPT = """\
+Classify the user's NEW message below into exactly one intent, using the \
+conversation history for context (e.g. a short reactive reply like "what \
+should I do?" is ACTIVE_SESSION_FOLLOWUP if the history shows an ongoing \
+scam situation, but SCAM_CHECK if this is the first message in the session).
+
+Intents:
+- GREETING: a hello/how-are-you with no other content.
+- LANGUAGE_CHANGE: the user is asking to switch the language you reply in \
+(e.g. "reply to me in Tamil", "switch to Hindi"). If so, also extract the \
+language name in English.
+- SCAM_CHECK: the user is describing, quoting, or pasting a call/message/link \
+they received and want checked — OR asking a hypothetical/general question \
+about a scam pattern that could plausibly be describing something that \
+happened to them. When in doubt between SCAM_CHECK and any other intent, \
+choose SCAM_CHECK — never let ambiguity route a possible real scam away \
+from checking.
+- ACTIVE_SESSION_FOLLOWUP: a short, first-person, reactive message about an \
+ONGOING situation already established in the conversation history (e.g. "he \
+says he'll arrest me", "what do I do now") — not a new script/message being \
+submitted for checking.
+- INFORMATIONAL_QUERY: a general legal/factual question NOT about a specific \
+incident — e.g. "is filing a police complaint free?", "will my bank refund \
+me?", "what does Chakshu do?", "what are my data rights?".
+- GENERAL_CHAT: anything else — small talk, "what do you do", thanks, etc.
+
+Conversation history (may be empty):
+{history}
+
+New message: "{message}"
+
+Reply with ONLY a JSON object, nothing else, in this exact shape:
+{{"intent": "<ONE_OF_THE_6_ABOVE>", "language": "<English language name, or null>"}}\
+"""
+
+_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="intent-router")
+_INTENT_TIMEOUT_SECONDS = 6.0
 
 
-def detect_intent(message: str) -> str:
-    msg = message.strip().lower()
+def _format_history(session_id: str) -> str:
+    turns = get_history(session_id, last_n=8)
+    if not turns:
+        return "(none — this is the first message)"
+    lines = []
+    for e in turns:
+        role = "User" if e["role"] == "user" else "AbhayAI"
+        lines.append(f"{role}: {e['content']}")
+    return "\n".join(lines)
 
-    greet_kw = next((kw for kw in _GREET_KW if msg == kw or msg.startswith(kw)), None)
-    if greet_kw is not None:
-        remainder = msg[len(greet_kw):].strip(" ,.!-")
-        if len(remainder) <= _GREETING_REMAINDER_MAX_LEN:
-            return "greeting"
 
-    if any(kw in msg for kw in _ABOUT_KW):
-        return "about"
+def _parse_intent_response(text: str) -> tuple[str, str | None]:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("no JSON object in response")
+    data = json.loads(cleaned[start:end + 1])
+    intent = str(data.get("intent", "")).strip().lower()
+    if intent not in _VALID_INTENTS:
+        raise ValueError(f"unrecognized intent {intent!r}")
+    language = data.get("language")
+    language = str(language).strip() if language else None
+    return intent, language
 
-    if any(kw in msg for kw in _FOLLOWUP_KW):
-        return "followup"
 
-    if any(kw in msg for kw in _SCAM_KW):
-        return "scam_report"
-
+def classify_intent(session_id: str, message: str) -> tuple[str, str | None]:
+    """Returns (intent, language_name_or_None). On any classifier failure
+    (timeout, malformed JSON, LLM chain fully down), defaults to
+    "scam_check" — the safest failure mode, since that path still runs
+    ScamDetector.predict() and can itself return SAFE; every other intent
+    risks silently never checking a message that might be a real scam."""
+    prompt = _INTENT_PROMPT.format(history=_format_history(session_id), message=message)
+    future = _executor.submit(generate, prompt, retries=1)
     try:
-        prompt = _INTENT_PROMPT.format(message=message)
-        response = generate(prompt)
-        first_word = response.text.strip().split()[0].lower().rstrip(".,")
-        if first_word in ("greeting", "about", "scam_report", "followup", "unclear"):
-            return first_word
-    except Exception:
-        pass
+        response = future.result(timeout=_INTENT_TIMEOUT_SECONDS)
+        return _parse_intent_response(response.text)
+    except _FutureTimeoutError:
+        logger.warning("Intent classification TIMED OUT after %.1fs — defaulting to scam_check.", _INTENT_TIMEOUT_SECONDS)
+    except Exception as exc:
+        logger.warning("Intent classification FAILED (%s) — defaulting to scam_check.", exc)
+    return "scam_check", None
 
-    return "unclear"
+
+# ── Direct LLM reply for GREETING / GENERAL_CHAT ──────────────────────────────
+
+def _direct_reply(session_id: str, message: str, fallback: str) -> tuple[str, str]:
+    prompt = _DIRECT_REPLY_SYSTEM_CONTEXT.format(history=_format_history(session_id), message=message)
+    future = _executor.submit(generate, prompt, retries=1)
+    try:
+        response = future.result(timeout=_INTENT_TIMEOUT_SECONDS)
+        if response.text and len(response.text.strip()) > 0:
+            return response.text.strip(), response.engine
+    except _FutureTimeoutError:
+        logger.warning("Direct-reply LLM call TIMED OUT — using fallback copy.")
+    except Exception as exc:
+        logger.warning("Direct-reply LLM call FAILED (%s) — using fallback copy.", exc)
+    return fallback, "personality_fallback"
+
+
+# ── Scam-check (shared by SCAM_CHECK and ACTIVE_SESSION_FOLLOWUP's fallback) ──
+
+def _run_scam_check(session_id: str, message: str, lure_detected: bool) -> dict:
+    """Unchanged verdict logic: ml.detector.ScamDetector via
+    rag.retriever.retrieve_and_respond() is the ONLY thing that decides
+    risk_level/scam_type — the intent router above never does."""
+    prior_scam = None
+    prior_scam_hist = [
+        e for e in get_scam_history(session_id)
+        if e["role"] == "assistant" and e.get("scam_type")
+    ]
+    if prior_scam_hist:
+        prior_scam = prior_scam_hist[-1]["scam_type"]
+    result = retrieve_and_respond(message, prior_scam_type=prior_scam)
+
+    if result.get("scam_type"):
+        fingerprint = extract_all(message)
+        result["fingerprint"] = fingerprint
+
+    pattern_note = compare_with_history(session_id, result)
+    if pattern_note:
+        result["answer"] = result["answer"] + "\n\n" + pattern_note
+
+    profile = detect_profile(session_id, message)
+    if profile == "elderly" and result.get("scam_type"):
+        result["answer"] = format_elderly(result)
+    elif profile == "farmer" and result.get("scam_type"):
+        result["answer"] = format_farmer(result)
+
+    if lure_detected:
+        result["answer"] = _VERIFICATION_LURE_WARNING + "\n\n" + result["answer"]
+
+    result["profile"] = profile
+    return result
 
 
 # ── Main entry ────────────────────────────────────────────────────────────────
@@ -294,63 +397,85 @@ def chat(session_id: str, message: str) -> dict:
         return result
 
     lure_detected = is_verification_lure(message)
-    intent = "scam_report" if lure_detected else detect_intent(message)
+    # MANDATORY SAFETY BACKSTOP — see the doc comment above classify_intent().
+    rule_hit = bool(_rule_signals(message))
+    language_name = None
+    if lure_detected or rule_hit:
+        intent = "scam_check"
+    else:
+        intent, language_name = classify_intent(session_id, message)
+
     add_to_memory(session_id, "user", message, intent=intent)
 
     if intent == "greeting":
+        answer, engine = _direct_reply(session_id, message, GREETING_FALLBACK)
         result = {
-            "answer": GREETING,
+            "answer": answer,
             "scam_type": None,
             "confidence": None,
-            "engine": "personality",
+            "engine": engine,
             "profile": "default",
         }
-    elif intent == "about":
+    elif intent == "general_chat":
+        answer, engine = _direct_reply(session_id, message, GENERAL_CHAT_FALLBACK)
         result = {
-            "answer": ABOUT,
+            "answer": answer,
             "scam_type": None,
             "confidence": None,
-            "engine": "personality",
+            "engine": engine,
             "profile": "default",
         }
-    elif intent == "unclear":
+    elif intent == "language_change":
+        tag = english_name_to_tag(language_name) if language_name else None
+        if tag:
+            english_name = english_name_for_tag(tag)
+            result = {
+                "answer": f"Language preference noted: {english_name}.",
+                "scam_type": None,
+                "confidence": None,
+                "engine": "language_change",
+                "profile": "default",
+                "lang_tag": tag,
+            }
+        else:
+            result = {
+                "answer": "Which language would you like me to reply in?",
+                "scam_type": None,
+                "confidence": None,
+                "engine": "language_change_unclear",
+                "profile": "default",
+                "lang_tag": None,
+            }
+    elif intent == "informational_query":
+        legal_result = answer_legal_query(message)
         result = {
-            "answer": UNCLEAR,
+            "answer": legal_result["answer"],
             "scam_type": None,
             "confidence": None,
-            "engine": "personality",
+            "engine": legal_result["engine"],
             "profile": "default",
+            "source_name": legal_result.get("source_name"),
+            "source_url": legal_result.get("source_url"),
         }
-    else:
-        prior_scam = None
-        prior_scam_hist = [
-            e for e in get_scam_history(session_id)
-            if e["role"] == "assistant" and e.get("scam_type")
-        ]
-        if prior_scam_hist:
-            prior_scam = prior_scam_hist[-1]["scam_type"]
-        result = retrieve_and_respond(message, prior_scam_type=prior_scam)
-
-        if result.get("scam_type"):
-            fingerprint = extract_all(message)
-            result["fingerprint"] = fingerprint
-
-        # pattern detection
-        pattern_note = compare_with_history(session_id, result)
-        if pattern_note:
-            result["answer"] = result["answer"] + "\n\n" + pattern_note
-
-        # profile-aware formatting
-        profile = detect_profile(session_id, message)
-        if profile == "elderly" and result.get("scam_type"):
-            result["answer"] = format_elderly(result)
-        elif profile == "farmer" and result.get("scam_type"):
-            result["answer"] = format_farmer(result)
-
-        if lure_detected:
-            result["answer"] = _VERIFICATION_LURE_WARNING + "\n\n" + result["answer"]
-
-        result["profile"] = profile
+    elif intent == "active_session_followup":
+        already_active = bool(get_scam_history(session_id))
+        if already_active and is_conversational_followup(message):
+            result = {
+                "answer": CONVERSATIONAL_FOLLOWUP_EN,
+                "scam_type": None,
+                "confidence": None,
+                "engine": "calm_guidance",
+                "profile": detect_profile(session_id, message),
+            }
+        else:
+            # The precondition ACTIVE_SESSION_FOLLOWUP depends on (an
+            # already-flagged session + genuinely reactive phrasing) doesn't
+            # actually hold -- never trust the LLM's label alone here. Falls
+            # through to the full scam-check path rather than silently
+            # dropping a message that might be a fresh scam ask.
+            result = _run_scam_check(session_id, message, lure_detected)
+    else:  # scam_check
+        result = _run_scam_check(session_id, message, lure_detected)
 
     add_to_memory(
         session_id,

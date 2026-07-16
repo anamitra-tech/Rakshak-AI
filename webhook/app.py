@@ -784,25 +784,15 @@ _ACTION_HI = {
 # is computed identically in both handlers.
 _lang_prefs: dict[str, str] = {}
 
-# Same 12 target languages/BCP-47 tags as the Android app's
-# FamilySetupActivity.spokenLanguages and SarvamLanguageCodes, reordered
-# Hindi-first/English-second for this first-contact WhatsApp menu — Android's
-# Spinner stays English-first, a distinct UI convention for a calm, one-time
-# family-setup screen, not a first-contact chat prompt (CLAUDE.md 9.2).
-_LANGUAGE_MENU: list[tuple[str, str, str]] = [
-    ("hi-IN", "हिन्दी", "Hindi"),
-    ("en-IN", "English", "English"),
-    ("bn-IN", "বাংলা", "Bengali"),
-    ("mr-IN", "मराठी", "Marathi"),
-    ("te-IN", "తెలుగు", "Telugu"),
-    ("ta-IN", "தமிழ்", "Tamil"),
-    ("gu-IN", "ગુજરાતી", "Gujarati"),
-    ("ur-IN", "اردو", "Urdu"),
-    ("kn-IN", "ಕನ್ನಡ", "Kannada"),
-    ("ml-IN", "മലയാളം", "Malayalam"),
-    ("pa-IN", "ਪੰਜਾਬੀ", "Punjabi"),
-    ("or-IN", "ଓଡ଼ିଆ", "Odia"),
-]
+# Extracted to bot/languages.py so bot.agent.chat()'s LANGUAGE_CHANGE intent
+# can resolve free-text language mentions through the exact same table this
+# first-contact menu and _parse_language_selection use, instead of a second
+# copy that could drift out of sync.
+from bot.languages import (
+    LANGUAGE_MENU as _LANGUAGE_MENU,
+    to_sarvam_lang_code as _to_sarvam_lang_code,
+    parse_language_selection as _parse_language_selection,
+)
 
 _LANGUAGE_INTRO = (
     "🛡️ *Namaste! I'm AbhayAI.*\n\n"
@@ -813,30 +803,6 @@ _LANGUAGE_INTRO = (
     )
     + "\n\nReply with a number (1-12) to select your language."
 )
-
-# Built from _LANGUAGE_MENU so it can never drift out of sync with it: each
-# language is selectable by its menu number, its English name, or its native
-# self-name (all lowercased for matching).
-_LANGUAGE_ALIASES: dict[str, str] = {}
-for _i, (_tag, _native, _english) in enumerate(_LANGUAGE_MENU, start=1):
-    _LANGUAGE_ALIASES[str(_i)] = _tag
-    _LANGUAGE_ALIASES[_english.lower()] = _tag
-    _LANGUAGE_ALIASES[_native.lower()] = _tag
-
-
-def _to_sarvam_lang_code(tag: str) -> str:
-    """Mirrors the Android app's SarvamLanguageCodes.toSarvamCode: Sarvam
-    uses "od-IN" for Odia, not the standard BCP-47 "or-IN" this project's
-    preference store otherwise uses throughout."""
-    return "od-IN" if tag.lower() == "or-in" else tag
-
-
-def _parse_language_selection(text: str) -> str | None:
-    """None if `text` isn't a recognized language-selection reply (a menu
-    number 1-12, an English language name, or a native self-name); else the
-    selected BCP-47 tag."""
-    return _LANGUAGE_ALIASES.get(text.strip().lower())
-
 
 def _language_confirmation_reply(lang_tag: str) -> str:
     english_name = next(english for tag, _native, english in _LANGUAGE_MENU if tag == lang_tag)
@@ -900,48 +866,15 @@ def _resolve_feedback(text: str) -> bool | None:
 # no rule_categories of its own, so a message that *also* contains a fresh
 # scam ask (e.g. "he says send OTP now") still gets the full verdict, not
 # just the calm-guidance short-circuit.
-_CONVERSATIONAL_FOLLOWUP_PATTERNS = [
-    r"\bhe\s+says\b", r"\bhe\s+told\s+me\b", r"\bhe'?s\s+(saying|asking|telling)\b",
-    r"\bhe\s+is\s+(saying|asking|telling)\b", r"\bhe\s+wants\s+me\s+to\b",
-    r"\bshe\s+says\b", r"\bshe\s+told\s+me\b", r"\bshe'?s\s+(saying|asking|telling)\b",
-    r"\bthey'?re\s+saying\b", r"\bthey\s+are\s+saying\b", r"\bthey\s+told\s+me\b",
-    r"\bthey\s+want\s+me\s+to\b",
-    r"\bwhat\s+should\s+i\s+do\b", r"\bwhat\s+do\s+i\s+do\b",
-    r"usne\s+kaha", r"usne\s+bola", r"unhone\s+kaha", r"vo\s+bol\s+raha",
-    r"vo\s+keh\s+raha", r"voh\s+bol\s+raha", r"kya\s+kar[uü]\b",
-    r"mujhe\s+kya\s+karna\s+chahiye",
-    r"उसने\s+कहा", r"उन्होंने\s+कहा", r"वह\s+बोल\s+रहा", r"क्या\s+करूं",
-]
-_CONVERSATIONAL_FOLLOWUP_RE = re.compile(
-    "|".join(_CONVERSATIONAL_FOLLOWUP_PATTERNS), re.IGNORECASE,
-)
-
-
-def _is_conversational_followup(original_text: str, translated_text: str) -> bool:
-    """First-person reactive framing ('he says he'll arrest me', 'usne kaha
-    ki...', 'what should I do') describing an ongoing situation, as opposed
-    to a scam script/message being submitted for checking."""
-    return bool(
-        _CONVERSATIONAL_FOLLOWUP_RE.search(original_text)
-        or _CONVERSATIONAL_FOLLOWUP_RE.search(translated_text)
-    )
-
-
-_CONVERSATIONAL_FOLLOWUP_EN = (
-    "I understand what you're describing. Please listen carefully:\n\n"
-    "• Hang up the call right now, or stop replying if it's over message.\n"
-    "• Do NOT share any OTP, PIN, or code — ever.\n"
-    "• Do NOT send any money, no matter what they threaten.\n"
-    "• Do NOT stay on the call out of fear — this is a known scam tactic.\n\n"
-    "Report this at cybercrime.gov.in or call 1930."
-)
-_CONVERSATIONAL_FOLLOWUP_HI = (
-    "मैं समझ रहा/रही हूं कि क्या हो रहा है। कृपया ध्यान से सुनें:\n\n"
-    "• अभी कॉल काट दें, या मैसेज का जवाब देना बंद कर दें।\n"
-    "• कभी भी OTP, पिन या कोड साझा न करें।\n"
-    "• डर के कारण पैसे बिल्कुल न भेजें।\n"
-    "• डर की वजह से कॉल पर बने न रहें — यह एक जाना-पहचाना धोखाधड़ी तरीका है।\n\n"
-    "cybercrime.gov.in पर रिपोर्ट करें या 1930 पर कॉल करें।"
+#
+# Detection regex + reply copy extracted to bot/calm_guidance.py so
+# bot.agent.chat()'s ACTIVE_SESSION_FOLLOWUP intent (a separate pipeline,
+# separate session store) reuses the exact same detector/copy instead of a
+# second copy that could silently drift from this one.
+from bot.calm_guidance import (
+    is_conversational_followup as _is_conversational_followup,
+    CONVERSATIONAL_FOLLOWUP_EN as _CONVERSATIONAL_FOLLOWUP_EN,
+    CONVERSATIONAL_FOLLOWUP_HI as _CONVERSATIONAL_FOLLOWUP_HI,
 )
 
 
@@ -1622,12 +1555,24 @@ def _process_webhook_message(
 
             result = chat(session_id, text_for_chat)
 
-            # Reply language is the user's STORED preference (lang_tag),
-            # never whatever language the input was in -- see
-            # _translate_reply_to_preference's doc comment for the bug this
-            # replaces (this used to translate back into
-            # translated_source_lang, the *input's* detected script).
-            reply = _translate_reply_to_preference(result["answer"], lang_tag)
+            # bot.agent's LANGUAGE_CHANGE intent (free-text language switches
+            # mid-conversation, e.g. "reply to me in Tamil") can't mutate
+            # _lang_prefs itself -- chat() doesn't own that state, it lives
+            # here (shared with /whatsapp/webhook's pre-chat gate). Apply the
+            # switch and use the same confirmation copy that gate already
+            # sends, instead of translating chat()'s generic answer.
+            if result.get("intent") == "language_change" and result.get("lang_tag"):
+                new_tag = result["lang_tag"]
+                _lang_prefs[session_id] = new_tag
+                reply = _language_confirmation_reply(new_tag)
+                logging.info(f"webhook session={session_id} | language changed mid-conversation to {new_tag}")
+            else:
+                # Reply language is the user's STORED preference (lang_tag),
+                # never whatever language the input was in -- see
+                # _translate_reply_to_preference's doc comment for the bug this
+                # replaces (this used to translate back into
+                # translated_source_lang, the *input's* detected script).
+                reply = _translate_reply_to_preference(result["answer"], lang_tag)
 
             # ADDITION 3 — store Twilio geo metadata for graph indexing
             twilio_metadata = {
