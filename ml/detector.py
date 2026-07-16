@@ -37,7 +37,16 @@ HIGH_RISK_PATTERNS = {
         # variant (see CLAUDE.md Section 6.3's cross-reference), same
         # justification as telecom_impersonation being split out from this
         # category rather than folded in as a synonym list of one sentence.
-        r"cyber\s*crime\s*(cell|branch|police|wing|department)",
+        #
+        # \W* (not \s*) between the words -- real bug caught live re-testing
+        # this exact scam via a typed/pasted message rather than OCR:
+        # Sarvam's translation of the same Gujarati source sometimes renders
+        # this as "Cyber ‐ Crime Cell", using U+2010 HYPHEN as a stray
+        # separator between "Cyber" and "Crime" rather than plain
+        # whitespace. \s* silently missed it (scored SAFE 0.393, rule_
+        # categories=[] again); \W* matches whitespace, ASCII hyphens, and
+        # any Unicode dash/punctuation variant alike.
+        r"cyber\W*crime\W*(cell|branch|police|wing|department)",
     ],
     "credential_request": [
         r"\botp\b", r"\bcvv\b", r"\bpin\b", r"\bupi\s*pin\b", r"share.*(otp|pin|cvv)",

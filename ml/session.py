@@ -37,6 +37,22 @@ class FraudSessionDetector:
         self.detector = detector          # reuse Module 1
         self.store = SessionStore()
 
+    def is_already_active(self, session_id) -> bool:
+        """Read-only peek at whether this session was ALREADY flagged
+        active/high-risk from PRIOR messages, without ingesting a new event
+        or affecting any state. Used to distinguish a first-person
+        conversational follow-up ("he says he'll arrest me") within an
+        established high-risk session from a fresh session's first message,
+        which must still go through full classification/display even if it
+        happens to trip the same thresholds on its own — see
+        webhook/app.py's _is_conversational_followup gate. Callers must
+        still call ingest() as normal for the current message; this only
+        reports the state as of the *previous* call."""
+        s = self.store.get(session_id)
+        if s is None or not s["events"]:
+            return False
+        return self._evaluate(session_id, s, None)["active_scam_session"] == "YES"
+
     def ingest(self, session_id, text, ts=None, verdict=None):
         ts = ts or time.time()
         # Callers that already computed (and possibly LLM-second-opinion

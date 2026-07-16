@@ -884,6 +884,76 @@ def _resolve_feedback(text: str) -> bool | None:
     return None
 
 
+# Real bug reproduced live (2026-07-16): a WhatsApp session already flagged
+# high-risk (per SESSION.is_already_active) got a follow-up message that was
+# a first-person description of an ONGOING situation ("But he says he will
+# arrest me as soon") -- not a new suspicious message being submitted for
+# checking. _build_reply's normal technical reasons dump (ML score %,
+# "N high-risk messages", session duration) isn't useful to someone who
+# needs a direct next action, not a report. Checked against both the
+# original and English-translated text (a short reactive phrase's
+# translation isn't always a reliable English pattern match on its own --
+# same original+translated dual-check already used for classify_text
+# above). Deliberately does NOT change scoring/session-tracking at all
+# (see _process_whatsapp_message's call site) -- this only changes what's
+# DISPLAYED, gated additionally on this specific message having triggered
+# no rule_categories of its own, so a message that *also* contains a fresh
+# scam ask (e.g. "he says send OTP now") still gets the full verdict, not
+# just the calm-guidance short-circuit.
+_CONVERSATIONAL_FOLLOWUP_PATTERNS = [
+    r"\bhe\s+says\b", r"\bhe\s+told\s+me\b", r"\bhe'?s\s+(saying|asking|telling)\b",
+    r"\bhe\s+is\s+(saying|asking|telling)\b", r"\bhe\s+wants\s+me\s+to\b",
+    r"\bshe\s+says\b", r"\bshe\s+told\s+me\b", r"\bshe'?s\s+(saying|asking|telling)\b",
+    r"\bthey'?re\s+saying\b", r"\bthey\s+are\s+saying\b", r"\bthey\s+told\s+me\b",
+    r"\bthey\s+want\s+me\s+to\b",
+    r"\bwhat\s+should\s+i\s+do\b", r"\bwhat\s+do\s+i\s+do\b",
+    r"usne\s+kaha", r"usne\s+bola", r"unhone\s+kaha", r"vo\s+bol\s+raha",
+    r"vo\s+keh\s+raha", r"voh\s+bol\s+raha", r"kya\s+kar[uü]\b",
+    r"mujhe\s+kya\s+karna\s+chahiye",
+    r"उसने\s+कहा", r"उन्होंने\s+कहा", r"वह\s+बोल\s+रहा", r"क्या\s+करूं",
+]
+_CONVERSATIONAL_FOLLOWUP_RE = re.compile(
+    "|".join(_CONVERSATIONAL_FOLLOWUP_PATTERNS), re.IGNORECASE,
+)
+
+
+def _is_conversational_followup(original_text: str, translated_text: str) -> bool:
+    """First-person reactive framing ('he says he'll arrest me', 'usne kaha
+    ki...', 'what should I do') describing an ongoing situation, as opposed
+    to a scam script/message being submitted for checking."""
+    return bool(
+        _CONVERSATIONAL_FOLLOWUP_RE.search(original_text)
+        or _CONVERSATIONAL_FOLLOWUP_RE.search(translated_text)
+    )
+
+
+_CONVERSATIONAL_FOLLOWUP_EN = (
+    "I understand what you're describing. Please listen carefully:\n\n"
+    "• Hang up the call right now, or stop replying if it's over message.\n"
+    "• Do NOT share any OTP, PIN, or code — ever.\n"
+    "• Do NOT send any money, no matter what they threaten.\n"
+    "• Do NOT stay on the call out of fear — this is a known scam tactic.\n\n"
+    "Report this at cybercrime.gov.in or call 1930."
+)
+_CONVERSATIONAL_FOLLOWUP_HI = (
+    "मैं समझ रहा/रही हूं कि क्या हो रहा है। कृपया ध्यान से सुनें:\n\n"
+    "• अभी कॉल काट दें, या मैसेज का जवाब देना बंद कर दें।\n"
+    "• कभी भी OTP, पिन या कोड साझा न करें।\n"
+    "• डर के कारण पैसे बिल्कुल न भेजें।\n"
+    "• डर की वजह से कॉल पर बने न रहें — यह एक जाना-पहचाना धोखाधड़ी तरीका है।\n\n"
+    "cybercrime.gov.in पर रिपोर्ट करें या 1930 पर कॉल करें।"
+)
+
+
+def _conversational_followup_reply(lang_tag: str) -> str:
+    if lang_tag == "en-IN":
+        return _CONVERSATIONAL_FOLLOWUP_EN
+    if lang_tag == "hi-IN":
+        return _CONVERSATIONAL_FOLLOWUP_HI
+    translated = _translate_text_sarvam(_CONVERSATIONAL_FOLLOWUP_EN, "en-IN", _to_sarvam_lang_code(lang_tag))
+    return translated or _CONVERSATIONAL_FOLLOWUP_EN
+
+
 def _decide(text_analysis: dict, session_analysis: dict) -> dict:
     """Mirrors android/.../intelligence/DecisionAgent.kt's decide(), minus the
     phone-lookup signal (no CNAP/Sanchar Saathi source for a WhatsApp number)."""
@@ -1196,6 +1266,13 @@ def _process_whatsapp_message(
             else:
                 logging.info(f"whatsapp session={session_id} | translation failed, classifying untranslated text")
 
+        # Captured BEFORE ingest() so this reflects the session's state from
+        # PRIOR messages only -- a fresh, non-flagged session's first
+        # message must still go through full classification/display even if
+        # it happens to trip the same thresholds on its own (see
+        # _is_conversational_followup's doc comment above).
+        was_already_active = SESSION.is_already_active(session_id)
+
         text_analysis = analyze_transcript(text_for_detector, DETECTOR)
         session_analysis = SESSION.ingest(session_id, text_for_detector)
         decision = _decide(text_analysis, session_analysis)
@@ -1206,7 +1283,24 @@ def _process_whatsapp_message(
         # Tamil screenshot from a Hindi-preference user used to get a Tamil
         # reply because this used to key off translated_source_lang/
         # general_native_lang, the *input's* detected script, instead).
-        reply = _reply_in_preference(decision, lang_tag)
+        #
+        # Scoring/session-tracking above is completely unchanged regardless
+        # of what happens next -- only the DISPLAYED reply switches to calm,
+        # direct guidance when: the session was already flagged high-risk
+        # from prior messages, this message reads as a first-person
+        # reactive follow-up rather than a script being submitted for
+        # checking, AND this specific message triggered no rule_categories
+        # of its own (so a message that also contains a fresh scam ask still
+        # gets the full verdict).
+        if (
+            was_already_active
+            and not text_analysis.get("rule_categories")
+            and _is_conversational_followup(classify_text, text_for_detector)
+        ):
+            reply = _conversational_followup_reply(lang_tag)
+            logging.info(f"whatsapp session={session_id} | conversational followup, calm-guidance reply sent")
+        else:
+            reply = _reply_in_preference(decision, lang_tag)
 
         _last_verdict[session_id] = {
             "original_text": classify_text,
