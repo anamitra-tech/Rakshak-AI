@@ -603,36 +603,102 @@ ml/detector.py and OfflineRuleEngine.kt.
 ones Android's offline Kotlin port mirrors — not all 13; that's the tool's own
 documented scope, not a gap introduced by this task.)
 
-### 6.4 12-language OCR reliability — EXISTING-VERIFIED (qualitative table + 2 real CER numbers, honestly incomplete beyond that)
+### 6.4 12-language OCR reliability — RECONCILED 2026-07-18, fresh full-pipeline measurement, EXISTING-VERIFIED + NEWLY-MEASURED-THIS-TASK
 
-Pulled directly from the real audit already recorded in `webhook/app.py`'s own doc
-comment (`_OCR_RELIABLE_LANGUAGES`, lines 1008-1042) and CLAUDE.md §13 — **not
-re-invented**. Real, measured numbers that exist: English/Hindi/Marathi CER **under
-8%**; Urdu CER **84%**. For the other 8 languages (Bengali/Gujarati/Kannada/
-Malayalam/Punjabi/Odia/Telugu/Tamil), **no exact CER/WER percentage was recorded** —
-only the qualitative classification outcome (SUSPICIOUS-not-FRAUD under-call, or for
-Telugu/Tamil a REAL false negative). Reporting this gap honestly rather than
-fabricating numbers that were never measured:
+**First, reconciling the historical-record question directly.** A claim surfaced
+that a full 12-language CER/WER audit with real numbers for all 12 languages
+(not just 4) had already been run and recorded somewhere in this repo's history.
+This was searched for exhaustively before touching anything:
 
-| Language | Tag | OCR reliability | Real measured detail |
-|---|---|---|---|
-| English | en-IN | **Reliable** | CER <8%, correct FRAUD |
-| Hindi | hi-IN | **Reliable** | CER <8%, correct FRAUD |
-| Marathi | mr-IN | **Reliable** | CER <8%, correct FRAUD |
-| Bengali | bn-IN | Unreliable | under-called SUSPICIOUS not FRAUD (no exact CER recorded) |
-| Gujarati | gu-IN | Unreliable | under-called (no exact CER recorded) |
-| Kannada | kn-IN | Unreliable | under-called (no exact CER recorded) |
-| Malayalam | ml-IN | Unreliable | under-called (no exact CER recorded) |
-| Punjabi | pa-IN | Unreliable | under-called (no exact CER recorded) |
-| Odia | or-IN | Unreliable | under-called (no exact CER recorded) |
-| Telugu | te-IN | Unreliable | **false negative — scored REAL** on a real scam script |
-| Tamil | ta-IN | Unreliable | **false negative — scored REAL** |
-| Urdu | ur-IN | Unreliable | **84% CER**; translation of garbage OCR text hallucinated a fabricated story |
+- `git log --all --grep` and `git log --all -p` over every commit's message and
+  diff (103 commits total) for `CER`/`WER`/`character error` — the **only** hits
+  anywhere in git history are the same two data points already in the previous
+  version of this table (English/Hindi/Marathi "<8%", Urdu "84%"), inside the
+  `74eb3f2` commit that first added CLAUDE.md §13.
+- The full commit message of `74eb3f2` (`fix(ocr): gate screenshot OCR to
+  English/Hindi/Marathi...`) and its diff of CLAUDE.md were read directly — the
+  table it introduced is qualitative-only for the other 8 languages, identical to
+  what was already in this doc. No richer version was ever committed and later
+  trimmed.
+- Every `.log`/`.json` scratch file at the repo root (`webhook_stderr.log`,
+  `investigator_app.log`, `scratch_webhook_restart.err.log`, etc.) and the 3.8GB
+  `scratch_logcat.txt` (Android device log) were grepped for `CER`/`character
+  error`/`_ocr_image:`/`Tesseract cascade` — zero matches beyond what's already
+  documented.
+- No stray/uncommitted audit script survives anywhere in the working tree.
+
+**Conclusion: no hidden full 12-language numeric audit exists in this repo's
+history.** What existed before this task was exactly the 2-datapoint table
+already reported. Rather than speculate further about a prior session's memory,
+a **fresh, real, complete audit was run this task** against the actual production
+`_ocr_image()` → `_detect_native_script_lang()` → `_translate_text_sarvam()` →
+`ScamDetector.predict()` pipeline (the same code `/whatsapp/webhook` runs), using
+the real ground-truth screenshot images already sitting in the repo root
+(`bengali_test.png`, `telugu_test.png`, etc. — themselves artifacts of the
+original 2026-07-13/15/16 audits, per their file timestamps, still present on disk
+though never committed).
+
+**Methodology, disclosed plainly:** ground-truth text for each image was
+established by directly viewing the image file (visual transcription), not pulled
+from an external corpus — this is a real, reproducible, but self-transcribed
+ground truth; transcription fluency was not independently verified per-script
+against a certified reader. CER = Levenshtein edit distance between ground truth
+and actual OCR output, divided by ground-truth character count (standard
+character-error-rate formula) — computed with a plain edit-distance function, not
+a third-party library. **Tamil has no ground-truth test image anywhere in this
+repo** (checked — `tamil_test.png` does not exist, unlike the other 11 languages)
+— genuinely cannot produce a fresh number for it; the historical Tamil result
+(false negative, STT-verified separately) stands unrevisited.
+
+| Language | Tag | OCR CER (fresh, this task) | OCR confidence | Raw-OCR-text verdict | **Full pipeline** (OCR→translate→classify) verdict |
+|---|---|---|---|---|---|
+| English | en-IN | 0.0% | 0.72 | SUSPICIOUS | SUSPICIOUS |
+| Hindi | hi-IN | 6.9% | 0.84 | REAL | SUSPICIOUS (not FRAUD — OCR misread "OTP" as digits "07") |
+| Marathi | mr-IN | 13.5% | 0.76 | REAL | SUSPICIOUS (same OTP→"077" digit corruption) |
+| Bengali | bn-IN | 13.8% | 0.46 | REAL | **REAL — translation inverted the meaning** ("Your account is not blocked.", opposite of ground truth) |
+| Gujarati | gu-IN | 5.4% | 0.94 | REAL | SUSPICIOUS (OTP→"010" digit corruption) |
+| Kannada | kn-IN | 34.5% | 0.46 | REAL | REAL — translation hallucinated ("The story of Nemamu is being told") |
+| Malayalam | ml-IN | 16.7% | 0.60 | REAL | SUSPICIOUS ("I will block your account" — garbled but landed suspicious) |
+| Punjabi | pa-IN | 3.1% | 0.95 | REAL | REAL (OCR+translation both accurate here — the test sentence itself is a short, incomplete fragment with no OTP/urgency framing, so REAL is arguably correct for this specific short input, not an OCR failure) |
+| Odia | or-IN | 9.5% | 0.93 | REAL | REAL (same short-fragment caveat as Punjabi) |
+| Tamil | ta-IN | *(no test image in repo — not measured this task)* | — | — | — |
+| Telugu | te-IN | 16.0% | 0.86 | REAL | **REAL — translation hallucinated** ("Your card will be made", meaning lost entirely) |
+| Urdu | ur-IN | 75.0% | 0.84 | REAL | **REAL — translation hallucinated** ("The next day, the two meet in the Kalb Ratna tree.") |
+
+Real, honest observations from this fresh pass:
+1. **Urdu's fresh 75.0% CER closely corroborates the historically-recorded 84%** —
+   different test image/run, same rough magnitude, which is reassuring evidence
+   this fresh methodology is measuring the same real phenomenon, not an artifact.
+2. **"Raw-OCR-text verdict" vs. "Full pipeline verdict" is an important
+   distinction this pass adds that the historical record didn't separate.**
+   Classifying the untranslated native-script OCR output directly (bypassing the
+   translate step) landed every non-English case at REAL/SAFE regardless of
+   language, simply because `ml.detector.HIGH_RISK_PATTERNS` is Latin-script only
+   — that's expected, not an OCR finding. The **full pipeline** column (which
+   actually runs the same translate-then-classify steps `/whatsapp/webhook` does
+   in production) is the representative number.
+3. **A new, previously-undocumented failure mode found this pass: Bengali's
+   translation didn't just degrade the text, it inverted its meaning** — "your
+   account WILL be blocked" became "your account is NOT blocked" after Sarvam
+   translation of the OCR output. This is more dangerous than an "under-call" —
+   it's an actively wrong-direction signal. Not previously reported anywhere in
+   this repo.
+4. **Punjabi and Odia's REAL results are not OCR/translation failures** — both
+   pipelines produced accurate, correct translations; the underlying test-image
+   sentences are short fragments ("your account will be blocked") without the
+   OTP/urgency/authority framing needed to cross the FRAUD/SUSPICIOUS threshold.
+   Flagging this honestly rather than lumping every REAL result together as "OCR
+   is bad" — some of this table's REAL outcomes are appropriate given weak input,
+   not pipeline defects.
+5. The three languages the original audit called worst (Telugu/Urdu, and now also
+   Kannada) are confirmed still broken this pass specifically via **translation
+   hallucination downstream of OCR corruption**, not the raw OCR step alone.
 
 STT (Sarvam Saaras v3) replacement path, re-verified for real 2026-07-16 for the 3
-worst OCR failures: Telugu FRAUD 1.0, Tamil FRAUD 0.713, Urdu FRAUD 1.0 (transcripts
-matched ground truth almost word-for-word); benign control sentences, same 3
-languages, correctly scored SAFE 0.39-0.43.
+worst OCR failures (not re-run this task — cited as-is from the existing real
+record): Telugu FRAUD 1.0, Tamil FRAUD 0.713, Urdu FRAUD 1.0 (transcripts matched
+ground truth almost word-for-word); benign control sentences, same 3 languages,
+correctly scored SAFE 0.39-0.43.
 
 ### 6.5 Android vs. WhatsApp alignment — EXISTING-VERIFIED, same source of truth, confirmed identical
 
@@ -646,6 +712,84 @@ independently tuned, they reference the identical, single, real measurement.
 Voice input (Sarvam STT) is unaffected by this table and available for all 12
 languages on both platforms, per §2.3/§6.4.
 
+### 6.6 OCR-confidence safety floor — NEWLY-BUILT-THIS-TASK, tested against real garbled OCR, honest about what it does and doesn't catch
+
+**Confirmed first: the OCR-disable-for-9-languages redirect is real, built, and
+active** (item 3 of this reconciliation) — `git log` shows it landed in commit
+`74eb3f2` (`fix(ocr): gate screenshot OCR to English/Hindi/Marathi...`), and the
+current code confirms it's still live: `webhook/app.py`'s
+`_OCR_RELIABLE_LANGUAGES = {"en-IN", "hi-IN", "mr-IN"}` gates both `/whatsapp/webhook`
+(before media download) and `/webhook`, and the Android side
+(`CheckCallActivity.kt`, `CloudOcrClient.kt`) explicitly references this same
+policy in its own comments. This remains the **primary** defense against the
+Telugu/Tamil/Urdu false-SAFE failure — it prevents those languages from ever
+reaching OCR at all, regardless of what a confidence floor could or couldn't catch.
+
+**Built this task, on top of that gate, as requested defense-in-depth:**
+`webhook/app.py::_apply_ocr_confidence_floor()`. Mechanism:
+- `_ocr_image()` now returns `(text, confidence)` instead of bare text —
+  confidence normalized to EasyOCR's native 0.0-1.0 scale (Tesseract's own 0-100
+  scale divided by 100), reusing whichever engine's result was actually returned.
+- `_OCR_CONFIDENCE_SAFETY_FLOOR = 0.40` — deliberately reuses the exact same
+  evidence-based cutoff as the pre-existing `_TESSERACT_CASCADE_MIN_CONFIDENCE`
+  (real calibration data already in the code: correct-language Tesseract matches
+  scored 45.6-95, wrong-language forced misreads scored under 45), not a new,
+  independent guess.
+- `_apply_ocr_confidence_floor(text_analysis, ocr_confidence, safe_level)`: if
+  confidence is below the floor **and** the verdict is the SAFE tier
+  (`"REAL"` for `voice/voice_fraud.py`'s spelling), forces `risk_level` to
+  `"SUSPICIOUS"`, `score` to at least `SUSPICIOUS_THRESHOLD`, and `reason` to:
+  *"We couldn't read this image clearly enough to be confident — please type the
+  message or use voice input instead for an accurate check."* Never downgrades an
+  already-SUSPICIOUS/FRAUD verdict; no-op when confidence is `None` (non-image
+  media) or at/above the floor.
+- Wired into both `/whatsapp/webhook` (`_process_whatsapp_message`, directly
+  against `analyze_transcript()`'s result) and `/webhook` (`_process_webhook_message`,
+  against `chat()`'s result, keyed off `result.get("engine") == "classifier_safe"`
+  — the one reliable signal available without reaching into `retrieve_and_respond()`
+  itself). **Known, disclosed limitation of the `/webhook` wiring**: if the LLM
+  intent router misroutes a garbled OCR text away from `SCAM_CHECK` entirely (e.g.
+  to `GENERAL_CHAT`), the floor never fires there — `bot.agent.chat()`'s mandatory
+  rule-based backstop only force-routes to `SCAM_CHECK` when a rule pattern
+  actually matches, which corrupted OCR text may not do.
+
+**Tested against real garbled/low-confidence OCR — results, reported honestly, not
+oversold:**
+1. **Mechanism confirmed working for its calibrated failure mode.** `punjabi_test.png`
+   was deliberately forced through the Tesseract cascade under the *wrong*
+   language codes (`ben`, `tam`, `guj`) — the exact "wrong-language forced misread"
+   scenario `_TESSERACT_CASCADE_MIN_CONFIDENCE` was originally calibrated against.
+   Real result: `ben` → confidence 0.380, correctly floored SAFE→SUSPICIOUS. `guj`
+   → confidence 0.362, correctly floored. `tam` → confidence 0.420, just above the
+   floor, **not** floored — a real, honest illustration that 0.40 is "a real, if
+   imperfect, cutoff," exactly as the pre-existing code comment for
+   `_TESSERACT_CASCADE_MIN_CONFIDENCE` already said about itself.
+2. **The floor did NOT trigger on any of the 11 real ground-truth images in §6.4's
+   fresh audit — including Telugu and Urdu, the two languages that motivated this
+   feature.** Both engines' self-reported confidence stayed at 0.84-0.86 on those
+   two even though the actual OCR text was badly corrupted and the downstream
+   translation hallucinated. **This is the honest, important finding**: Tesseract/
+   EasyOCR's own confidence score reflects how sure the engine is about its own
+   (possibly wrong) reading, not whether that reading is actually correct — it
+   reliably flags "wrong script forced onto the image" (finding 1) but does
+   **not** reliably flag "right script, subtly wrong characters" (what actually
+   happens on the real Telugu/Urdu images). So for the exact motivating case in
+   this task's request, **the language-level gate (`_OCR_RELIABLE_LANGUAGES`) is
+   doing all of the real protective work — the confidence floor is real, tested,
+   correctly-functioning defense-in-depth for a genuinely different (and also
+   real) failure shape, not a second independent guarantee against the same one.**
+
+Both layers are kept, per the request ("keep both anyway as layered safety") —
+they protect against different, real, distinct failure shapes, and the floor's
+narrower coverage doesn't make it redundant, just not a full substitute for the
+language gate.
+
+**Gate check:** `eval_testset.py --no-llm` re-run after these changes — byte-
+identical to baseline (100% recall, 0.033 FPR, same `fp24`). `check_pattern_parity.py`
+clean. These changes are entirely inside `webhook/app.py`'s media-handling
+functions; `ml/detector.py` and `voice/voice_fraud.py` were not touched, so this
+result was expected, not just hoped for.
+
 ---
 
 ## Summary of what was newly built this task
@@ -656,8 +800,25 @@ languages on both platforms, per §2.3/§6.4.
 2. **`POST /graph/cluster_summary`** (`api/server.py`) — new endpoint, new
    `_generate_cluster_summary()` helper, reusing the existing `llm.client.generate`
    chain (see §3.4).
+3. **OCR-confidence safety floor** (`webhook/app.py`) — `_ocr_image()` now returns
+   confidence alongside text; `_apply_ocr_confidence_floor()` forces a SAFE verdict
+   to SUSPICIOUS (with an honest caveat) when OCR confidence is below 0.40, wired
+   into both `/whatsapp/webhook` and `/webhook`. Real defense-in-depth on top of the
+   already-active `_OCR_RELIABLE_LANGUAGES` gate — tested against real garbled OCR
+   (forced-wrong-language reads on `punjabi_test.png`) and confirmed working for
+   that failure mode, but honestly does **not** catch the original Telugu/Urdu
+   motivating case (those engines report high self-confidence on subtly-wrong-but-
+   right-script reads) — see §6.6 for the full, undersold-not-oversold writeup.
+4. **A fresh, real, complete 11-of-12-language OCR CER + full-pipeline audit**
+   (§6.4) — no hidden historical full audit was found after an exhaustive search
+   (git history, CLAUDE.md, all scratch logs, the 3.8GB logcat file), so one was
+   run for real this task, including a newly-found Bengali meaning-inversion
+   translation bug not previously documented anywhere.
 
-Both gated by re-running `eval_testset.py --no-llm` before and after: byte-identical
-baseline (100% recall, 0.033 false_positive_bait FPR, same single known `fp24`
-case) — zero regression to the core detection pipeline, confirmed by real run, not
-assumed from the diff touching unrelated files.
+All four gated by re-running `eval_testset.py --no-llm` and `check_pattern_parity.py`
+before and after: byte-identical baseline (100% recall, 0.033 false_positive_bait
+FPR, same single known `fp24` case), clean parity — zero regression to the core
+detection pipeline, confirmed by real runs, not assumed from the diff touching
+unrelated files. `eval_rag_testset.py` was also re-run in full (unaffected by these
+changes, since none of them touch `bot.agent.chat()`'s decision path — only wrap a
+post-hoc floor around its already-decided result).

@@ -41,7 +41,7 @@ from graph.fraud_graph import (
     get_hard_links,
     get_ring_clusters,
 )
-from ml.detector import ScamDetector
+from ml.detector import ScamDetector, SUSPICIOUS_THRESHOLD
 from ml.session import FraudSessionDetector
 from voice.voice_fraud import analyze_transcript
 from feedback.store import log_correction
@@ -370,13 +370,27 @@ _OCR_MIN_FRAGMENT_CONFIDENCE_THRESHOLD = 0.15
 _TESSERACT_CASCADE_MIN_CONFIDENCE = 40.0
 
 
-def _ocr_image(image_bytes: bytes) -> str | None:
+def _ocr_image(image_bytes: bytes) -> tuple[str | None, float]:
     """Runs on-device-equivalent OCR (English/Latin script via EasyOCR)
     over a downloaded image, falling back to the same 9-language Tesseract
     cascade CloudOcrClient.kt uses (plus Devanagari/"hin", which the
     Android app doesn't need server-side — see _OCR_CASCADE_LANGS) when
-    EasyOCR's English-only read doesn't look confident. None on failure or
-    no text found.
+    EasyOCR's English-only read doesn't look confident. Returns
+    (None, 0.0) on failure or no text found.
+
+    Also returns the confidence of whichever result was actually returned,
+    normalized to EasyOCR's 0.0-1.0 scale (Tesseract's own 0-100 scale is
+    divided by 100) — added 2026-07-18 so callers can apply
+    _OCR_CONFIDENCE_SAFETY_FLOOR (see that constant's doc comment) on top
+    of the language-level _OCR_RELIABLE_LANGUAGES gate. Real, live-observed
+    motivation: the 2026-07-15/16 OCR audit (CLAUDE.md Section 13) found
+    Telugu/Tamil confidently returning a false REAL/SAFE verdict on a real
+    scam script due to OCR corruption — the language gate now prevents
+    those two specific languages from ever reaching this function at all,
+    but this return value lets a caller catch the same failure shape for
+    any OCR result, including a low-confidence read within one of the 3
+    "reliable" languages (e.g. a blurry/low-light en/hi/mr screenshot),
+    which the language gate alone cannot catch.
 
     Real bug traced live via an actual WhatsApp message: a Punjabi malware-
     attachment screenshot sent to the Twilio sandbox came back as pure
@@ -438,7 +452,7 @@ def _ocr_image(image_bytes: bytes) -> str | None:
             and avg_confidence >= _OCR_LOW_CONFIDENCE_THRESHOLD
             and min_confidence >= _OCR_MIN_FRAGMENT_CONFIDENCE_THRESHOLD
         ):
-            return easy_text
+            return easy_text, avg_confidence
 
         logging.info(
             f"_ocr_image: EasyOCR result low-confidence (avg={avg_confidence:.2f}, "
@@ -469,12 +483,12 @@ def _ocr_image(image_bytes: bytes) -> str | None:
                     f"_ocr_image: Tesseract cascade best guess lang={best_lang} "
                     f"confidence={best_conf:.1f} (below floor, using anyway over EasyOCR)"
                 )
-            return best_text
+            return best_text, best_conf / 100.0
 
-        return easy_text or None
+        return (easy_text, avg_confidence) if easy_text else (None, 0.0)
     except Exception as e:
         logging.error(f"_ocr_image failed: {e}")
-        return None
+        return None, 0.0
 
 
 def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str) -> str | None:
@@ -727,31 +741,84 @@ def _audio_unanalyzed_reply(lang_tag: str) -> str:
     return "⚠️ COULD NOT ANALYZE / जांच नहीं हो पाई\n" + _AUDIO_UNANALYZED_EN + "\n\n" + _AUDIO_UNANALYZED_HI
 
 
-def _extract_media_content(media_url: str, content_type: str) -> str | None:
-    """Returns real extracted text for an image (OCR) or audio (Sarvam STT-
-    translate) attachment, bracketed for the classifier the same way
-    _media_descriptor's notes are — or None for any other media type, or if
-    download/extraction failed, in which case the caller falls back to
-    _media_descriptor's type-only note rather than sending nothing."""
+def _extract_media_content(media_url: str, content_type: str) -> tuple[str | None, float | None]:
+    """Returns (real extracted text, ocr_confidence) for an image (OCR) or
+    audio (Sarvam STT-translate) attachment, bracketed for the classifier
+    the same way _media_descriptor's notes are — or (None, None) for any
+    other media type, or if download/extraction failed, in which case the
+    caller falls back to _media_descriptor's type-only note rather than
+    sending nothing.
+
+    ocr_confidence is only ever non-None for an image attachment that
+    produced text — None for audio (Sarvam STT has no comparable per-call
+    confidence surfaced here), no-media, and failed-extraction cases, so a
+    caller can tell "this wasn't an image/OCR result at all" apart from "OCR
+    ran and was confident." See _OCR_CONFIDENCE_SAFETY_FLOOR for the caller-
+    side use of this value."""
     if not media_url or not content_type:
-        return None
+        return None, None
     content_type = content_type.lower()
 
     if content_type.startswith("image/"):
         data = _download_media(media_url)
         if data is None:
-            return None
-        text = _ocr_image(data)
-        return f"[Image text: {text}]" if text else None
+            return None, None
+        text, confidence = _ocr_image(data)
+        return (f"[Image text: {text}]", confidence) if text else (None, None)
 
     if content_type.startswith("audio/"):
         data = _download_media(media_url)
         if data is None:
-            return None
+            return None, None
         text = _transcribe_audio_sarvam(data, content_type)
-        return f"[Voice message: {text}]" if text else None
+        return (f"[Voice message: {text}]", None) if text else (None, None)
 
-    return None
+    return None, None
+
+
+# Reuses the exact same evidence-based cutoff as _TESSERACT_CASCADE_MIN_CONFIDENCE
+# (see that constant's doc comment: real correct-language matches scored
+# 45.6-95, wrong-language/forced misreads scored under 45, normalized here to
+# the 0.0-1.0 scale _ocr_image returns) — one real, already-validated number,
+# not a second independent guess. Defense-in-depth ON TOP OF the
+# _OCR_RELIABLE_LANGUAGES gate (see _ocr_image's doc comment for why the gate
+# alone doesn't cover every case this catches, e.g. a low-confidence read
+# within an already-"reliable" language).
+_OCR_CONFIDENCE_SAFETY_FLOOR = 0.40
+
+_OCR_LOW_CONFIDENCE_CAVEAT_EN = (
+    "We couldn't read this image clearly enough to be confident — please type "
+    "the message or use voice input instead for an accurate check."
+)
+
+
+def _apply_ocr_confidence_floor(text_analysis: dict, ocr_confidence: float | None, safe_level: str) -> dict:
+    """Never let a genuinely low-confidence OCR read render as the SAFE tier
+    (`safe_level` — "REAL" for voice.voice_fraud's spelling, "SAFE" for
+    ml.detector's) — force it to SUSPICIOUS with an honest caveat instead,
+    regardless of what the (possibly garbled) OCR text itself scored.
+    Directly targets the real, live-confirmed failure mode this session's
+    audit found: Telugu/Tamil OCR corruption producing a confident FALSE
+    SAFE verdict on an actual scam script (CLAUDE.md Section 13). A no-op
+    (returns text_analysis unchanged) when ocr_confidence is None (not an
+    image result at all) or at/above the floor, and never downgrades an
+    already-SUSPICIOUS/FRAUD verdict — this only ever escalates a false
+    "safe" read, never softens a real one."""
+    if ocr_confidence is None or ocr_confidence >= _OCR_CONFIDENCE_SAFETY_FLOOR:
+        return text_analysis
+    if text_analysis.get("risk_level") != safe_level:
+        return text_analysis
+    floored = dict(text_analysis)
+    floored["risk_level"] = "SUSPICIOUS"
+    floored["score"] = max(text_analysis.get("score", 0.0), SUSPICIOUS_THRESHOLD)
+    floored["reason"] = _OCR_LOW_CONFIDENCE_CAVEAT_EN
+    floored["signals"] = []
+    floored["ocr_confidence_floor_applied"] = True
+    logging.info(
+        f"_apply_ocr_confidence_floor: OCR confidence {ocr_confidence:.2f} below floor "
+        f"{_OCR_CONFIDENCE_SAFETY_FLOOR} — forced {safe_level} to SUSPICIOUS"
+    )
+    return floored
 
 
 _RISK_RANK = {"REAL": 0, "SUSPICIOUS": 1, "FRAUD": 2}
@@ -1126,9 +1193,10 @@ def _process_whatsapp_message(
         # wasn't possible (no key configured, download failed, no text
         # found) or the attachment isn't an image/audio at all.
         media_descriptor = None
+        ocr_confidence = None
         audio_unanalyzed = False
         if has_media:
-            media_descriptor = _extract_media_content(MediaUrl0, MediaContentType0)
+            media_descriptor, ocr_confidence = _extract_media_content(MediaUrl0, MediaContentType0)
             if media_descriptor is None:
                 if is_audio:
                     audio_unanalyzed = True
@@ -1245,6 +1313,10 @@ def _process_whatsapp_message(
         was_already_active = SESSION.is_already_active(session_id)
 
         text_analysis = analyze_transcript(text_for_detector, DETECTOR)
+        # Defense-in-depth on top of the _OCR_RELIABLE_LANGUAGES gate — see
+        # _apply_ocr_confidence_floor's doc comment. "REAL" is
+        # voice.voice_fraud's spelling of the safe tier.
+        text_analysis = _apply_ocr_confidence_floor(text_analysis, ocr_confidence, "REAL")
         session_analysis = SESSION.ingest(session_id, text_for_detector)
         decision = _decide(text_analysis, session_analysis)
 
@@ -1542,9 +1614,10 @@ def _process_webhook_message(
         # STT-translate) via _extract_media_content, same as /whatsapp/webhook,
         # falling back to the type-only note on any failure.
         media_descriptor = None
+        ocr_confidence = None
         audio_unanalyzed = False
         if has_media:
-            media_descriptor = _extract_media_content(MediaUrl0, MediaContentType0)
+            media_descriptor, ocr_confidence = _extract_media_content(MediaUrl0, MediaContentType0)
             if media_descriptor is None:
                 if is_audio:
                     audio_unanalyzed = True
@@ -1593,6 +1666,31 @@ def _process_webhook_message(
                     logging.info(f"webhook session={session_id} | translation failed, chatting with untranslated text")
 
             result = chat(session_id, text_for_chat)
+
+            # Same defense-in-depth floor as /whatsapp/webhook (see
+            # _apply_ocr_confidence_floor's doc comment), applied here
+            # against chat()'s result instead of analyze_transcript()'s —
+            # chat()/retrieve_and_respond() marks its classifier-driven SAFE
+            # verdict with engine="classifier_safe" (rag/retriever.py) before
+            # any RAG/LLM step runs, which is the one reliable signal
+            # available here without reaching into retrieve_and_respond()
+            # itself. Known, honest limitation: if the intent router (a
+            # separate LLM call) misroutes a garbled/low-confidence OCR text
+            # away from SCAM_CHECK entirely (e.g. to GENERAL_CHAT), this
+            # never fires — bot.agent.chat()'s own mandatory rule-based
+            # backstop only force-routes to SCAM_CHECK when a rule pattern
+            # actually matches, which corrupted OCR text may not do.
+            if (
+                ocr_confidence is not None
+                and ocr_confidence < _OCR_CONFIDENCE_SAFETY_FLOOR
+                and result.get("engine") == "classifier_safe"
+            ):
+                logging.info(
+                    f"webhook session={session_id} | OCR confidence {ocr_confidence:.2f} below floor "
+                    f"{_OCR_CONFIDENCE_SAFETY_FLOOR} — forcing classifier_safe reply to low-confidence caveat"
+                )
+                result["answer"] = _OCR_LOW_CONFIDENCE_CAVEAT_EN
+                result["ocr_confidence_floor_applied"] = True
 
             # bot.agent's LANGUAGE_CHANGE intent (free-text language switches
             # mid-conversation, e.g. "reply to me in Tamil") can't mutate
