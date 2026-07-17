@@ -1,4 +1,4 @@
-# Prahari / AbhayAI — API Spec (real, evidence-based)
+# Prahari / PraHARI-AI — API Spec (real, evidence-based)
 
 Generated 2026-07-17 by reading the actual source and running live requests against
 `python -m api.server 8000` and `uvicorn webhook.app:app --port 8001` (both already

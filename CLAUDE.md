@@ -25,7 +25,7 @@ first claimed done).
 State explicitly which of (a)-(e) are true whenever reporting a fix's status, and call out plainly
 which ones aren't yet. Never say a fix is "done" or "working" based on (a)/(b) alone.
 
-# AbhayAI — Android Client, Phase 1 (revised)
+# PraHARI-AI — Android Client, Phase 1 (revised)
 
 This repo already contains **Prahari**, a working Python fraud-intelligence backend (see
 `README.md`). This document specifies the Android call-protection app that will consume it,
@@ -54,7 +54,7 @@ Android code.
 
 ## 1. What Prahari already covers vs. what's genuinely mocked
 
-| AbhayAI agent role | Prahari coverage | Integration |
+| PraHARI-AI agent role | Prahari coverage | Integration |
 |---|---|---|
 | **Call Intelligence** (CNAP + Sanchar Saathi, number-only, pre-connect) | **Not covered** — Prahari has no phone-number-reputation lookup; nothing to consume | `MockCallerLookupSource` stays, as originally planned |
 | **Speech Intelligence** (scam-phrase / urgency detection on text) | **Covered** — `POST /analyze_voice {transcript}` (`voice/voice_fraud.py`), `POST /analyze_message {text}` (`ml/detector.py`) | Real HTTP calls, fed from manual/pasted text (see Section 3 — no live audio in this phase) |

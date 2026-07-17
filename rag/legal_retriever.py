@@ -27,7 +27,7 @@ _NO_MATCH_ANSWER = (
 _FALLBACK_TEMPLATE = "{body}\n\nWhat to do: {what_to_do}\n\nSource: {source_name}"
 
 _PROMPT_TEMPLATE = """\
-You are AbhayAI, a public safety assistant for Indian citizens.
+You are PraHARI-AI, a public safety assistant for Indian citizens.
 A citizen asked: "{user_message}"
 
 Here is a sourced knowledge-base entry to answer from — use ONLY this \

@@ -900,7 +900,7 @@ from bot.languages import (
 )
 
 _LANGUAGE_INTRO = (
-    "🛡️ *Namaste! I'm AbhayAI.*\n\n"
+    "🛡️ *Namaste! I'm PraHARI-AI.*\n\n"
     "Apni bhasha chuniye / Please select your language:\n\n"
     + "\n".join(
         f"{i}. {native}" if native == english else f"{i}. {native} ({english})"
@@ -1480,7 +1480,7 @@ _EVIDENCE_FILENAME_RE = re.compile(r"^[0-9a-f]{32}\.pdf$")
 class WhatsAppEvidenceRequest(BaseModel):
     phone_number: str  # E.164, no "whatsapp:" prefix — this adds it
     pdf_base64: str
-    caption: str = "AbhayAI — missed escalation evidence"
+    caption: str = "PraHARI-AI — missed escalation evidence"
 
 
 class EmailEvidenceRequest(BaseModel):

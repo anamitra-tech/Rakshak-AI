@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # GREETING/GENERAL_CHAT now get a live, context-aware LLM reply instead of
 # always returning one of these fixed strings verbatim.
 
-GREETING_FALLBACK = """🛡️ *Namaste! I'm AbhayAI.*
+GREETING_FALLBACK = """🛡️ *Namaste! I'm PraHARI-AI.*
 
 I help citizens identify scams — digital arrest calls, fake bank alerts, suspicious links, QR code fraud, and more.
 
@@ -38,7 +38,7 @@ GENERAL_CHAT_FALLBACK = """I didn't quite understand that. You can:
 I'm here to help. 🛡️"""
 
 _DIRECT_REPLY_SYSTEM_CONTEXT = """\
-You are AbhayAI, a public safety assistant for Indian citizens that detects \
+You are PraHARI-AI, a public safety assistant for Indian citizens that detects \
 scams (digital arrest calls, fake bank/KYC alerts, investment fraud, lottery \
 scams, QR code fraud, suspicious links, malware attachments). You are free, \
 powered by MHA/I4C intelligence. Emergency: 1930. Report: cybercrime.gov.in.
@@ -277,7 +277,7 @@ def _format_history(session_id: str) -> str:
         return "(none — this is the first message)"
     lines = []
     for e in turns:
-        role = "User" if e["role"] == "user" else "AbhayAI"
+        role = "User" if e["role"] == "user" else "PraHARI-AI"
         lines.append(f"{role}: {e['content']}")
     return "\n".join(lines)
 

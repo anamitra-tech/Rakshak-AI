@@ -2,7 +2,7 @@
 <!--
   Full-screen loading state for CheckCallActivity — a radar-sweep animation
   (radar_rings.xml static + radar_sweep.xml rotated continuously, see
-  LoadingOverlay.kt), the AbhayAI wordmark, a rotating reassurance phrase,
+  LoadingOverlay.kt), the PraHARI-AI wordmark, a rotating reassurance phrase,
   and one honest stat line. Driven by LoadingOverlay.kt (show()/hide()),
   included via <include> in activity_check_call.xml so this stays a
   self-contained, reusable unit rather than inline elements mixed into the

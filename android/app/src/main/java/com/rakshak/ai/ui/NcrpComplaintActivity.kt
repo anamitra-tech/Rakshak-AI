@@ -684,7 +684,7 @@ class NcrpComplaintActivity : AppCompatActivity() {
          */
         private val DESCRIPTION_TEMPLATE_VARIANTS = listOf(
             "On {timestamp} I got a call from {phone_number}. {brief_description_of_what_was_said_or_asked} " +
-                "The Rakshak AI app on my phone flagged this as {rule_category_plain_language} I am filing " +
+                "The PraHARI-AI app on my phone flagged this as {rule_category_plain_language} I am filing " +
                 "this report because I believe someone was trying to defraud me.",
             "{phone_number} called me on {timestamp}. {brief_description_of_what_was_said_or_asked} I did " +
                 "not act on anything they asked. It looked like {rule_category_plain_language} so I am " +
@@ -693,7 +693,7 @@ class NcrpComplaintActivity : AppCompatActivity() {
                 "was roughly this, {brief_description_of_what_was_said_or_asked} It sounded exactly like " +
                 "{rule_category_plain_language} and my phone warned me about it right there during the " +
                 "call, so I am filing this while it is still fresh.",
-            "I want to report a call I received on {timestamp} from {phone_number}. Rakshak AI picked this " +
+            "I want to report a call I received on {timestamp} from {phone_number}. PraHARI-AI picked this " +
                 "up on my phone as {rule_category_plain_language} Here is what actually happened on the " +
                 "call, {brief_description_of_what_was_said_or_asked} I am submitting this so it is on file " +
                 "with NCRP.",

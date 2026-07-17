@@ -13,6 +13,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.rakshak.ai.intelligence.DecisionResult
+import com.rakshak.ai.location.VictimLocation
 import com.rakshak.ai.settings.AppSettings
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -62,14 +63,23 @@ class EscalationOrchestrator(private val context: Context) {
      * configured, or SEND_SMS isn't granted, or the send fails, the draft is
      * still returned so the caller (WarningActivity) can show it in-app with
      * a copy button instead — the draft is never silently dropped.
+     *
+     * [location], if provided, must already be resolved by the caller (see
+     * VictimLocationProvider) — this function does not fetch it itself, so
+     * it stays synchronous and callers control the fetch-then-send ordering
+     * (WarningActivity waits for it before calling this; Tier 3b's
+     * auto-escalation fires the call intent immediately regardless and lets
+     * this run whenever the location callback resolves — see
+     * AutoEscalationCountdownActivity.triggerAutoEscalation).
      */
     fun notifyTrustedContact(
         settings: AppSettings,
         phoneNumber: String,
         decision: DecisionResult,
         transcript: String?,
+        location: VictimLocation? = null,
     ): NotifyResult {
-        val draft = ComplaintDraft.build(phoneNumber, decision, transcript)
+        val draft = ComplaintDraft.build(phoneNumber, decision, transcript, location = location)
         val contactPhone = settings.trustedContactPhone.trim()
         val name = settings.trustedContactName.ifBlank { "your trusted contact" }
 
@@ -86,7 +96,7 @@ class EscalationOrchestrator(private val context: Context) {
         }
 
         return try {
-            val smsBody = "ABHAYAI ALERT — possible scam detected.\n\n$draft"
+            val smsBody = "PraHARI-AI ALERT — possible scam detected.\n\n$draft"
             val smsManager = SmsManager.getDefault()
             val parts = smsManager.divideMessage(smsBody)
 

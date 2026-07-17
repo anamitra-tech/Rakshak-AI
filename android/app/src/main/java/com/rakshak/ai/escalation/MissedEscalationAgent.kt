@@ -56,7 +56,7 @@ class MissedEscalationAgent(private val context: Context) {
 
         val draftText = ComplaintDraft.build(phoneNumber, decision, transcript)
         val pdfBase64 = try {
-            val pdfBytes = EvidenceCardRenderer.renderPdf("RAKSHAK AI — EVIDENCE CARD", draftText)
+            val pdfBytes = EvidenceCardRenderer.renderPdf("PraHARI-AI — EVIDENCE CARD", draftText)
             Base64.encodeToString(pdfBytes, Base64.NO_WRAP)
         } catch (e: Exception) {
             Log.e(TAG, "Evidence PDF rendering failed: ${e.message}")
@@ -94,7 +94,7 @@ class MissedEscalationAgent(private val context: Context) {
             val json = JSONObject().apply {
                 put("phone_number", phone)
                 put("pdf_base64", pdfBase64)
-                put("caption", "AbhayAI — missed escalation evidence. See attached.")
+                put("caption", "PraHARI-AI — missed escalation evidence. See attached.")
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
@@ -127,7 +127,7 @@ class MissedEscalationAgent(private val context: Context) {
      * timeout, rather than just checking that the send call didn't throw.
      */
     private suspend fun trySms(phone: String, draftText: String): Boolean {
-        val condensed = "RAKSHAK AI EVIDENCE (you may have missed an earlier alert):\n" + condense(draftText)
+        val condensed = "PraHARI-AI EVIDENCE (you may have missed an earlier alert):\n" + condense(draftText)
         return try {
             val smsManager = SmsManager.getDefault()
             val parts = smsManager.divideMessage(condensed)
@@ -181,10 +181,10 @@ class MissedEscalationAgent(private val context: Context) {
         return try {
             val json = JSONObject().apply {
                 put("to_email", email)
-                put("subject", "AbhayAI — missed escalation evidence")
+                put("subject", "PraHARI-AI — missed escalation evidence")
                 put("text_summary", draftText)
                 put("pdf_base64", pdfBase64)
-                put("pdf_filename", "abhayai_evidence.pdf")
+                put("pdf_filename", "PraHARI-AI_evidence.pdf")
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
