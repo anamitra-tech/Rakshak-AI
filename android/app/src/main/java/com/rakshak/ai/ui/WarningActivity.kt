@@ -1,9 +1,11 @@
 package com.rakshak.ai.ui
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -14,6 +16,7 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.rakshak.ai.R
 import com.rakshak.ai.RakshakApp
 import com.rakshak.ai.databinding.ActivityWarningBinding
@@ -21,7 +24,11 @@ import com.rakshak.ai.escalation.ComplaintDraft
 import com.rakshak.ai.escalation.EscalationOrchestrator
 import com.rakshak.ai.escalation.NotifyResult
 import com.rakshak.ai.intelligence.DecisionResult
+import com.rakshak.ai.intelligence.ExplanationTranslations
 import com.rakshak.ai.intelligence.RiskLevel
+import com.rakshak.ai.location.VictimLocation
+import com.rakshak.ai.location.VictimLocationProvider
+import com.rakshak.ai.settings.AppSettings
 import com.rakshak.ai.tts.SpeechLanguageSelector
 import java.util.Date
 
@@ -152,18 +159,48 @@ class WarningActivity : AppCompatActivity() {
     private fun onPanicTapped() {
         val outcome = escalation.describePanicOutcome(autoSilenced)
         val decision = DecisionResult(riskLevel = riskLevel, headline = headline, reasons = reasons, suspectedScamType = null)
-        val notifyResult = escalation.notifyTrustedContact(
-            (application as RakshakApp).settings, phoneNumber, decision, transcript,
-        )
-        showHelpState(notifyResult)
-        speak(outcome)
+        val settings = (application as RakshakApp).settings
+
+        // Single-visible-button rule (CLAUDE.md 9.2) must hold the instant
+        // this is tapped, not after an up-to-8s location fetch below — so
+        // the HELP state is shown immediately, before location sharing
+        // (if any) even starts resolving.
+        binding.primaryActionButton.visibility = View.GONE
+        binding.helpActionButton.visibility = View.VISIBLE
+        binding.statusText.visibility = View.VISIBLE
         binding.helpActionButton.setOnClickListener { escalation.dialHelpline() }
+        speak(outcome)
+
+        val wantsLocation = settings.locationSharingEnabled &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (wantsLocation) {
+            binding.statusText.text = "$outcome\n\n${getString(R.string.locating_status)}"
+            VictimLocationProvider(this).fetchCurrentLocation { location ->
+                completePanicFlow(settings, decision, outcome, location)
+            }
+        } else {
+            binding.statusText.text = outcome
+            completePanicFlow(settings, decision, outcome, null)
+        }
+    }
+
+    /**
+     * The actual Tier 2 send + on-screen complaint draft, run once a
+     * location fix has been attempted (successfully or not) or wasn't
+     * requested at all — the single place both [location]-dependent pieces
+     * (the SMS and the draft) are built, so they always agree.
+     */
+    private fun completePanicFlow(settings: AppSettings, decision: DecisionResult, outcome: String, location: VictimLocation?) {
+        val notifyResult = escalation.notifyTrustedContact(settings, phoneNumber, decision, transcript, location)
+        binding.statusText.text = outcome
+        renderNotifyResult(notifyResult)
 
         // Same ComplaintDraft text already used for the SMS/copy fallback —
         // NcrpComplaintActivity treats it as the always-available manual
         // fallback alongside its WebView-assisted autofill attempt.
         val now = Date()
-        val draftText = ComplaintDraft.build(phoneNumber, decision, transcript, now)
+        val draftText = ComplaintDraft.build(phoneNumber, decision, transcript, now, location)
         val descriptionText = buildString {
             if (reasons.isNotEmpty()) append(reasons.joinToString("; "))
             if (!transcript.isNullOrBlank()) {
@@ -250,25 +287,28 @@ class WarningActivity : AppCompatActivity() {
         binding.statusText.visibility = View.GONE
     }
 
-    private fun showHelpState(notifyResult: NotifyResult) {
-        binding.primaryActionButton.visibility = View.GONE
-        binding.helpActionButton.visibility = View.VISIBLE
-        binding.statusText.visibility = View.VISIBLE
-        binding.statusText.text = escalation.describePanicOutcome(autoSilenced)
-        renderNotifyResult(notifyResult)
-    }
-
     /**
-     * Selects a TTS voice/locale matching this specific utterance's actual
-     * language (ML Kit Language ID, on-device) before speaking, falling back
-     * to the app's configured spokenLanguageTag if detection is inconclusive
-     * or no matching voice is installed. See SpeechLanguageSelector.
+     * Translates [text] into the family's configured spokenLanguageTag first
+     * (via [ExplanationTranslations] — the same fixed-string lookup Tier 3b's
+     * countdown screen already uses), then speaks that translation. Without
+     * this, [text] here is always DecisionAgent's hardcoded English headline,
+     * so ML Kit's language detection inside SpeechLanguageSelector always
+     * identified it as English and spoke English regardless of what language
+     * was set in Family Setup — the configured language was never actually
+     * reachable for the one thing users most need spoken correctly. Falls
+     * back to the raw English text (still via SpeechLanguageSelector, so a
+     * mismatched-language voice on an unsupported/untranslated string doesn't
+     * hard-fail) when no translation exists for this exact string+language,
+     * e.g. the configured language is English, or this text isn't in
+     * ExplanationTranslations' fixed set (a free-text panic-outcome string).
      */
     private fun speak(text: String) {
         if (!ttsReady || text.isBlank()) return
         Log.i(TAG, "tts_speak text_len=${text.length}")
         val app = application as RakshakApp
-        SpeechLanguageSelector.speak(tts, text, app.settings.spokenLanguageTag, "rakshak_warning")
+        val languageTag = app.settings.spokenLanguageTag
+        val spokenText = ExplanationTranslations.translate(text, languageTag) ?: text
+        SpeechLanguageSelector.speak(tts, spokenText, languageTag, "rakshak_warning")
     }
 
     /**

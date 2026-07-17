@@ -937,7 +937,7 @@ class NcrpComplaintActivity : AppCompatActivity() {
                         function fillByIdOrKeyword(fieldLabel, id, includeKeys, value) {
                             if (!value) { return; }
                             var el = id ? document.getElementById(id) : null;
-                            if (el && !el.disabled && !el.readOnly && !el.value) {
+                            if (el && !el.disabled && !el.readOnly && !el.value.trim()) {
                                 el.value = value;
                                 el.dispatchEvent(new Event('input', { bubbles: true }));
                                 el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -949,7 +949,7 @@ class NcrpComplaintActivity : AppCompatActivity() {
                             );
                             for (var i = 0; i < candidates.length; i++) {
                                 var c = candidates[i];
-                                if (c.disabled || c.readOnly || c.value) { continue; }
+                                if (c.disabled || c.readOnly || c.value.trim()) { continue; }
                                 var haystack = haystackFor(c);
                                 var excluded = EXCLUDE_ALWAYS.some(function(k) { return haystack.indexOf(k) !== -1; });
                                 if (excluded) { continue; }
@@ -1088,10 +1088,18 @@ class NcrpComplaintActivity : AppCompatActivity() {
                         }
                         // -1 sentinel as the initial lastCount so the very first
                         // check (count=1, placeholder only) can never spuriously
-                        // "stabilize"; 8 attempts (~3.2s worst case) budgets for one
-                        // extra confirmation round-trip versus the old single-arrival
-                        // check, since stabilization needs two matching reads, not one.
-                        finalizeSubCategoryAndReport(8, -1);
+                        // "stabilize". Was 8 attempts (~3.2s worst case, tuned against
+                        // a single real capture where the cascade landed ~815ms in) —
+                        // real evidence from a later live capture (2026-07-18, this
+                        // same category/session) showed the cascade hadn't populated
+                        // ANY real option even after the full 3.2s window, on NCRP's
+                        // actual live server, not a synthetic delay — an external
+                        // government site's response time isn't something this app
+                        // controls, so the budget is widened rather than assumed
+                        // fixed at the one earlier observed timing. 20 attempts
+                        // (~8s worst case) trades more latency for not giving up on a
+                        // real cascade that's simply slower tonight.
+                        finalizeSubCategoryAndReport(20, -1);
                     } catch (e) {
                         if (window.$JS_BRIDGE_NAME && window.$JS_BRIDGE_NAME.onFillResult) {
                             window.$JS_BRIDGE_NAME.onFillResult(JSON.stringify({ filled: [], notFound: [], error: String(e) }));

@@ -257,9 +257,14 @@ class CheckCallActivity : AppCompatActivity() {
                 val transcript = SarvamApiClient.transcribeAndTranslate(file, app.settings.evidenceBaseUrl)
                 binding.transcriptInput.setText(transcript)
                 binding.transcriptInput.setSelection(transcript.length)
-                // mode=translate already returns English -- no further
-                // translation needed before this reaches Prahari.
-                transcriptSourceLanguageTag = "en-IN"
+                // Now mode="transcribe" (native script), not mode="translate"
+                // -- no reliable source-language metadata from this path (Saaras
+                // auto-detects the spoken language itself, same as before), so
+                // leave this null and let runAnalysis's SarvamLanguageCodes
+                // .detectNativeScriptTag content-based detection resolve the
+                // real script from the transcript text itself, same as typed/
+                // pasted native-language input already does.
+                transcriptSourceLanguageTag = null
                 binding.voiceStatusText.visibility = View.GONE
                 Log.i(TAG, "sarvam_stt_success")
             } catch (e: SarvamUnavailableException) {

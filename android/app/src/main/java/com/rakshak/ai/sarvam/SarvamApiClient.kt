@@ -116,12 +116,22 @@ object SarvamApiClient {
      * the online fallback VoiceInputHelper/CheckCallActivity use when
      * Android's on-device SpeechRecognizer reports the language isn't
      * supported (or the device can't do on-device recognition at all).
-     * That endpoint's mode=translate returns English text directly (Saaras
-     * speech-to-English translation), so callers don't need a separate
-     * /translate round trip, and it transparently falls back to Sarvam's
-     * async batch-job API for audio over the sync endpoint's ~30s limit
-     * (see _transcribe_audio_sarvam's doc comment server-side) — this app
-     * doesn't need its own copy of that fallback logic.
+     * Requests mode="transcribe" so the server returns the transcript in
+     * its original script (e.g. real Telugu text for Telugu speech) rather
+     * than mode="translate"'s straight-to-English output — real bug this
+     * fixes: the transcript box was always showing an English translation
+     * regardless of the configured language, since translate-mode was the
+     * only mode this client ever requested, so the user never saw their
+     * own words back in the language they actually spoke. The existing
+     * content-based script-detection + translate-to-English bridge in
+     * CheckCallActivity.runAnalysis (already built for OCR/typed native
+     * text) picks up this native transcript exactly the same way — nothing
+     * downstream needed to change.
+     *
+     * Transparently falls back to Sarvam's async batch-job API for audio
+     * over the sync endpoint's ~30s limit (see _transcribe_audio_sarvam's
+     * doc comment server-side) — this app doesn't need its own copy of
+     * that fallback logic.
      *
      * No language_code is sent (the server-side function doesn't accept
      * one) — real bug hit against a live device test calling Sarvam
@@ -141,6 +151,7 @@ object SarvamApiClient {
             val multipart = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("file", audioFile.name, audioFile.asRequestBody("audio/mp4".toMediaType()))
+                .addFormDataPart("mode", "transcribe")
                 .build()
             val request = Request.Builder()
                 .url(evidenceBaseUrl.trimEnd('/') + "/stt/sarvam")

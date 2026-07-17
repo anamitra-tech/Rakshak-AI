@@ -491,12 +491,15 @@ def _ocr_image(image_bytes: bytes) -> tuple[str | None, float]:
         return None, 0.0
 
 
-def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str) -> str | None:
-    """Sarvam speech-to-text, mode=translate — Indic speech (or English)
-    straight to an English transcript, same translate-to-English behavior
-    CLAUDE.md documented as the planned online-STT fallback (§11.3), here
-    used server-side rather than on-device. None if SARVAM_API_KEY isn't
-    configured or the call fails for any reason — never blocks the reply.
+def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str, mode: str = "translate") -> str | None:
+    """Sarvam speech-to-text. [mode] defaults to "translate" (Indic speech,
+    or English, straight to an English transcript — the WhatsApp bot's own
+    behavior, documented as the planned online-STT fallback, CLAUDE.md
+    §11.3) but callers that want the transcript in its original script
+    (e.g. the Android app's voice-input box, so the user sees back what
+    they actually said) pass mode="transcribe" instead. None if
+    SARVAM_API_KEY isn't configured or the call fails for any reason —
+    never blocks the reply.
 
     Tries the fast synchronous /speech-to-text endpoint first (real limit,
     confirmed via a live 400 response: 30 seconds max). A voice note longer
@@ -514,23 +517,25 @@ def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str) -> str | Non
             "https://api.sarvam.ai/speech-to-text",
             headers={"api-subscription-key": SARVAM_API_KEY},
             files={"file": (f"voice{ext}", audio_bytes, content_type)},
-            data={"model": "saaras:v3", "mode": "translate"},
+            data={"model": "saaras:v3", "mode": mode},
             timeout=30,
         )
         if resp.status_code == 400 and "exceeds the maximum limit" in resp.text:
             logging.info("_transcribe_audio_sarvam: audio too long for sync endpoint, trying batch job")
-            return _transcribe_audio_sarvam_batch(audio_bytes, ext)
+            return _transcribe_audio_sarvam_batch(audio_bytes, ext, mode)
         if resp.status_code >= 400:
             logging.error(f"_transcribe_audio_sarvam: {resp.status_code} response body: {resp.text[:500]}")
         resp.raise_for_status()
-        transcript = (resp.json().get("transcript") or "").strip()
+        resp_json = resp.json()
+        logging.info(f"DIAG_sarvam_sync_raw_response mode={mode} json={resp_json}")
+        transcript = (resp_json.get("transcript") or "").strip()
         return transcript or None
     except Exception as e:
         logging.error(f"_transcribe_audio_sarvam failed: {e}")
         return None
 
 
-def _transcribe_audio_sarvam_batch(audio_bytes: bytes, ext: str) -> str | None:
+def _transcribe_audio_sarvam_batch(audio_bytes: bytes, ext: str, mode: str = "translate") -> str | None:
     """Async batch-job path for audio too long for the sync endpoint — see
     _transcribe_audio_sarvam's doc comment. The SDK's upload_files() takes
     file paths, not bytes, so this writes to a real temp file first. Output
@@ -550,7 +555,7 @@ def _transcribe_audio_sarvam_batch(audio_bytes: bytes, ext: str) -> str | None:
         with os.fdopen(fd, "wb") as f:
             f.write(audio_bytes)
 
-        job = client.speech_to_text_job.create_job(model="saaras:v3", mode="translate")
+        job = client.speech_to_text_job.create_job(model="saaras:v3", mode=mode)
         job.upload_files(file_paths=[tmp_path])
         job.start()
         # 180s budget: real test completed in ~3s for a 2s clip; this leaves
@@ -572,6 +577,7 @@ def _transcribe_audio_sarvam_batch(audio_bytes: bytes, ext: str) -> str | None:
             return None
         with open(os.path.join(out_dir, json_files[0]), encoding="utf-8") as f:
             data = json.load(f)
+        logging.info(f"DIAG_sarvam_batch_raw_response mode={mode} json={data}")
         transcript = (data.get("transcript") or "").strip()
         return transcript or None
     except Exception as e:
@@ -1812,8 +1818,8 @@ async def health():
 
 
 @app.post("/stt/sarvam")
-async def stt_sarvam(file: UploadFile = File(...)):
-    """Called by the Android app's SarvamApiClient.transcribeAndTranslate —
+async def stt_sarvam(file: UploadFile = File(...), mode: str = Form("translate")):
+    """Called by the Android app's SarvamApiClient —
     proxies through _transcribe_audio_sarvam (this file's own, already
     battle-tested WhatsApp media-handling code) rather than having the
     Android client call api.sarvam.ai directly. Real bug this fixed: the
@@ -1822,10 +1828,21 @@ async def stt_sarvam(file: UploadFile = File(...)):
     endpoint's 30s limit just failed outright — this endpoint reuses the
     sync-then-async-batch fallback (see _transcribe_audio_sarvam's own doc
     comment) that already handles audio up to 2 hours, proven working
-    against real WhatsApp voice notes."""
+    against real WhatsApp voice notes.
+
+    [mode] defaults to "translate" (English transcript) for backward
+    compatibility with any other caller, but CheckCallActivity's voice
+    input passes mode="transcribe" so the user sees their own words back
+    in the language they actually spoke — real bug this fixes: the
+    transcript box was always showing an English translation regardless
+    of the configured language, since translate-mode was the only mode
+    ever requested. The existing content-based script-detection + translate
+    bridge in CheckCallActivity.runAnalysis already handles native-script
+    text correctly (built for OCR/typed input) — this just stops
+    pre-translating away the native text before that bridge ever sees it."""
     audio_bytes = await file.read()
     content_type = file.content_type or "audio/mp4"
-    transcript = _transcribe_audio_sarvam(audio_bytes, content_type)
+    transcript = _transcribe_audio_sarvam(audio_bytes, content_type, mode)
     if transcript is None:
         return {"transcript": "", "found": False}
     return {"transcript": transcript, "found": True}
