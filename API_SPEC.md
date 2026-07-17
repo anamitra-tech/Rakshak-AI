@@ -1,0 +1,663 @@
+# Prahari / AbhayAI — API Spec (real, evidence-based)
+
+Generated 2026-07-17 by reading the actual source and running live requests against
+`python -m api.server 8000` and `uvicorn webhook.app:app --port 8001` (both already
+running on this machine). Every JSON block below is a **real captured response**,
+not a hand-written example, unless explicitly marked otherwise. Every status tag
+means:
+
+- **EXISTING-VERIFIED** — code read + a real request/run confirmed the behavior today.
+- **EXISTING-NEEDS-VERIFICATION** — code exists and looks correct, but no live
+  request was run against this exact path in this session (rare in this doc —
+  flagged inline wherever used).
+- **NEWLY-BUILT-THIS-TASK** — did not exist before this task; built, gated through
+  the eval suite (zero regression confirmed), and verified with a real request.
+
+Two servers, two different frameworks:
+- `api/server.py` — zero-dependency `http.server`, the primary/demo server (port 8000).
+- `api/app_fastapi.py` — an alternate FastAPI implementation of *most* of the same
+  routes (port 8000 if run standalone via uvicorn). **Known drift, verified by
+  reading both files side by side**: `app_fastapi.py`'s `/analyze_session` and
+  `/case/generate` never call `ml/llm_explainer.py` — they always return the
+  template-based `reason`, never the LLM-rewritten one. `api/server.py` does. The
+  two new endpoints in this doc (`/extract_entities`, `/graph/cluster_summary`)
+  were added only to `api/server.py`. **If your frontend needs the LLM-explanation
+  behavior or the two new endpoints, use `api/server.py`, not `app_fastapi.py`.**
+- `webhook/app.py` — FastAPI, port 8001, the WhatsApp/Twilio conversational bot
+  and its own `/graph`, `/health`, `/stt/sarvam`, `/ocr/tesseract` routes.
+
+---
+
+## 1. CITIZEN FRAUD SHIELD
+
+### 1.1 `POST /analyze_voice` — EXISTING-VERIFIED
+
+Real request/response, `api/server.py:8000`:
+
+```json
+// request
+{"transcript": "This is officer Sharma from CBI. There is an arrest warrant in your name. Do not disconnect the call and do not tell your family. To clear the case transfer the settlement amount to this RBI safe account immediately."}
+
+// response
+{
+  "risk_level": "FRAUD",
+  "score": 1.0,
+  "reason": "This message is a FRAUD risk because it claims to be from a real law enforcement agency (\"officer Sharma from CBI\") to create a sense of authority and convince you to act quickly. It creates a false sense of urgency by stating that you must not alert your family and need to transfer money immediately \"to clear the case\". This is a scam tactic to trick you into sending the money to someone who does not have your best interest in mind.",
+  "signals": [
+    "Impersonates law-enforcement / govt authority",
+    "Creates artificial urgency / coercion",
+    "Demands money transfer"
+  ],
+  "recommended_action": "Hang up. No real officer arrests over a call/UPI. Report to 1930.",
+  "rule_categories": ["authority_impersonation", "urgency_coercion", "money_demand"],
+  "llm_explanation": {
+    "used": true, "explanation": "...(same text as reason)...",
+    "engine": "groq", "latency_ms": 4994, "error": null
+  }
+}
+```
+
+**Field shapes (confirmed against `voice/voice_fraud.py::_fmt`, `ml/llm_explainer.py::apply`):**
+
+| Field | Type | Range/values |
+|---|---|---|
+| `risk_level` | string | `"FRAUD"` \| `"SUSPICIOUS"` \| `"REAL"` |
+| `score` | float | **0.0 – 1.0, not 0-100** (confirmed: `voice_fraud.py` clamps via `min(1.0, ...)`; `analyze_transcript` returns `round(score, 3)`) |
+| `reason` | string | see §1.3 — always a single string, never a list |
+| `signals` | array[string] | human-readable labels, one per matched `rule_category` (can be empty array) |
+| `recommended_action` | string | fixed per risk_level (3 possible strings) |
+| `rule_categories` | array[string] | machine-readable category keys, see §1.2 (can be empty array) |
+| `llm_explanation` | object \| absent* | see §1.3 |
+
+\* `llm_explanation` is only present because `/analyze_voice` and `/analyze_session`
+route through `ml/llm_explainer.py::apply()`. `/analyze_message` does **not** call
+this at all (confirmed reading `api/server.py`'s `do_POST` — no `llm_explainer.apply`
+on that branch), so its response never has this key. This is real, current code
+behavior, not a bug being reported — `/analyze_message` is meant as the fast,
+offline-only path.
+
+### 1.2 Full enumerated `rule_category` / `fraud_type` values — EXISTING-VERIFIED
+
+The complete, current key set of `ml.detector.HIGH_RISK_PATTERNS` (13 categories,
+confirmed by reading the dict literal in `ml/detector.py` top to bottom — this is
+every key, not a sample):
+
+1. `authority_impersonation`
+2. `credential_request` *(soft signal — see note below)*
+3. `urgency_coercion` *(soft signal)*
+4. `money_demand`
+5. `reward_bait`
+6. `isolation_tactics` *(near-deterministic override)*
+7. `otp_readout_request` *(near-deterministic override)*
+8. `card_collection_request` *(near-deterministic override)*
+9. `relative_impersonation`
+10. `telecom_impersonation`
+11. `extortion_threat` *(structural — counts as 2 categories' worth of evidence)*
+12. `malicious_link_bait`
+13. `malware_attachment_delivery` *(structural)*
+
+`credential_request` and `urgency_coercion` are in `SOFT_SIGNAL_CATEGORIES` — a bare
+hit on either alone contributes nothing to the score; they only count combined with
+at least one other category (`ml/detector.py::_rule_signals`). `isolation_tactics`,
+`otp_readout_request`, `card_collection_request` are in `NEAR_DETERMINISTIC_RULES` —
+any single hit forces `score = max(score, 0.95)` regardless of anything else.
+
+### 1.3 `reason`/`reasoning` shape — always a single string — EXISTING-VERIFIED
+
+Confirmed by reading `ml/detector.py::build_reason()`, `voice/voice_fraud.py`, and
+`ml/llm_explainer.py::apply()` — **`reason` is always one string, never a list, in
+every code path.** `signals` is the array; `reason` is prose that may reference
+those signals in a sentence. Real side-by-side comparison, same input, offline vs
+online:
+
+**Offline (`POST /analyze_message`, no LLM, rule-template reason):**
+```json
+{
+  "risk_level": "FRAUD", "score": 1.0,
+  "reason": "FRAUD: detected 2 risk signal(s) — Impersonates law-enforcement / govt authority; Demands money transfer.",
+  "signals": ["Impersonates law-enforcement / govt authority", "Demands money transfer"],
+  "recommended_action": "Block sender, do NOT share any code/money, report at cybercrime.gov.in / 1930.",
+  "rule_categories": ["authority_impersonation", "money_demand"]
+}
+```
+
+**Online (`POST /analyze_voice`, same underlying text, LLM-rewritten reason):** see
+§1.1 above — same `risk_level`/`score`/`rule_categories`, richer `reason` prose.
+`eval_testset.py` asserts, every case every run, that the LLM layer can only ever
+change `reason` — `risk_level`/`score`/`rule_categories` are snapshotted before and
+after and asserted byte-identical (confirmed passing on 72/72 cases this session).
+
+Near-deterministic-rule reason text is fixed, not LLM/ML generated at all when no
+LLM is used — e.g. hitting `otp_readout_request` offline always returns exactly:
+*"No bank, police officer, or government official will ever ask you to read out your
+OTP, PIN, or CVV over a phone call. Anyone asking for this is trying to access your
+account directly."* (verified in the real two-turn `/analyze_session` example in
+§1.5).
+
+### 1.4 Real measured latency — EXISTING-VERIFIED, measured this session
+
+| Path | Real measured time | Notes |
+|---|---|---|
+| `/analyze_message` (offline: TF-IDF+LR + regex rules only) | **5.6 – 9.8 ms** total (curl `time_total`, 3 runs) | No LLM call at all |
+| `eval_testset.py --no-llm`, full offline pipeline incl. `analyze_transcript` | **0.2 s / 72 cases ≈ 2.8 ms/case** | Same order of magnitude as above |
+| `/analyze_voice` (online: adds `ml/llm_explainer.py`) | **3.1 – 5.0 s** total (curl `time_total`, 3 runs) | Whichever engine wins Gemini→Groq→Ollama race |
+| `eval_testset.py` with LLM layer, 72 cases, 40 of them SUSPICIOUS/FRAUD (only those trigger explanation) | **137.0 s wall / 40 LLM calls**; per-call latency: **min=2055ms p50=2853ms p95=4860ms max=5432ms**; 3/40 timed out at the 6.0s budget and fell back to the rule-based `reason` text (`es6`, `iso3`, `tel2`) | Engine breakdown this run: `{'gemini': 13, 'groq': 27}` — **Gemini's free-tier daily quota (20 req/day) was exhausted partway through this exact run** (real `429 RESOURCE_EXHAUSTED` from `generativelanguage.googleapis.com`, confirmed in logs), so most calls fell through to Groq. This is real, current, reproducible behavior on this API key today, not a hypothetical. |
+| `eval_rag_testset.py`, full `bot.agent.chat()` path (intent classification + retrieval + explanation, 1-3 LLM calls per message) | **349.7 s wall / 72 cases ≈ 4.9 s/case average**, individual cases ranged ~1.9s–18.3s | Engine breakdown: `{'groq': 48, 'classifier_safe': 22, 'classifier_reason_fallback': 2}` (again, almost entirely Groq — Gemini quota exhausted) |
+| `/graph/analyze` (NetworkX, 19 nodes/35 edges) | **5.4 ms** | computed live, not cached — see §3.2 |
+| `/geo/analyze` | **5.2 ms** | |
+| `webhook GET /graph` (session fingerprint graph) | **85 ms** (empty, 0 sessions — fresh server) | |
+
+### 1.5 Ambiguous/borderline input — real SUSPICIOUS example, never null/error — EXISTING-VERIFIED
+
+Real two-turn `/analyze_session` sequence, same session:
+
+```json
+// turn 1: {"session_id":"PH:+91-9000000099","text":"Hello sir this is regarding your account"}
+{
+  "session_id": "PH:+91-9000000099", "active_scam_session": "NO", "severity": "NONE",
+  "message_count": 1, "duration_seconds": 0.0, "high_risk_messages": 0, "session_triggers": [],
+  "last_message": {
+    "risk_level": "SUSPICIOUS", "score": 0.62,
+    "reason": "This message is suspicious because it uses a very general greeting like 'Hello sir' and vaguely mentions 'your account' without providing any specific details...",
+    "signals": [], "rule_categories": [],
+    "recommended_action": "Do not act on this message. Verify via the official app or helpline before responding."
+  }
+}
+```
+Note: `score=0.62` with **zero `rule_categories`** — this is pure ML-classifier
+signal (the TF-IDF+LR baseline alone crossed `SUSPICIOUS_THRESHOLD=0.5`), a real,
+live example of the classifier flagging vague/borderline phrasing with no rule hit
+at all. There is no null/error state anywhere in this pipeline for ambiguous
+input — `ScamDetector.predict()` always returns a fully-formed result; the only
+early-return is for an empty string (`{"risk_level": "SAFE", "score": 0.0, "reason": "Empty message.", ...}`).
+
+```json
+// turn 2 (same session, escalating): {"session_id":"PH:+91-9000000099","text":"This is CBI officer. Your Aadhaar is linked to a money laundering case. Transfer 50000 to this RBI safe account and share OTP immediately."}
+{
+  "session_id": "PH:+91-9000000099", "active_scam_session": "YES", "severity": "CRITICAL",
+  "message_count": 2, "duration_seconds": 6.2, "high_risk_messages": 1,
+  "session_triggers": ["authority + credential/money request sequence"],
+  "last_message": {"risk_level": "FRAUD", "score": 1.0, ...}
+}
+```
+
+### 1.6 Entity extraction — was NOT reachable as a standalone endpoint; now is — NEWLY-BUILT-THIS-TASK
+
+**Honest status before this task:** `graph/entity_extractor.py::extract_all()`
+already existed and is real (LLM-based `hard_entities` extraction — phone/UPI/bank/
+etc. — plus fast local regex-based `scammer_signature`/`script_fingerprint`/
+`timing_signals`/`background_signals`/`device_signals`/`linguistic_fingerprint`).
+But it was only ever invoked as a side effect deep inside
+`bot.agent._run_scam_check()` (building the fingerprint for the WhatsApp session
+graph) — **there was no way to call it directly over HTTP**, and its result isn't
+returned as top-level JSON from `/webhook` (which replies with empty TwiML; the
+real reply goes out async via Twilio).
+
+**A real bug found and fixed while wiring this up:** `ENTITY_PROMPT.format()` was
+crashing on its own literal `{ }` JSON-skeleton braces (a `KeyError`, before the LLM
+was ever called) on every single invocation, anywhere in the codebase, caught only
+by a silent `except Exception: return dict(_EMPTY_ENTITIES)` with no logging — so
+`extract_all()`'s `hard_entities` has always silently returned all-empty in
+production, undetected until this session. Fixed in `graph/entity_extractor.py`
+(escaped the braces, `{{ }}`), and added a `logger.warning` on the fallback path so
+a future failure is visible instead of silent.
+
+**New endpoint:** `POST /extract_entities {text}` → `graph.entity_extractor.extract_all(text)`, real response:
+
+```json
+// request: {"text":"This is CBI officer Sharma, cyber crime cell. Your case has been registered. Transfer to UPI id cbi.settlement@ybl or account 5021-8842-1190 immediately. Do not tell your family, stay on the call, we are recording this."}
+{
+  "hard_entities": {
+    "phone_numbers": [], "upi_ids": [], "urls": [], "bank_accounts": [],
+    "amounts_inr": [], "officer_names": [], "agency_names": [],
+    "locations_mentioned": [], "imei_numbers": [], "device_models": [],
+    "app_names_mentioned": []
+  },
+  "scammer_signature": {"script_tells": ["we are recording"]},
+  "script_fingerprint": ["stay on the call", "we are recording this"],
+  "timing_signals": [], "background_signals": [], "device_signals": [],
+  "linguistic_fingerprint": {}, "fingerprint_strength": "MEDIUM"
+}
+```
+
+**Residual, honestly-reported gap (not fixed — a prompt-engineering/model-choice
+problem, out of scope for a minimal wiring fix):** even after the crash fix,
+`hard_entities` is unreliable specifically on the **Groq fallback model**
+(`llama-3.1-8b-instant`, used whenever Gemini's 20-req/day free quota is exhausted —
+which is the majority case in this session, see §1.4). Direct testing this session
+against the exact same prompt/message produced, across two calls:
+- One call: syntactically invalid JSON (`json.loads` error: `Expecting ':' delimiter: line 5 column 3`) → silently degrades to all-empty.
+- Another call: valid JSON but with a **different key name** than the schema asks for (`"account_numbers"` instead of `"bank_accounts"`) and several required keys omitted entirely (only non-empty fields returned).
+
+So a frontend consuming `hard_entities` should not assume the documented 11-key
+shape is always present, or that empty arrays mean "no entities in the text" rather
+than "the fallback LLM didn't conform to the schema this time." This is a real,
+live-reproduced limitation of the underlying `llama-3.1-8b-instant` fallback, not
+speculation.
+
+Regex-based fields (`scammer_signature`, `script_fingerprint`, `timing_signals`,
+`background_signals`, `device_signals`, `linguistic_fingerprint`,
+`fingerprint_strength`) never call an LLM and are fully reliable/deterministic.
+
+**Gate check:** `eval_testset.py --no-llm` re-run after this fix — byte-identical
+to the pre-change baseline (same 100% recall / 0.033 FPR / same single known
+`fp24` false positive). Neither `graph/entity_extractor.py` nor the new endpoint
+touches `ml/detector.py`, `voice/voice_fraud.py`, or `ml/session.py`, so zero
+regression risk to the core detection pipeline by construction, confirmed by re-run.
+
+---
+
+## 2. "DIGITAL ARREST DETECTOR"
+
+**Plainly: there is no separate "Digital Arrest Detector" module or endpoint.**
+Grepped the entire `.py` tree for `digital.arrest` — it appears only as a
+`scam_type` string value (a label in `kb/scams.json`/`data/synth.py`'s training
+vocabulary and in `rag/retriever.py`'s output), never as its own API surface,
+class, or route. "Digital arrest" detection is the **same unified classifier**
+(`ml.detector.ScamDetector`) as Citizen Fraud Shield, driven by specific rule
+categories combining.
+
+### 2.1 Which rule_categories map to digital-arrest signals — EXISTING-VERIFIED
+
+From `ml/detector.py::predict()`, the "critical combo" that pushes score to 0.95
+specifically for this pattern:
+```python
+if ("authority_impersonation" in rules or "telecom_impersonation" in rules) and (
+    "money_demand" in rules or "credential_request" in rules
+):
+    score = max(score, 0.95)
+```
+Plus the three near-deterministic overrides that are especially characteristic of
+digital-arrest scripts: `isolation_tactics` ("stay on the call," "don't tell your
+family"), `otp_readout_request`, `card_collection_request`. No `digital_arrest`
+rule_category exists — the signal is the *combination* of `authority_impersonation`
++ `isolation_tactics` + `money_demand`/`credential_request` co-occurring, exactly as
+shown in the real §1.1 example above (all three fired on that transcript).
+
+### 2.2 Timeline array — does NOT exist as a standalone feature — flagged, not built
+
+**Honest status:** `casefile/case_generator.py::generate_case()` does build a
+`timeline` array (real, confirmed in the §5 case-file examples below) — but it's a
+**flat list of up to 4 discrete analysis events** ("Message analysed", "Call
+transcript analysed", "Link analysed", "Active scam session (severity)"), each a
+single-shot signal, not a chronological multi-message conversation timeline.
+
+Separately, `ml/session.py::SessionStore` genuinely does keep a real per-session
+event history internally (`{"ts", "text", "score", "rules"}` per message, sliding
+window of last 50) — but `/analyze_session`'s response never returns that raw
+events array, only aggregated stats (`message_count`, `session_triggers`,
+`last_message`). **A real "show me every message in this session over time with its
+score" timeline endpoint does not exist today.** Per the task instructions this is
+flagged as new work, not built in this pass (the two build requests explicitly
+called out were entity extraction and cluster summary — see §1.6 and §3.4). The
+underlying data (`SessionStore._s[sid]["events"]`) already exists in memory and
+could be exposed cheaply in a future change if a frontend needs it.
+
+### 2.3 Real input methods that exist — EXISTING-VERIFIED, no raw-audio-upload/Whisper endpoint
+
+Confirmed: **no Whisper integration anywhere in this repo** (grepped `llm/`, `voice/`,
+`webhook/` — zero references). The real input methods, all confirmed by reading code:
+
+| Input | Mechanism | Where |
+|---|---|---|
+| Typed/pasted text | Direct | Android "Check a call/message" screen, WhatsApp text message |
+| Voice → text | **On-device** `SpeechRecognizer.createOnDeviceSpeechRecognizer()` (Android, API 31+, English/partial-Hindi only — see §5) OR **Sarvam Saaras v3** STT (`mode=translate`) for the other 10 languages, via `webhook/app.py`'s `POST /stt/sarvam` (proxying `_transcribe_audio_sarvam`) or directly inside `/whatsapp/webhook` for WhatsApp voice notes | `android/.../stt/VoiceInputHelper.kt`, `webhook/app.py:480` |
+| Screenshot → text | ML Kit on-device (en/hi/mr only) or server-side `POST /ocr/tesseract` (Tesseract cascade, 9 other scripts) — **gated by `_OCR_RELIABLE_LANGUAGES`, see §6.4** | `android/.../ocr/`, `webhook/app.py:1736` |
+
+No endpoint anywhere accepts a raw audio file for `/analyze_voice` directly — audio
+is always converted to text client-side (or in `webhook/app.py`) first, then the
+resulting **text** is what hits `/analyze_voice`/`/analyze_message`. This matches
+CLAUDE.md's documented architecture exactly.
+
+### 2.4 Real measured OCR/STT + classify time — EXISTING-VERIFIED (see §6.4/§6.5 for full detail)
+
+No separate stopwatch number for "OCR+classify" as one measurement exists in this
+repo's history; the two halves were measured separately and are reported honestly
+as such:
+- OCR (`_ocr_image` pipeline): CER-based reliability audit only (English/Hindi/
+  Marathi: CER under 8%, correctly classified FRAUD; the other 9: ranged from
+  under-called SUSPICIOUS to false-negative REAL to Urdu's 84% CER) — no wall-clock
+  timing was recorded for the OCR step itself in any surviving script/log.
+- Classify (`ScamDetector.predict()`): **2.8ms/case average** (§1.4).
+- STT (Sarvam Saaras v3, `mode=translate`) + classify, for the 3 languages
+  re-verified live on 2026-07-16: Telugu → FRAUD 1.0, Tamil → FRAUD 0.713, Urdu →
+  FRAUD 1.0, transcripts matching ground truth almost word-for-word; benign control
+  sentences in the same 3 languages → SAFE 0.39-0.43. No wall-clock STT latency
+  number survives from that test either — only the classification-accuracy result.
+  **Reporting this gap honestly rather than inventing a number**: if
+  OCR-latency/STT-latency-in-milliseconds is something your frontend needs to
+  budget for, that has not actually been measured yet in this repo.
+
+---
+
+## 3. FRAUD NETWORK INTELLIGENCE
+
+**Plainly confirmed: NetworkX (in-memory Python `networkx.MultiDiGraph`/`Graph`),
+NOT Neo4j.** Grepped the whole repo — zero references to `neo4j`, `cypher`, or any
+graph-database driver. If your frontend specifically needs Cypher/Neo4j's query
+model, that is a real, separate architecture decision (standing up a graph
+database and a migration path) that has not been made or started here — flagging
+honestly rather than faking compatibility.
+
+There are **two, structurally different** graph systems in this repo — worth
+being precise about which one a frontend is integrating against:
+
+1. `graph/fraud_graph.py::FraudGraph` (used by `api/server.py`, port 8000) —
+   phone/bank_account/device/user nodes from **explicit interaction data**
+   (`/graph/add_interaction`, `/graph/seed`). This is what §3.1-3.4 below describe.
+2. `graph/fraud_graph.py`'s session-graph functions (`build_fraud_graph_with_entities`
+   etc., used by `webhook/app.py`'s `GET /graph`, port 8001) — links **WhatsApp bot
+   chat sessions** to each other via shared fingerprint signals (phone/UPI/script
+   phrases/etc. from §1.6's `extract_all()`). Real response, fresh server, 0
+   sessions yet: `{"summary": {"total_sessions": 0, ...}, "hard_links": [], "fraud_rings": [], "nodes": [], "edges": [], "intelligence": {"confirmed_links": 0, "probable_rings": 0, "highest_confidence_ring": null, "alert": "Insufficient data for ring detection"}}` — this is real, in-memory (`bot.agent._sessions` dict), and **wiped on every server restart**, since there is no persistent store behind it.
+
+### 3.1 Real node/edge JSON structure — EXISTING-VERIFIED, real seed data
+
+After `POST /graph/seed` (loads `data/synth.py::generate_fraud_graph()`, a
+synthetic-but-structurally-real ring — 19 nodes, 35 edges this run):
+
+```json
+// one real node
+{"id": "PH:+91-9447712782", "type": "phone", "cluster": 0, "pagerank": 0.0341,
+ "degree": 2, "money": 115863, "risk_score": 0.141, "role": "likely_victim"}
+
+// one real edge
+{"source": "PH:+91-9447712782", "target": "PH:+91-9000000001", "type": "call", "amount": 0}
+
+// central_nodes (top 5 by pagerank)
+[
+  {"id": "PH:+91-9000000001", "pagerank": 0.1847, "role": "scammer_hub"},
+  {"id": "BA:ACC-MULE-0", "pagerank": 0.1079, "role": "money_mule"},
+  {"id": "PH:+91-9000000002", "pagerank": 0.0973, "role": "scammer_hub"},
+  {"id": "BA:ACC-MULE-9", "pagerank": 0.0823, "role": "money_mule"},
+  {"id": "PH:+91-9798935572", "pagerank": 0.0365, "role": "likely_victim"}
+]
+```
+`role` is inferred (`_infer_role`): `money_mule` (bank_account with money flow),
+`scammer_hub` (phone, degree≥4), `shared_infrastructure` (device, degree≥2),
+`likely_victim` (phone, low degree), else `node`.
+
+### 3.2 Cluster detection — computed live on each request, not cached — EXISTING-VERIFIED
+
+Confirmed by reading `FraudGraph.analyze()` — it's plain synchronous
+`networkx.connected_components` + `pagerank` run fresh every call, no caching layer
+anywhere. Real measured response time: **5.4ms** for 19 nodes / 35 edges (curl
+`time_total`, `GET /graph/analyze`). At this graph size, live computation is cheap
+enough that caching wouldn't be worth the complexity — but note this is a small
+synthetic seed graph; no load test exists for graphs orders of magnitude larger.
+
+### 3.3 Real cluster object — EXISTING-VERIFIED
+
+```json
+{
+  "cluster_id": 0, "size": 19, "risk": 4.51,
+  "kingpin": "PH:+91-9000000001",
+  "members": ["BA:ACC-MULE-0", "BA:ACC-MULE-1", "BA:ACC-MULE-2", "BA:ACC-MULE-9",
+              "DEV:IMEI-SHARED-01", "PH:+91-8150017772", "PH:+91-8153246119",
+              "PH:+91-8410965605", "PH:+91-8728720317", "PH:+91-9000000001",
+              "PH:+91-9000000002", "PH:+91-9151847156", "PH:+91-9177777868",
+              "PH:+91-9261973069", "PH:+91-9447712782", "PH:+91-9523938499",
+              "PH:+91-9675398922", "PH:+91-9798935572", "PH:+91-9981836553"]
+}
+```
+`cluster_id` (int), `size` (member count), `risk` (sum of member `risk_score`s,
+**not 0-1 bounded** — it's an aggregate, can exceed 1.0, as shown: 4.51), `kingpin`
+(highest-pagerank member id), `members` (flat sorted list of node id strings — not
+a nested subgraph object).
+
+### 3.4 AI-generated cluster summary — did NOT exist; built this task — NEWLY-BUILT-THIS-TASK
+
+**Honest status before this task:** no such endpoint or function existed anywhere —
+`FraudGraph.analyze()` only ever returned the structural cluster object in §3.3,
+never natural-language text.
+
+**Built:** `POST /graph/cluster_summary {cluster_id}` in `api/server.py`, using the
+same `llm.client.generate()` chain as `ml/llm_explainer.py` (Gemini→Groq→Ollama) —
+bundled into `api/server.py` rather than a separate microservice, since it's a
+single additive route with no shared state beyond the already-running `GRAPH`
+object. Real response (after `/graph/seed`):
+
+```json
+// request: {"cluster_id": 0}
+{
+  "cluster_id": 0, "size": 19, "risk": 4.51, "kingpin": "PH:+91-9000000001",
+  "summary": "This fraud ring cluster appears to be a large network of likely victims, money mules, and scammer hubs, with 17 likely victims, 4 money mules, and 2 scammer hubs. The kingpin, PH:+91-9000000001, holds the highest pagerank, suggesting its prominence in the ring's operations. The ring's structure implies a hierarchical organization, with the kingpin coordinating the activities of money mules and victims.",
+  "engine": "groq", "latency_ms": 2919
+}
+```
+Error path, real (unseeded/unknown cluster id): `{"error": "no cluster 99 (seed the graph first via /graph/seed or /graph/add_interaction; known cluster_ids: [0])"}` (HTTP 404).
+
+**Gate check:** re-ran `eval_testset.py --no-llm` after adding this — byte-identical
+baseline (same 100% recall, 0.033 FPR, same `fp24`). This endpoint reads `GRAPH`
+state and calls the shared LLM client; it does not touch `ml/detector.py`,
+`voice/voice_fraud.py`, or `ml/session.py` at all.
+
+### 3.5 Size limits / pagination — EXISTING-VERIFIED, none exist
+
+Reading `FraudGraph.analyze()` and `GeoFraudLayer.analyze()`: **no pagination, no
+size cap, no truncation anywhere** — every node, edge, and cluster is always
+returned in full on every call. Current real data volume is trivially small (19
+nodes / 35 edges from the one synthetic seed function; the in-memory
+`bot.agent._sessions` dict starts empty every server restart with no persistence).
+There is no evidence this has ever been tested at a size where pagination would
+matter — flagging as a real, currently-unaddressed scaling gap rather than assuming
+it's fine at production volume.
+
+---
+
+## 4. GEOSPATIAL
+
+### 4.1 Real shape of a "complaint/report point" — EXISTING-VERIFIED, and it is 100% synthetic demo data today
+
+`geo/geo_fraud.py::GeoFraudLayer` stores `(lat, lng, weight, meta)` tuples. The
+**only** producer of points is `demo_points()` — Gaussian-scattered synthetic
+coordinates around 5 Indian metro centers (Delhi/Mumbai/Jamtara/Bengaluru/Kolkata),
+loaded via `POST /geo/seed`. Real output cell:
+
+```json
+{"lat": 28.6137, "lng": 77.2, "count": 3, "intensity": 7.0, "normalized": 0.583, "rank": 2, "priority": "HIGH"}
+```
+
+**Confirmed there is no lat/lng anywhere in the real citizen-facing pipeline** —
+grepped `webhook/app.py` for `FromCity`/`FromCountry`/lat/lng: Twilio does report
+`FromCountry`/`FromCity` (its own network-inferred guess, not GPS, and not
+self-reported by the user) into a message's `twilio_metadata`, but this is used
+**only** as one signal in the session-fingerprint linking (`entity:voip:country:...`
+in `graph/entity_extractor.py`'s index) — it is never fed into `GeoFraudLayer`.
+**These two location signals are completely unwired from each other today.**
+
+**Real, in-progress, uncommitted change found this session** (not something this
+task built — flagging honestly since it directly bears on this question):
+`android/app/src/main/java/com/rakshak/ai/location/VictimLocationProvider.kt`
+(currently untracked in git) does fetch a **real GPS fix** via
+`FusedLocationProviderClient` + reverse-geocode via Android's `Geocoder` — but only
+at the moment of a Tier 2/3b escalation (panic button / auto-escalation), for the
+**victim's own device only**, and it is used **exclusively to enrich the local NCRP
+complaint-draft text** (`escalation/ComplaintDraft.kt`: `"GPS: $lat, $lng"` /
+`"Approximate address: ..."`) that the victim/family can copy to cybercrime.gov.in.
+**It is never sent to Prahari's backend** — no call to `/geo/seed`, `/case/generate`,
+or any other endpoint includes this GPS data. So: real precise GPS location now
+exists in the Android client (new, not yet committed), but is scoped to local
+complaint-drafting only, not backend geo-intelligence.
+
+**Net honest answer:** no real "self-reported city" or "telecom circle" field
+exists anywhere in this repo today either — those were speculative possibilities
+in the question, not implemented features. The only two location signals that
+exist at all are (a) 100% synthetic demo points in `GeoFraudLayer`, and (b) the
+new, backend-disconnected victim-GPS-for-complaint-draft feature above.
+
+### 4.2 District-level GeoJSON boundaries — NOT sourced; frontend's responsibility
+
+Grepped the whole repo for `geojson`/`GeoJSON`/`district` — zero matches outside
+this doc. **No district/circle boundary data of any kind is included or sourced
+anywhere in this repo.** `GeoFraudLayer` works entirely in raw lat/lng grid cells
+(`cell_deg=0.05`, ~5.5km grid), with no notion of administrative boundaries at all.
+A frontend that wants a district-level choropleth map needs to source that GeoJSON
+itself (e.g. from a public Survey of India / data.gov.in dataset) and do its own
+point-in-polygon aggregation against the raw `heatmap` cells this API returns.
+
+### 4.3 Aggregation — backend-side, confirmed — EXISTING-VERIFIED
+
+`GET /geo/analyze` does real backend-side grid aggregation (counts, weighted
+intensity, normalization, top-5 ranked hotspots with `CRITICAL`/`HIGH`/`MEDIUM`
+priority tiers) — confirmed by reading `GeoFraudLayer.analyze()` and the real
+output in §4.1. No client-side aggregation is expected or needed for what this
+endpoint already returns. (Same caveat as §3.5: no pagination/size cap exists, and
+current data volume — one synthetic seed call — has never tested this at scale.)
+
+---
+
+## 5. LLM / SKILL INVENTORY
+
+Every LLM/model actually integrated (confirmed reading `llm/client.py` — this is
+the exhaustive list, one shared chain used everywhere in this repo):
+
+| Engine | Exact model | Role | Confirmed never decides SCAM/SAFE? |
+|---|---|---|---|
+| Gemini (primary) | `gemini-2.5-flash` | explanation/conversation generation only | **Yes** — `ml/llm_explainer.py` only ever rewrites `reason`; `bot/agent.py`'s intent router/direct-reply/legal-answer paths never touch `risk_level`/`scam_type`, which is always `ml.detector.ScamDetector.predict()` (directly, or via `rag/retriever.py::retrieve_and_respond` which delegates to it) |
+| Groq (fallback) | `llama-3.1-8b-instant` | same, fallback when Gemini fails/quota-exhausted | same guarantee |
+| Ollama (final fallback) | `gemma3` (`http://localhost:11434`) | same, last resort | same guarantee |
+
+This 3-tier chain (`llm/client.py::generate()`) is the **single shared client**
+used by: `ml/llm_explainer.py` (verdict explanation), `bot/agent.py` (intent
+classification, greeting/general-chat direct replies, legal Q&A), `rag/retriever.py`
+(RAG answer generation), `graph/entity_extractor.py` (hard-entity extraction, §1.6),
+and the new `/graph/cluster_summary` (§3.4). Verified this session: the guarantee
+holds under real Gemini-quota-exhaustion conditions too — `eval_testset.py`'s
+per-case assertion (`risk_level`/`score`/`rule_categories` snapshotted before/after
+the LLM layer runs) passed for all 72 cases even while Gemini was returning live
+`429` errors and every explanation fell through to Groq.
+
+**Correction to CLAUDE.md's own Section 1 table** (found by reading the actual
+Android code, not assumed from the doc): CLAUDE.md's "Speech Intelligence" row and
+Section 11 don't claim Bulbul is used for scam decisions, but the codebase does
+contain a comment in `android/.../sarvam/SarvamLanguageCodes.kt` documenting Sarvam
+Bulbul's per-language TTS coverage. **Grepped the actual Android TTS call sites
+(`WarningActivity.kt`) — TTS is 100% `android.speech.tts.TextToSpeech` (native
+Android engine, via `SpeechLanguageSelector`), never Sarvam Bulbul.**
+`SarvamApiClient.kt` has zero TTS/synthesis calls — Sarvam is used for STT
+(`saaras:v3`, confirmed in `webhook/app.py` at `_transcribe_audio_sarvam` and
+`_transcribe_audio_sarvam_batch`) and for text translation (Sarvam's translate API,
+used for reply-language translation), **not** speech synthesis. If a frontend
+expects Bulbul-generated audio anywhere in this pipeline, it does not exist —
+correcting that expectation explicitly here.
+
+### 5.1 OCR/STT tool inventory — EXISTING-VERIFIED
+
+| Tool | Scope | Where |
+|---|---|---|
+| ML Kit on-device text recognition | Android client, English/Hindi/Marathi only (the 3 OCR-reliable languages, §6.4) | Android `ocr/ScreenshotOcrHelper.kt` |
+| Tesseract (server-side) | 9 non-Latin scripts: ben/tam/tel/kan/mal/guj/pan/ori/urd, **plus hin** for the WhatsApp cascade only (not needed server-side for Android, which handles hi/mr/en on-device) | `webhook/app.py::_run_tesseract_ocr`, `_OCR_CASCADE_LANGS`; exposed to Android via `POST /ocr/tesseract` |
+| EasyOCR | Still used, as the **first** cascade step for WhatsApp image uploads — English-only (`easyocr.Reader(["en"], gpu=False)`), confidence-gated, falls through to the Tesseract cascade above when confidence is low | `webhook/app.py::_ocr_image`/`_get_ocr_reader` |
+| Sarvam Saaras v3 | STT + translate-to-English (`model: "saaras:v3"`, `mode: "translate"`), sync endpoint with async-batch fallback for audio >30s (up to 2 hours) | `webhook/app.py::_transcribe_audio_sarvam(_batch)`, proxied to Android via `POST /stt/sarvam` |
+| Sarvam Bulbul v3 (TTS) | **Not actually integrated** — see correction above | — |
+
+---
+
+## 6. EVALUATION METRICS — real numbers, re-run fresh this session
+
+`rakshak_eval_testset.json` currently has **72 cases** (10 categories + 30
+`false_positive_bait` cases) — grown since earlier documented counts (36→52→54);
+this is the current, live count, re-confirmed by loading the file this session.
+
+### 6.1 `eval_testset.py` (phone-app `/analyze_voice` path) — EXISTING-VERIFIED, fresh
+
+**Offline (`--no-llm`, classifier + rules only):**
+```
+Total wall time: 0.2s across 72 cases
+  card_courier_scam                n_scam=2  recall=1.00
+  expert_scam                      n_scam=10 recall=1.00
+  extortion_threat_scam            n_scam=3  recall=1.00
+  isolation_scam                   n_scam=6  recall=1.00
+  malicious_link_bait_scam         n_scam=4  recall=1.00
+  malware_attachment_delivery_scam n_scam=3  recall=1.00
+  otp_readout_scam                 n_scam=8  recall=1.00
+  relative_impersonation_scam      n_scam=3  recall=1.00
+  telecom_impersonation_scam       n_scam=3  recall=1.00
+false_positive_bait FPR: 1/30 = 0.033   (the one known-failing fp24 case — see CLAUDE.md §6.3)
+No missed scams (0 false negatives).
+```
+**100% recall across every category, 3.3% false_positive_bait FPR (1 known-failing
+case, `fp24`, tracked deliberately — see CLAUDE.md).**
+
+**Online (with LLM explanation layer):** identical recall/FPR numbers (the LLM
+layer only rewrites `reason`, asserted every case). Latency numbers in §1.4.
+
+### 6.2 `eval_rag_testset.py` (WhatsApp/conversational path) — EXISTING-VERIFIED, fresh
+
+Identical recall/FPR to §6.1: **100% recall across all 10 scam categories, 1/30
+(0.033) false_positive_bait FPR, same single `fp24` known-failing case.** Confirms
+the RAG/chat path and the phone-app path are classification-equivalent, as
+`eval_rag_testset.py`'s own docstring claims (`retrieve_and_respond()` delegates to
+the same `ScamDetector` instance) — verified fresh, not assumed. Full timing in
+§1.4. Engine/path breakdown this run: `{'groq': 48, 'classifier_safe': 22, 'classifier_reason_fallback': 2}`.
+
+### 6.3 `check_pattern_parity.py` — EXISTING-VERIFIED, fresh, clean
+
+```
+Pattern parity OK: all 75 patterns across isolation_tactics, otp_readout_request,
+card_collection_request, malware_attachment_delivery are identical between
+ml/detector.py and OfflineRuleEngine.kt.
+```
+**No drift.** (Note: this check only covers those 4 of the 13 rule categories — the
+ones Android's offline Kotlin port mirrors — not all 13; that's the tool's own
+documented scope, not a gap introduced by this task.)
+
+### 6.4 12-language OCR reliability — EXISTING-VERIFIED (qualitative table + 2 real CER numbers, honestly incomplete beyond that)
+
+Pulled directly from the real audit already recorded in `webhook/app.py`'s own doc
+comment (`_OCR_RELIABLE_LANGUAGES`, lines 1008-1042) and CLAUDE.md §13 — **not
+re-invented**. Real, measured numbers that exist: English/Hindi/Marathi CER **under
+8%**; Urdu CER **84%**. For the other 8 languages (Bengali/Gujarati/Kannada/
+Malayalam/Punjabi/Odia/Telugu/Tamil), **no exact CER/WER percentage was recorded** —
+only the qualitative classification outcome (SUSPICIOUS-not-FRAUD under-call, or for
+Telugu/Tamil a REAL false negative). Reporting this gap honestly rather than
+fabricating numbers that were never measured:
+
+| Language | Tag | OCR reliability | Real measured detail |
+|---|---|---|---|
+| English | en-IN | **Reliable** | CER <8%, correct FRAUD |
+| Hindi | hi-IN | **Reliable** | CER <8%, correct FRAUD |
+| Marathi | mr-IN | **Reliable** | CER <8%, correct FRAUD |
+| Bengali | bn-IN | Unreliable | under-called SUSPICIOUS not FRAUD (no exact CER recorded) |
+| Gujarati | gu-IN | Unreliable | under-called (no exact CER recorded) |
+| Kannada | kn-IN | Unreliable | under-called (no exact CER recorded) |
+| Malayalam | ml-IN | Unreliable | under-called (no exact CER recorded) |
+| Punjabi | pa-IN | Unreliable | under-called (no exact CER recorded) |
+| Odia | or-IN | Unreliable | under-called (no exact CER recorded) |
+| Telugu | te-IN | Unreliable | **false negative — scored REAL** on a real scam script |
+| Tamil | ta-IN | Unreliable | **false negative — scored REAL** |
+| Urdu | ur-IN | Unreliable | **84% CER**; translation of garbage OCR text hallucinated a fabricated story |
+
+STT (Sarvam Saaras v3) replacement path, re-verified for real 2026-07-16 for the 3
+worst OCR failures: Telugu FRAUD 1.0, Tamil FRAUD 0.713, Urdu FRAUD 1.0 (transcripts
+matched ground truth almost word-for-word); benign control sentences, same 3
+languages, correctly scored SAFE 0.39-0.43.
+
+### 6.5 Android vs. WhatsApp alignment — EXISTING-VERIFIED, same source of truth, confirmed identical
+
+Both platforms gate on the **exact same 3-language allowlist**: `webhook/app.py`'s
+`_OCR_RELIABLE_LANGUAGES = {"en-IN", "hi-IN", "mr-IN"}` is the single set both the
+WhatsApp handlers (`/whatsapp/webhook`, `/webhook`) and — per CLAUDE.md §13's
+explicit instruction to keep both in sync — the Android "Check a call/message"
+screen check against. This is confirmed by reading the code (one constant, one
+audit, documented as shared) rather than assumed — the two platforms are not
+independently tuned, they reference the identical, single, real measurement.
+Voice input (Sarvam STT) is unaffected by this table and available for all 12
+languages on both platforms, per §2.3/§6.4.
+
+---
+
+## Summary of what was newly built this task
+
+1. **`POST /extract_entities`** (`api/server.py`) — new endpoint wiring, plus a real
+   bug fix in `graph/entity_extractor.py` (`ENTITY_PROMPT.format()` was crashing on
+   every call before this fix — see §1.6).
+2. **`POST /graph/cluster_summary`** (`api/server.py`) — new endpoint, new
+   `_generate_cluster_summary()` helper, reusing the existing `llm.client.generate`
+   chain (see §3.4).
+
+Both gated by re-running `eval_testset.py --no-llm` before and after: byte-identical
+baseline (100% recall, 0.033 false_positive_bait FPR, same single known `fp24`
+case) — zero regression to the core detection pipeline, confirmed by real run, not
+assumed from the diff touching unrelated files.

@@ -1,12 +1,15 @@
 from llm.client import generate
 import json
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 ENTITY_PROMPT = """\
 Extract entities from this scam victim report.
 Return JSON only. No markdown. No explanation.
 
-{
+{{
   "phone_numbers": [],
   "upi_ids": [],
   "urls": [],
@@ -18,7 +21,7 @@ Return JSON only. No markdown. No explanation.
   "imei_numbers": [],
   "device_models": [],
   "app_names_mentioned": []
-}
+}}
 
 Message: {message}"""
 
@@ -141,7 +144,13 @@ def extract_entities(message: str) -> dict:
         text = resp.text.strip()
         text = re.sub(r"```json|```", "", text).strip()
         return json.loads(text)
-    except Exception:
+    except Exception as e:
+        # 2026-07-17: this used to fail silently on EVERY call, before the
+        # LLM was ever reached -- ENTITY_PROMPT's own JSON skeleton had
+        # unescaped { } that collided with .format()'s substitution syntax
+        # (fixed above). Logging here so a future regression is visible
+        # instead of silently degrading to empty entities again.
+        logger.warning("extract_entities failed, returning empty entities: %s", e)
         return dict(_EMPTY_ENTITIES)
 
 

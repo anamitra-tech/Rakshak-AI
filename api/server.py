@@ -22,10 +22,25 @@ Endpoints
   POST /feedback              {channel, original_text, verdict, rule_categories?,
                                 user_correction, session_id?} -> log only, no
                                 effect on any live decision (see feedback/store.py)
+  POST /extract_entities      {text} -> graph.entity_extractor.extract_all(text):
+                                phone/UPI/bank/etc. entities (LLM-extracted) plus
+                                regex-based script/signature/timing/device/
+                                linguistic fingerprint signals, for the Graph
+                                Intelligence module's session-linking handoff.
+                                Added 2026-07-17 — see API_SPEC.md; this was not
+                                previously reachable as a standalone endpoint,
+                                only as a side effect of bot.agent.chat().
+  POST /graph/cluster_summary {cluster_id} -> plain-language LLM summary of one
+                                cluster from GRAPH.analyze() (members/roles/
+                                risk), using the same llm.client.generate chain
+                                as ml/llm_explainer.py. Added 2026-07-17 — see
+                                API_SPEC.md; no such summary previously existed,
+                                only the raw structural cluster object.
 """
 import json
 import os
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -36,10 +51,12 @@ from ml import llm_explainer
 from link.url_safety import analyze_url
 from voice.voice_fraud import analyze_transcript
 from graph.fraud_graph import FraudGraph
+from graph.entity_extractor import extract_all
 from geo.geo_fraud import GeoFraudLayer, demo_points
 from casefile.case_generator import generate_case
 from data.synth import generate_fraud_graph
 from feedback.store import log_correction
+from llm.client import generate as llm_generate
 
 print("Loading models...", file=sys.stderr)
 DETECTOR = ScamDetector()
@@ -138,6 +155,33 @@ class Handler(BaseHTTPRequestHandler):
                     session_id=b.get("session_id"),
                 )
                 return self._send({"ok": True, "id": row_id})
+            if p == "/extract_entities":
+                text = b.get("text", "")
+                if not text:
+                    return self._send({"error": "missing field 'text'"}, 400)
+                return self._send(extract_all(text))
+            if p == "/graph/cluster_summary":
+                if "cluster_id" not in b:
+                    return self._send({"error": "missing field 'cluster_id'"}, 400)
+                analysis = GRAPH.analyze()
+                clusters = {c["cluster_id"]: c for c in analysis["clusters"]}
+                cluster = clusters.get(b["cluster_id"])
+                if cluster is None:
+                    return self._send(
+                        {"error": f"no cluster {b['cluster_id']!r} (seed the graph first via /graph/seed "
+                                  f"or /graph/add_interaction; known cluster_ids: {sorted(clusters)})"}, 404)
+                nodes_by_id = {n["id"]: n for n in analysis["nodes"]}
+                t0 = time.monotonic()
+                try:
+                    resp = _generate_cluster_summary(cluster, nodes_by_id)
+                    return self._send({
+                        "cluster_id": cluster["cluster_id"], "size": cluster["size"],
+                        "risk": cluster["risk"], "kingpin": cluster["kingpin"],
+                        "summary": resp.text.strip(), "engine": resp.engine,
+                        "latency_ms": round((time.monotonic() - t0) * 1000),
+                    })
+                except Exception as e:
+                    return self._send({"error": f"summary generation failed: {e}"}, 502)
             if p == "/case/generate":
                 mr = DETECTOR.predict(b["text"]) if b.get("text") else None
                 vr = analyze_transcript(b["transcript"], DETECTOR) if b.get("transcript") else None
@@ -153,6 +197,38 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send({"error": str(e)}, 500)
         return self._send({"error": "not found"}, 404)
+
+
+_CLUSTER_SUMMARY_PROMPT = """\
+You are summarising a fraud-ring cluster detected by a graph-intelligence \
+system for an investigator. Do not invent any fact not present below.
+
+Cluster {cluster_id}: {size} linked nodes, aggregate risk score {risk}.
+Highest-pagerank node ("kingpin"): {kingpin}.
+
+Member nodes (id, type, role, degree, money throughput, risk_score):
+{members}
+
+Write a 2-4 sentence plain-language summary of what this cluster looks like \
+(e.g. how many likely victims vs. money mules vs. scammer hubs, and what that \
+suggests about the ring's structure). Respond with ONLY the summary text, no \
+preamble, no markdown."""
+
+
+def _generate_cluster_summary(cluster, nodes_by_id):
+    members_lines = []
+    for node_id in cluster["members"]:
+        n = nodes_by_id.get(node_id, {})
+        members_lines.append(
+            f"- {node_id} ({n.get('type')}, role={n.get('role')}, "
+            f"degree={n.get('degree')}, money={n.get('money')}, "
+            f"risk_score={n.get('risk_score')})"
+        )
+    prompt = _CLUSTER_SUMMARY_PROMPT.format(
+        cluster_id=cluster["cluster_id"], size=cluster["size"], risk=cluster["risk"],
+        kingpin=cluster["kingpin"], members="\n".join(members_lines),
+    )
+    return llm_generate(prompt, retries=1)
 
 
 def main(port=8000):
