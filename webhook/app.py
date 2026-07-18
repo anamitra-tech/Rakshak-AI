@@ -289,14 +289,6 @@ def _run_tesseract_ocr_with_confidence(image_bytes: bytes, lang: str) -> tuple[s
         return None, 0.0
 
 
-def _run_tesseract_ocr(image_bytes: bytes, lang: str) -> str | None:
-    """Text-only convenience wrapper around
-    _run_tesseract_ocr_with_confidence for callers (the Android app's
-    /ocr/tesseract endpoint) that don't need the confidence score."""
-    text, _ = _run_tesseract_ocr_with_confidence(image_bytes, lang)
-    return text
-
-
 def _download_media(media_url: str) -> bytes | None:
     """Authenticated fetch of a Twilio media URL. None on any failure —
     callers must fall back to the type-only descriptor, never raise."""
@@ -368,6 +360,35 @@ _OCR_MIN_FRAGMENT_CONFIDENCE_THRESHOLD = 0.15
 # logic, so this only controls the log-level confidence framing, not
 # whether a Tesseract read is trusted at all.
 _TESSERACT_CASCADE_MIN_CONFIDENCE = 40.0
+
+# Real bug this fixes (2026-07-18, live Malayalam test with CloudOcrClient
+# re-enabled): the confidence floor above can't reliably separate real from
+# wrong-language reads on its own -- this same doc comment's own data shows
+# real Bengali reads as low as 45.6 confidence overlapping with wrong-
+# language reads as high as ~45, too narrow a gap to raise the floor without
+# also rejecting genuine weak reads. A wrong-language (Telugu) cascade
+# candidate scored just above the 40 floor on a Malayalam screenshot and
+# passed the script-plausibility check too (Tesseract's forced-script
+# output still uses genuine Telugu Unicode characters even when it's
+# reading noise), producing text like "ఆం 5 క ఆజంక అక 9 658 9 ఆక8" -- heavy
+# digit/symbol soup, not a real sentence. Real scam messages in any of
+# these languages are predominantly letters; garbled OCR reads consistently
+# were not (this exact pattern -- digits interleaved with script characters
+# -- also showed up in the earlier Punjabi failure: "01&6600116.25.200").
+# Digit density is a cheap, independent signal confidence alone can't
+# provide.
+_OCR_MAX_DIGIT_RATIO = 0.20
+
+
+def _looks_like_ocr_noise(text: str) -> bool:
+    """True if [text] is dominated by digits relative to letters -- see
+    _OCR_MAX_DIGIT_RATIO's doc comment for the real failure this catches."""
+    letters = sum(1 for c in text if c.isalpha())
+    digits = sum(1 for c in text if c.isdigit())
+    total = letters + digits
+    if total < 5:
+        return False
+    return (digits / total) > _OCR_MAX_DIGIT_RATIO
 
 
 def _ocr_image(image_bytes: bytes) -> tuple[str | None, float]:
@@ -1112,7 +1133,17 @@ def _translate_reply_to_preference(reply_text: str, lang_tag: str) -> str:
 # a substantially more reliable path than OCR for these languages, evidence
 # now real rather than assumed. Mirrored in CLAUDE.md's "OCR reliability by
 # language" table -- keep both in sync if this list changes.
-_OCR_RELIABLE_LANGUAGES = {"en-IN", "hi-IN", "mr-IN"}
+# 2026-07-18: product decision to re-enable OCR for the 7 "under-called"
+# languages (Bengali/Gujarati/Kannada/Malayalam/Punjabi/Odia/Urdu) despite
+# the audit above, on the reasoning that under-calling to SUSPICIOUS (not
+# FRAUD) is a real but bounded degradation, not a silent miss -- unlike
+# Telugu/Tamil's outright false-negative-to-SAFE, which stays gated. Flagged
+# distinctly: Urdu's failure mode in the same audit isn't "under-called",
+# it's a translation hallucinating a fabricated, unrelated story from
+# 84%-CER garbage OCR text -- a materially worse failure than under-scoring,
+# re-enabled here only because it was explicitly requested alongside the
+# other 6, not because the hallucination risk stopped applying.
+_OCR_RELIABLE_LANGUAGES = {"en-IN", "hi-IN", "mr-IN", "bn-IN", "gu-IN", "kn-IN", "ml-IN", "pa-IN", "or-IN", "ur-IN"}
 
 _OCR_UNRELIABLE_TEMPLATE_EN = (
     "Text recognition for {language} isn't reliable enough yet — please type the message, "
@@ -1853,10 +1884,27 @@ async def ocr_tesseract(file: UploadFile = File(...), lang: str = Form(...)):
     """Called by the Android app's ocr/CloudOcrClient.kt — online-only OCR
     for the 9 scripts ML Kit's on-device recognizer doesn't cover. [lang]
     is a 3-letter Tesseract code (ben/tam/tel/kan/mal/guj/pan/ori/urd),
-    mapped client-side from the app's spoken-language tag."""
+    mapped client-side from the app's spoken-language tag.
+
+    Applies the same _TESSERACT_CASCADE_MIN_CONFIDENCE floor _ocr_image
+    already uses for the WhatsApp path — real bug this fixes: a live
+    Punjabi test with CloudOcrClient re-enabled (2026-07-18) came back
+    "found": true with confident-looking Gurmukhi-script garbage (Tesseract
+    always constrains output to the requested script, so wrong/garbled
+    reads still pass the script-plausibility check CloudOcrClient does
+    client-side) — that garbage then translated to equally meaningless
+    English and correctly-but-uselessly scored SAFE, since there's no scam
+    pattern in noise. Below-floor reads now report "found": false instead,
+    letting CloudOcrClient's existing per-candidate cascade move on to try
+    another language rather than confidently returning noise as the
+    result."""
     image_bytes = await file.read()
-    text = _run_tesseract_ocr(image_bytes, lang)
-    if text is None:
+    text, confidence = _run_tesseract_ocr_with_confidence(image_bytes, lang)
+    if text is None or confidence < _TESSERACT_CASCADE_MIN_CONFIDENCE:
+        logging.info(f"ocr_tesseract: rejecting low-confidence read lang={lang} confidence={confidence:.1f}")
+        return {"text": "", "found": False}
+    if _looks_like_ocr_noise(text):
+        logging.info(f"ocr_tesseract: rejecting digit-heavy noise read lang={lang} confidence={confidence:.1f} text={text!r}")
         return {"text": "", "found": False}
     return {"text": text, "found": True}
 
