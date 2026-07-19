@@ -9,7 +9,8 @@ from email.message import EmailMessage
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI, Request, Form, File, UploadFile, BackgroundTasks
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Form, File, UploadFile, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from twilio.rest import Client as TwilioRestClient
@@ -48,6 +49,22 @@ from feedback.store import log_correction
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
+
+# TEMPORARY, testing-only: allow all origins so the external website
+# dashboard (a different domain) can call /chat from a browser at all --
+# without this, the browser blocks the request before it even reaches this
+# server, regardless of whether the backend itself works. Tighten
+# allow_origins to the real deployed domain once it's known (Tuesday).
+# allow_credentials=False is deliberate and required: browsers reject
+# allow_origins=["*"] combined with allow_credentials=True, and /chat's auth
+# is a custom header (X-API-Key), not a cookie, so no credentials are needed.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
@@ -1530,7 +1547,18 @@ class ChatRequest(BaseModel):
     message: str
 
 
-@app.post("/chat")
+_CHAT_API_KEY = os.environ.get("CHAT_API_KEY")
+
+
+def _require_chat_api_key(x_api_key: str | None = Header(default=None)):
+    # Fails closed by construction: if CHAT_API_KEY isn't set server-side,
+    # _CHAT_API_KEY is None, and no client-sent header value can equal None
+    # over HTTP -- every request 401s rather than silently running unauthed.
+    if not _CHAT_API_KEY or x_api_key != _CHAT_API_KEY:
+        raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key header")
+
+
+@app.post("/chat", dependencies=[Depends(_require_chat_api_key)])
 async def chat_endpoint(req: ChatRequest):
     from assistant.pipeline import handle_chat
 

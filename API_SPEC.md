@@ -808,6 +808,7 @@ roles) — it does not touch `kb/scams.json`, `ml/detector.py`, or
 
 ```
 POST /chat
+  headers: X-API-Key: <shared secret — see 7.1.1, required>
   body: {"session_id": "<any string, dashboard-chosen>", "message": "<free text>"}
   returns: {"reply": "<string>", "sources": [{"id","title","url"}, ...], "metrics": {...}}
 ```
@@ -819,10 +820,52 @@ has no format requirement; conversation history is kept in-memory only (reuses
 `bot.agent.chat()` already used, not a new one — so it is wiped on server
 restart, same limitation as `GET /graph`, §3).
 
+#### 7.1.1 Authentication — required, one shared header
+
+Every `/chat` request must include:
+
+```
+X-API-Key: <the value of CHAT_API_KEY in .env>
+```
+
+Enforced by `webhook/app.py::_require_chat_api_key` (a FastAPI dependency on
+the route, checked before `handle_chat()` runs at all). Missing or wrong key
+→ **HTTP 401**, real captured response:
+
+```json
+// request: POST /chat with no X-API-Key header (or the wrong value)
+// response: HTTP 401
+{"detail": "Missing or invalid X-API-Key header"}
+```
+
+There is no per-client key, no rate limit, and no key rotation mechanism —
+this is a single shared secret, adequate for a known-integrator (one
+teammate's website) during testing, **not** a substitute for real per-client
+auth if this is opened up to arbitrary third parties later. Get the current
+key value from `.env`'s `CHAT_API_KEY` (not printed here — `.env` is
+gitignored, ask whoever has repo access rather than committing it).
+
+#### 7.1.2 CORS — currently wide open, temporary
+
+`webhook/app.py` has `CORSMiddleware` with `allow_origins=["*"]`
+(`allow_credentials=False`, required — browsers reject `["*"]` combined with
+credentialed requests, and `/chat` doesn't use cookies, so this is fine).
+**This is deliberately permissive for testing and must be narrowed to the
+real deployed dashboard domain before/at launch** — replace `["*"]` with the
+exact origin(s) once known. Until then, any website can call this endpoint
+from a browser (the `X-API-Key` requirement is the actual access control,
+not CORS — CORS only controls which *browser-origin* JS is allowed to read
+the response; a non-browser client, or a proxied server-side call, is
+unaffected by CORS either way).
+
+The three examples below were captured before the `X-API-Key` requirement
+was added — every request shown still needs that header in addition to the
+JSON body; only the body/response shape is what's being illustrated.
+
 **Real captured example — a real question, answered, cited, faithfulness-checked
 (first turn of a new session, so the fixed intro is prepended):**
 ```json
-// request
+// request (headers: X-API-Key: <shared secret>)
 {"session_id": "smoketest_clean1", "message": "If I just got scammed on UPI, will calling 1930 actually help get my money back?"}
 
 // response
