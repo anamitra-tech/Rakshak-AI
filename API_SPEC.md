@@ -1038,16 +1038,63 @@ Gemini to dropping nuanced conditions in legal text. Injection handling 1.000
 returned the safe fallback — confirming those specific harness-run failures
 were transient contention artifacts (same pattern as 7.3), not a real defect.
 
-**NVIDIA Nemotron tier — code complete, wired correctly, genuinely blocked on
-a live key.** `_nemotron_generate()` is written and inserted in the requested
-position (Groq → Gemini → Nemotron → Ollama); confirmed it raises cleanly
-(`NVIDIA_API_KEY not configured`) and the chain falls through to Ollama when
-unset, so it's inert and safe with no key present. **Not yet measured or
-gated**: real latency and a confirming `eval_chat_harness.py` run with
-Nemotron actually in the loop both require a real `NVIDIA_API_KEY`, which
-was not available as of this writing. The exact NIM catalog model id used
-(`nvidia/llama-3.1-nemotron-70b-instruct`) is also unverified against a real
-account's catalog access.
+### 7.7 NVIDIA Nemotron — measured, and a targeted (not blanket) fix for the c6 finding
+
+**NVIDIA Nemotron: real key provided, latency measured, one model-id
+correction needed.** The originally guessed catalog id,
+`nvidia/llama-3.1-nemotron-70b-instruct`, returns a real 404 against the
+live account (`GET /v1/models` lists it, but `POST /chat/completions`
+returns `{"status":404,"detail":"Function '...': Not found for account
+'...'"}` — listed in the catalog but not enabled/invokable on this specific
+account). `nvidia/llama-3.3-nemotron-super-49b-v1` was tried next and
+returns a real 200; `NVIDIA_NIM_MODEL` was updated to it.
+
+**Real latency, 4 calls, realistic `/chat`-generation-shaped prompt: 2
+succeeded at 12.93s / 13.36s, 2 failed with a 30s `ReadTimeout`.**
+Recommendation, stated plainly: **not fast enough for active live-demo
+generation.** Every LLM stage in the pipeline (rewrite, rerank, generation,
+faithfulness) already times out its primary/secondary engines at 6s each —
+a 13s Nemotron call would almost always be abandoned by that timeout before
+finishing, or add 13-30s of dead time on the rare occasion it's actually
+reached (Groq and Gemini both down). It stays wired in as a genuine deep
+safety net — strictly better than falling straight to Ollama — but should
+not be treated as a normal-path tier.
+
+**Conditional-language-triggered `prefer_gemini`, targeted at the exact
+failure mode c6 (7.6) surfaced.** Rather than reverting Groq-as-primary for
+generation broadly (losing the quota benefit for the ~4/5 of KB entries with
+no qualifying language), `assistant/pipeline.py::_has_conditional_language()`
+scans the retrieved source text for qualifying phrases ("provided that",
+"unless", `"within \d+ days"`, "subject to", "only if", etc.) and forces
+`prefer_gemini=True` on `generate_answer()`'s call for that specific
+generation only — same `prefer_gemini` mechanism `classify_intent()`
+already uses (7.6), no engine-order change. Verified against all 5
+`kb/legal_info.json` entries: only `rbi_liability_basics` matches (on
+"within 3 working days"), exactly the one entry this was tuned against.
+
+**Re-tested c6 for real, not assumed fixed from the code change alone.**
+Fresh call, `handle_chat("...", "What does RBI's zero liability rule mean
+for bank customers?")`: `metrics["conditional_language_detected"] = True`
+(confirmed firing), reply preserved **both** conditions this time ("if...
+the bank's fault or a third-party breach, and you report it within 3
+working days... your liability is zero... if you report later... limited on
+a sliding scale, but not total"), a fresh correctness-judge call returned
+`YES`. Honest caveat: Gemini itself was still quota-exhausted at test time
+(`429 RESOURCE_EXHAUSTED`), so this specific pass came from the Groq
+fallback within the Gemini-first chain the flag triggers, not a clean
+Gemini success — the *mechanism* is confirmed correctly wired (it did try
+Gemini first), but a clean Gemini-succeeds example hasn't been captured yet
+given today's quota state.
+
+**Gate check (this addendum):** `eval_chat_harness.py` re-run with Nemotron
+now live in the chain: Recall@5 still 1.000, injection handling still
+1.000/3; only 1/16 kb_question cases got a real generated answer this run
+(cumulative Groq+Gemini rate-limit pressure from the day's full testing
+history, not a new defect — same documented pattern as 7.3/7.6), and that
+one answered case passed faithfulness/relevance/correctness at 1.000/1.000/
+1.000. `eval_testset.py --no-llm` and `check_pattern_parity.py` re-run
+again after the Nemotron model-id fix: byte-identical (100% recall, 0.033
+FPR, same `fp24`).
 
 **Gate check:** `eval_testset.py --no-llm` and `check_pattern_parity.py` (invoked
 at import) re-run after all `/chat` work — byte-identical to baseline (100%
