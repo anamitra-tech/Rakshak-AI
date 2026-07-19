@@ -512,6 +512,21 @@ def _ocr_image(image_bytes: bytes) -> tuple[str | None, float]:
         return None, 0.0
 
 
+class SarvamQuotaExceededError(Exception):
+    """Raised when Sarvam responds 402 (payment required) or 429 (rate/quota
+    limit) — a caller-actionable condition distinct from a generic STT
+    failure (bad audio, network blip, etc). Deliberately not swallowed by
+    _transcribe_audio_sarvam's own broad except-Exception-return-None
+    fallback: the Android AI Services screen now tells users up front that
+    Sarvam is "free trial credits, then pay-as-you-go", so when that trial
+    runs out the app needs to say so explicitly rather than report the same
+    generic "couldn't understand" message it would give for a bad recording.
+    429 is confirmed as Sarvam's documented rate/quota-limit status (their
+    own API guidance says retry only on 429/500/503); 402 is included
+    defensively per general REST billing convention, not independently
+    confirmed against a live Sarvam response — treat as best-effort."""
+
+
 def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str, mode: str = "translate") -> str | None:
     """Sarvam speech-to-text. [mode] defaults to "translate" (Indic speech,
     or English, straight to an English transcript — the WhatsApp bot's own
@@ -544,6 +559,9 @@ def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str, mode: str = 
         if resp.status_code == 400 and "exceeds the maximum limit" in resp.text:
             logging.info("_transcribe_audio_sarvam: audio too long for sync endpoint, trying batch job")
             return _transcribe_audio_sarvam_batch(audio_bytes, ext, mode)
+        if resp.status_code in (402, 429):
+            logging.error(f"_transcribe_audio_sarvam: quota/rate limit hit ({resp.status_code}): {resp.text[:300]}")
+            raise SarvamQuotaExceededError(f"Sarvam STT returned HTTP {resp.status_code}")
         if resp.status_code >= 400:
             logging.error(f"_transcribe_audio_sarvam: {resp.status_code} response body: {resp.text[:500]}")
         resp.raise_for_status()
@@ -551,6 +569,8 @@ def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str, mode: str = 
         logging.info(f"DIAG_sarvam_sync_raw_response mode={mode} json={resp_json}")
         transcript = (resp_json.get("transcript") or "").strip()
         return transcript or None
+    except SarvamQuotaExceededError:
+        raise
     except Exception as e:
         logging.error(f"_transcribe_audio_sarvam failed: {e}")
         return None
@@ -1494,6 +1514,37 @@ async def feedback(req: FeedbackRequest):
     )
     return {"ok": True, "id": row_id}
 
+# ── Standalone conversational /chat endpoint ──────────────────────────────
+# Clean JSON in/out for an external website dashboard — separate from
+# /webhook (Twilio form-encoded) and separate from bot.agent.chat()'s
+# WhatsApp scam-triage flow. Legal/citizen-rights RAG over
+# kb/legal_info.json only; see assistant/pipeline.py for the full pipeline
+# (query rewrite -> hybrid retrieval -> confidence floor -> rerank ->
+# generation -> citation verification -> faithfulness check). Session
+# history reuses bot.agent's existing in-memory store (add_to_memory/
+# get_history) rather than a new one.
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+
+@app.post("/chat")
+async def chat_endpoint(req: ChatRequest):
+    from assistant.pipeline import handle_chat
+
+    try:
+        return handle_chat(req.session_id, req.message)
+    except Exception:
+        logging.exception("Unhandled /chat failure for session %s", req.session_id)
+        return {
+            "reply": "Something went wrong on our side. Please call 1930 directly or try again.",
+            "sources": [],
+            "metrics": {"error": "unhandled_exception"},
+        }
+
+
 # ── Missed-escalation evidence delivery ──────────────────────────────────
 # Separate agent from the fixed Tier 1-4 sequence: Android detects a Tier 2
 # SMS that wasn't delivered in time, or a Tier 3b call that likely wasn't
@@ -1873,7 +1924,10 @@ async def stt_sarvam(file: UploadFile = File(...), mode: str = Form("translate")
     pre-translating away the native text before that bridge ever sees it."""
     audio_bytes = await file.read()
     content_type = file.content_type or "audio/mp4"
-    transcript = _transcribe_audio_sarvam(audio_bytes, content_type, mode)
+    try:
+        transcript = _transcribe_audio_sarvam(audio_bytes, content_type, mode)
+    except SarvamQuotaExceededError:
+        return {"transcript": "", "found": False, "quota_exceeded": True}
     if transcript is None:
         return {"transcript": "", "found": False}
     return {"transcript": transcript, "found": True}

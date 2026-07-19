@@ -108,6 +108,7 @@ webhook/_evidence_files/
 *.json
 !kb/*.json
 !rakshak_eval_testset.json
+!eval_chat_testset.json
 *.parquet
 *.sqlite
 *.db

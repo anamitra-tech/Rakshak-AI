@@ -305,8 +305,13 @@ def classify_intent(session_id: str, message: str) -> tuple[str, str | None]:
     "scam_check" — the safest failure mode, since that path still runs
     ScamDetector.predict() and can itself return SAFE; every other intent
     risks silently never checking a message that might be a real scam."""
+    # prefer_gemini=True: this call decides which intent branch fires (i.e.
+    # whether ScamDetector even runs for a message the deterministic rule
+    # backstop doesn't catch) -- keep Gemini as primary here specifically,
+    # even while llm/client.py's default order is temporarily Groq-first
+    # elsewhere. See llm/client.py::generate()'s docstring/comment for why.
     prompt = _INTENT_PROMPT.format(history=_format_history(session_id), message=message)
-    future = _executor.submit(generate, prompt, retries=1)
+    future = _executor.submit(generate, prompt, retries=1, prefer_gemini=True)
     try:
         response = future.result(timeout=_INTENT_TIMEOUT_SECONDS)
         return _parse_intent_response(response.text)

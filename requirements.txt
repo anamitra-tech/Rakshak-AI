@@ -20,6 +20,11 @@ groq>=0.9
 faiss-cpu
 FlagEmbedding
 
+# Hybrid search (assistant/hybrid_search.py) — sparse BM25 keyword search,
+# fused with the existing FAISS dense search via reciprocal rank fusion,
+# for the /chat endpoint's retrieval over kb/legal_info.json
+rank_bm25
+
 # Scraping / parsing
 beautifulsoup4>=4.12
 feedparser>=6.0
