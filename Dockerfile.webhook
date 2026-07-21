@@ -1,0 +1,40 @@
+# webhook.app (port 8001) -- the RAG /chat endpoint (kb/legal_info.json) plus
+# the WhatsApp webhook path. Separate, heavier image from api.server's
+# Dockerfile.api: this one needs OCR (Tesseract + EasyOCR), the bge-m3
+# embedding model (FlagEmbedding/faiss for hybrid_search.py), and Sarvam STT/
+# translate.
+FROM python:3.11-slim
+
+# tesseract-ocr: the system binary pytesseract shells out to (language data
+# comes from this project's own tessdata/ dir, fetched below -- NOT the
+# system package's language packs). libgl1/libglib2.0-0: easyocr's opencv
+# dependency needs these even headless.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    libgl1 \
+    libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# tessdata/ is deliberately gitignored (see .gitignore: "~35MB of binary
+# language data") -- fetch the same tessdata_fast release files used to set
+# this up locally (webhook/app.py's _run_tesseract_ocr_with_confidence doc
+# comment: "verified byte-identical to the upstream tessdata_fast release").
+RUN mkdir -p tessdata && \
+    for lang in ben eng guj hin kan mal ori osd pan tam tel urd; do \
+      curl -sL -o tessdata/${lang}.traineddata \
+        "https://github.com/tesseract-ocr/tessdata_fast/raw/main/${lang}.traineddata"; \
+    done
+
+COPY . .
+
+ENV TESSDATA_PREFIX=/app/tessdata
+ENV PYTHONUNBUFFERED=1
+
+# Railway injects $PORT at runtime.
+CMD python -m uvicorn webhook.app:app --host 0.0.0.0 --port ${PORT:-8001}

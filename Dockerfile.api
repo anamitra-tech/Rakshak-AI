@@ -1,0 +1,17 @@
+# api.server (port 8000) -- the Android phone app's backend (Modules
+# 1/2/5/6/7: message/URL/voice classification, session detection, graph,
+# geo, case generation). Separate, lightweight image from webhook.app's
+# Dockerfile.webhook -- see requirements-api.txt for why.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt
+
+COPY . .
+
+ENV PYTHONUNBUFFERED=1
+
+# Railway injects $PORT at runtime; api/server.py reads it from argv.
+CMD python -m api.server ${PORT:-8000}

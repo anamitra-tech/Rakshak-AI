@@ -1,0 +1,19 @@
+# Lightweight dependency set for api.server (Modules 1/2/5/6/7 -- the phone
+# app's backend), split out from the full requirements.txt used by
+# webhook.app: api/server.py and everything it imports (ml/detector.py,
+# ml/session.py, ml/llm_explainer.py, link/url_safety.py, graph/*, geo/*,
+# casefile/case_generator.py, feedback/store.py, llm/client.py) never touches
+# FastAPI/uvicorn (api.server is a plain http.server.ThreadingHTTPServer),
+# Twilio, faiss-cpu/FlagEmbedding (RAG embeddings), easyocr/pytesseract (OCR),
+# sarvamai (STT/translate), or rank_bm25 (hybrid search) -- confirmed by
+# grepping every import in that module's real dependency chain, not guessed.
+# Keeps the api.server Docker image small and its cold start fast; see
+# requirements.txt for webhook.app's full (heavier) dependency set.
+numpy>=1.24
+scikit-learn>=1.3
+networkx>=3.0
+python-dotenv>=1.0
+requests>=2.31
+httpx>=0.27
+google-genai>=1.0
+groq>=0.9

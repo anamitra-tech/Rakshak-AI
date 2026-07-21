@@ -1,0 +1,60 @@
+\
+# Render Blueprint -- two separate services from this one repo, per the
+# same split as Dockerfile.api / Dockerfile.webhook:
+#   rakshak-api      -- api.server (port 8000), the Android phone app's
+#                        backend. Lightweight (sklearn/networkx only).
+#   rakshak-webhook  -- webhook.app (port 8001), the RAG /chat endpoint +
+#                        WhatsApp webhook, meant for external-website
+#                        integration. Heavy (bge-m3 embeddings via
+#                        FlagEmbedding/faiss, easyocr, Sarvam STT/translate).
+#
+# IMPORTANT, read before deploying: rakshak-webhook loads a ~2GB embedding
+# model (BAAI/bge-m3) plus EasyOCR's models into memory at startup --
+# Render's free tier (512MB RAM) will almost certainly OOM-crash it. Use at
+# least the Starter plan (or higher) for rakshak-webhook. rakshak-api has no
+# such requirement and can likely run on the free tier.
+#
+# All secret env vars are marked `sync: false` -- Render will prompt for
+# each one's real value in the dashboard when you create this Blueprint
+# instance; nothing secret is stored in this file.
+services:
+  - type: web
+    name: rakshak-webhook
+    runtime: docker
+    dockerfilePath: ./Dockerfile.webhook
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        sync: false
+      - key: CHAT_API_KEY
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+
+  - type: web
+    name: rakshak-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
