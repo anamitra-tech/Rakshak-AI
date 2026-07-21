@@ -18,6 +18,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeoutError
 
 from bot.agent import add_to_memory, get_history
+from bot.sarvam_translate import detect_native_script_lang, translate_text_sarvam
 from llm.client import generate
 
 from assistant.guardrails import DECLINE_MESSAGE, is_injection_attempt
@@ -198,7 +199,38 @@ Knowledge-base entries:
 Write a plain-language answer in 2-5 sentences. After every factual claim, \
 cite the entry it came from using this exact format: (Source: <id>). If the \
 entries don't actually answer the question, say so plainly instead of \
-guessing.\
+guessing.
+
+Two additional rules, found necessary after real generation errors that \
+passed citation checks but stated something the source didn't actually say:
+
+1. If a claim in the entries depends on MULTIPLE conditions joined by "and" \
+(e.g. "only if X and Y"), state ALL of them together with the conclusion — \
+never state just one of the conditions and drop the other, even to keep the \
+answer short. A citizen acting on a partially-qualified version of a rule \
+with multiple conditions can be materially misled (e.g. believing prompt \
+reporting alone guarantees a refund, when the source also separately \
+requires the fault not be theirs — both conditions matter, not just the one \
+about timing).
+
+2. If the question asks to compare or distinguish between two things, and \
+the entries describe both, give an explicit contrast — what each one is, \
+and what specifically makes them different (e.g. who runs it, what it can \
+and can't do) — rather than only listing facts about each separately. \
+Commit to one answer: either you can draw the contrast from the entries, or \
+you genuinely cannot — never write both a disclaimer that a comparison \
+"cannot be made" or "isn't covered" AND a paragraph that then draws one \
+anyway. If you can state even a partial, real contrast from what's given, \
+state it plainly as the answer instead of hedging around it.
+
+3. Several entries may be given, but not all of them are necessarily \
+relevant to this specific question — use only the ones that actually answer \
+it, and silently ignore the rest. Do NOT comment on what an irrelevant entry \
+fails to cover ("X doesn't mention the timeline"), and do NOT end the answer \
+with a disclaimer that no entry answers the question if an earlier part of \
+your own answer already did — that is a direct self-contradiction and \
+strictly worse than just giving the correct answer once, cleanly, and \
+stopping. Stay within 2-5 sentences total.\
 """
 
 
@@ -348,3 +380,46 @@ def handle_chat(session_id: str, message: str) -> dict:
         logger.exception("handle_chat failed unexpectedly for session %s", session_id)
         metrics["error"] = str(exc)
         return _finalize(session_id, is_new_session, _ERROR_FALLBACK, [], metrics)
+
+
+def handle_chat_multilang(session_id: str, message: str) -> dict:
+    """Boundary wrapper around handle_chat(): detects native (non-Latin)
+    script the same way the WhatsApp classify_text path already does
+    (bot.sarvam_translate.detect_native_script_lang — script-based, not
+    language-based; see its docstring), translates to English before
+    handle_chat() ever sees the message, then translates the finished reply
+    back into the same script before returning it. handle_chat() itself is
+    untouched and stays entirely English-internal — this function is the
+    only thing that knows a non-English caller exists.
+
+    Same fail-open posture as every other Sarvam caller in this project: if
+    SARVAM_API_KEY isn't configured or a translate call fails for any
+    reason, this falls back to running (or returning) the untranslated
+    text rather than blocking the reply. English/Hinglish input (Latin
+    script, detect_native_script_lang returns None) never touches Sarvam at
+    all -- byte-identical to calling handle_chat() directly."""
+    lang = detect_native_script_lang(message)
+    message_for_pipeline = message
+    translated_in = False
+    if lang:
+        translated = translate_text_sarvam(message, lang, "en-IN")
+        if translated:
+            message_for_pipeline = translated
+            translated_in = True
+        else:
+            logger.warning("handle_chat_multilang: translate-to-English failed for lang=%s — using raw message.", lang)
+
+    result = handle_chat(session_id, message_for_pipeline)
+    result["metrics"]["input_language"] = lang or "en-IN"
+    result["metrics"]["translated_in"] = translated_in
+
+    if lang:
+        translated_reply = translate_text_sarvam(result["reply"], "en-IN", lang)
+        if translated_reply:
+            result["reply"] = translated_reply
+            result["metrics"]["translated_out"] = True
+        else:
+            logger.warning("handle_chat_multilang: translate-from-English failed for lang=%s — returning English reply.", lang)
+            result["metrics"]["translated_out"] = False
+
+    return result
