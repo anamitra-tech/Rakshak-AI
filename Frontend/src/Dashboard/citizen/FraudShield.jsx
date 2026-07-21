@@ -2,6 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { categoryLabel, VERDICT_STYLES } from '../fraudCategories';
+import TrendCard from './TrendCard';
 
 // 🛡️ Import the asset directly so the bundler can resolve and optimize it
 import shieldAsset from '../../prahari copy 2.png';
@@ -263,7 +264,8 @@ const FraudShield = () => {
   };
 
   return (
-    <div className="max-w-2xl">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl w-full items-start">
+      <div className="max-w-2xl w-full flex flex-col">
       {/* Full-Screen Premium AI Guardian Overlay */}
       <AnimatePresence>
         {showOverlay && (
@@ -581,6 +583,11 @@ const FraudShield = () => {
           </div>
         </div>
       )}
+      </div>
+
+      <div className="w-full lg:sticky lg:top-24 h-full lg:h-[calc(100vh-8rem)]">
+        <TrendCard scamTypeKey={result?.categories?.[0]} />
+      </div>
     </div>
   );
 };

@@ -131,6 +131,48 @@ const GeoSpatial = () => {
           <div className="border border-cyan-500/10 rounded-2xl p-4 bg-[#052229]/30 backdrop-blur-sm">
             <TrendChart trend={trend} loading={loading} />
           </div>
+
+          {/* Recent Activity Table */}
+          <div className="border border-cyan-500/10 rounded-2xl p-4 bg-[#052229]/30 backdrop-blur-sm max-h-[300px] overflow-hidden flex flex-col">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400 mb-3 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" /> Recent Threat Activity
+            </h3>
+            <div className="overflow-y-auto flex-1 pr-2">
+              <table className="w-full text-left text-xs font-mono text-slate-300">
+                <thead className="sticky top-0 bg-[#052229] text-cyan-500/70 z-10">
+                  <tr>
+                    <th className="py-2 px-3 border-b border-cyan-500/10">Date</th>
+                    <th className="py-2 px-3 border-b border-cyan-500/10">District</th>
+                    <th className="py-2 px-3 border-b border-cyan-500/10">Scam Type</th>
+                    <th className="py-2 px-3 border-b border-cyan-500/10">Risk</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-cyan-500/5">
+                  {complaints.slice().reverse().map((c, i) => (
+                    <tr key={i} className="hover:bg-cyan-500/[0.02] transition-colors">
+                      <td className="py-2 px-3 text-slate-500 whitespace-nowrap">{c.date}</td>
+                      <td className="py-2 px-3">{c.district}</td>
+                      <td className="py-2 px-3 text-amber-300">{c.scam_type}</td>
+                      <td className="py-2 px-3">
+                        <span className={`px-2 py-0.5 rounded-md ${
+                          c.risk_score >= 67 ? 'bg-red-500/10 text-red-400' :
+                          c.risk_score >= 34 ? 'bg-amber-500/10 text-amber-400' :
+                          'bg-emerald-500/10 text-emerald-400'
+                        }`}>
+                          {c.risk_score}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {complaints.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="py-4 text-center text-slate-500 italic">No activity logged in selected range</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         {/* Floating Parameter Controls */}

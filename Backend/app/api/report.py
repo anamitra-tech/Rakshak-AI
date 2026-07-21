@@ -31,10 +31,40 @@ def report(payload: CitizenReportRequest):
             _, _, district = geo_service.mock_geocode("")
 
     # Map request to ComplaintPoint dictionary
+    valid_scams = geo_service.SCAM_TYPES
+    mapped_scam = next((s for s in valid_scams if s.lower() == payload.scam_type.lower()), None)
+    
+    if not mapped_scam:
+        mapping = {
+            "authority_impersonation": "Digital Arrest",
+            "credential_request": "Phishing",
+            "urgency_coercion": "Digital Arrest",
+            "money_demand": "Investment Scam",
+            "reward_bait": "Phishing",
+            "isolation_tactics": "Digital Arrest",
+            "otp_readout_request": "UPI Fraud",
+            "card_collection_request": "Phishing",
+            "relative_impersonation": "Digital Arrest",
+            "telecom_impersonation": "Digital Arrest",
+            "extortion_threat": "Digital Arrest",
+            "malicious_link_bait": "Phishing",
+            "malware_attachment_delivery": "Phishing",
+            "upi_fraud": "UPI Fraud",
+            "phishing": "Phishing",
+            "investment_scam": "Investment Scam",
+            "investment_fraud": "Investment Scam",
+            "loan_app_fraud": "Loan App Fraud",
+            "kyc_fraud": "KYC Fraud",
+            "job_fraud": "Job Fraud",
+            "digital_arrest": "Digital Arrest",
+        }
+        lower_type = payload.scam_type.lower().replace(" ", "_")
+        mapped_scam = mapping.get(lower_type, "Phishing") # Default fallback
+
     complaint_dict = {
         "lat": lat,
         "lng": lng,
-        "scam_type": payload.scam_type,
+        "scam_type": mapped_scam,
         "amount": round(random.uniform(100, 5000), 2), # Mock amount for now
         "risk_score": random.randint(30, 90), # Mock risk score
         "date": payload.date or date.today().isoformat(),
