@@ -1,3 +1,16 @@
+# Real bug found deploying to Render: FlagEmbedding/sentence_transformers pull
+# in torch as a transitive dependency with no CPU/GPU preference, so a plain
+# `pip install -r requirements.txt` resolves the full CUDA build (pulls in
+# nvidia-cusparselt-cu13, nvidia-cudnn-cu13, cuda-toolkit, etc. -- several
+# extra GB of GPU packages this CPU-only deploy never uses). That bloat is
+# the likely root cause of every prior Render build failing outright.
+# Pinning the exact +cpu-suffixed wheel (only resolvable via this extra
+# index, since no such version+suffix exists on default PyPI) forces pip to
+# install the CPU-only build instead, and satisfies FlagEmbedding/
+# sentence_transformers' own torch requirement once already installed.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.9.1+cpu
+
 # Core
 numpy>=1.24
 scikit-learn>=1.3
