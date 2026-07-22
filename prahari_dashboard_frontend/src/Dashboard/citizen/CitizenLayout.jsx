@@ -6,6 +6,7 @@ import prahariLogo from '../../prahari copy 2.png';
 
 const navItems = [
   { to: '/citizen/fraud-shield', label: 'Fraud Shield' },
+  { to: '/citizen/chat', label: 'Ask Prahari' },
   { to: '/citizen/report', label: 'Report a Scam' },
 ];
 

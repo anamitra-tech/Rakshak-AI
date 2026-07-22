@@ -6,6 +6,7 @@ import Walkthrough from './sections/Walkthrough';
 import ProtectedRoute from './components/ProtectedRoute';
 import CitizenLayout from './Dashboard/citizen/CitizenLayout';
 import FraudShield from './Dashboard/citizen/FraudShield';
+import Chat from './Dashboard/citizen/Chat';
 import Report from './Dashboard/citizen/Report';
 import CommandLayout from './Dashboard/CommandWorkSpace/CommandLayout';
 import Network from './Dashboard/CommandWorkSpace/Network';
@@ -28,6 +29,7 @@ const App = () => {
         }
       >
         <Route path="fraud-shield" element={<FraudShield />} />
+        <Route path="chat" element={<Chat />} />
         <Route path="report" element={<Report />} />
       </Route>
 

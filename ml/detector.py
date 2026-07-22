@@ -322,6 +322,49 @@ HIGH_RISK_PATTERNS = {
         r"forward kar ?(dijiye|do|kijiye|karein|ke)?.{0,150}\.(zip|exe|scr|js|docm|xlsm|bat)\b",
         r"\.(zip|exe|scr|js|docm|xlsm|bat)\b.{0,150}forward kar ?(dijiye|do|kijiye|karein|ke)?",
     ],
+    # Added 2026-07-22: real miss reported live — "Congratulations, you've
+    # cleared the initial screening for the part-time data entry role...
+    # just a small refundable deposit is required to reserve your slot on
+    # the training batch" scored SUSPICIOUS 0.556 with rule_categories=[],
+    # falling back to the generic "language model flags risk... though no
+    # explicit rule pattern matched" reason — no category explained *why*,
+    # and the response never told the user to report at 1930. None of the
+    # existing categories cover it: money_demand requires an explicit send/
+    # transfer/pay-fee verb or a named destination account, neither of which
+    # this message has ("a small refundable deposit is required" names no
+    # verb or destination). This is the advance-fee job/training scam
+    # already anticipated in the ScamType vocabulary (see report.py's
+    # scam_type mapping, "job_fraud" -> "Job Fraud") but never covered by a
+    # HIGH_RISK_PATTERNS category. Near-deterministic in the same sense as
+    # otp_readout_request/card_collection_request: no legitimate employer,
+    # recruiter, or training program ever requires a candidate to pay
+    # anything — refundable or not — to secure an offer, interview slot, or
+    # training seat, regardless of how the payment is framed. Every pattern
+    # below requires the job/interview/training/onboarding framing to
+    # co-occur with a payment-to-secure-a-slot framing, not bare presence of
+    # either alone (a real job posting mentioning "training" or a real
+    # e-commerce "reserve your slot" deal are both far too common to flag on
+    # one half alone).
+    "job_fraud": [
+        r"(job|role|position|vacancy|hiring|interview|onboarding|training|internship|placement)"
+        r".{0,100}(refundable|nominal|small|minimal|token|registration|security|processing)?"
+        r"\s*(deposit|fee|amount|payment|charges?)"
+        r".{0,10}(is |are |will be )?(required|needed|mandatory|must be paid|has to be paid)"
+        r".{0,80}(reserve|secure|confirm|book|hold|lock|guarantee)\s*(your\s+)?"
+        r"(slot|seat|position|spot|batch|offer)",
+        r"(reserve|secure|confirm|book|hold|lock|guarantee)\s*(your\s+)?(slot|seat|position|spot|batch|offer)"
+        r".{0,80}(refundable|nominal|small|minimal|token|registration|security|processing)?"
+        r"\s*(deposit|fee|amount|payment|charges?)"
+        r".{0,10}(is |are |will be )?(required|needed|mandatory|must be paid|has to be paid)"
+        r".{0,100}(job|role|position|vacancy|hiring|interview|onboarding|training|internship|placement)",
+        r"(pay|deposit|transfer).{0,30}(to|for).{0,20}(confirm|secure|reserve).{0,20}(your\s+)?"
+        r"(job|offer|selection|placement|position|interview)",
+        r"(training|joining|welcome|starter)\s*kit.{0,40}(pay|deposit|charges?|fee)",
+        r"(job|naukri|training|seat|slot).{0,40}(confirm|book|reserve|pakka)\s*karne\s*ke\s*liye"
+        r".{0,40}(deposit|fee|paise|rupaye|advance|shulk)",
+        r"(deposit|fee|paise|rupaye|advance|shulk).{0,40}(job|naukri|training|seat|slot)"
+        r".{0,40}(confirm|book|reserve|pakka)\s*karna\s*(hoga|padega)",
+    ],
 }
 
 # Surfaced verbatim to the user when the matching near-deterministic rule
@@ -344,6 +387,12 @@ CARD_COLLECTION_EXPLANATION = (
     "debit or credit card. If your card needs to be blocked, it can be done remotely — no one "
     "needs to physically take it from you."
 )
+JOB_FRAUD_EXPLANATION = (
+    "No legitimate employer, recruiter, or training program will ever ask you to pay money — "
+    "refundable or not — to secure a job offer, interview slot, or training seat. A real "
+    "employer pays you, not the other way around. Do not send any payment, block the sender, "
+    "and report this at cybercrime.gov.in or by calling 1930."
+)
 
 # Rules treated as near-certain scam on their own — no legitimate caller has
 # a reason to trigger any of these, so they override the ML/tone score
@@ -352,6 +401,7 @@ NEAR_DETERMINISTIC_RULES = {
     "isolation_tactics": ISOLATION_TACTICS_EXPLANATION,
     "otp_readout_request": OTP_READOUT_EXPLANATION,
     "card_collection_request": CARD_COLLECTION_EXPLANATION,
+    "job_fraud": JOB_FRAUD_EXPLANATION,
 }
 
 ACTION_BY_LEVEL = {
@@ -539,6 +589,7 @@ class ScamDetector:
             "extortion_threat": "Threatens to leak private content unless paid (blackmail/sextortion framing)",
             "malicious_link_bait": "Pressures you to click a link, tied to an account/KYC suspension threat, a parcel/delivery hold, or a prize claim",
             "malware_attachment_delivery": "Asks you to forward an attachment (e.g. to a finance/accounts contact) and open it on a computer, or names a risky file type (.zip/.exe/.docm/etc.)",
+            "job_fraud": "Asks you to pay a deposit/fee to secure a job offer, interview, or training slot",
         }
         return [label[k] for k in rules]
 

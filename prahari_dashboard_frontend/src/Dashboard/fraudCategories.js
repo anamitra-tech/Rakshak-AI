@@ -1,5 +1,5 @@
-// Maps the 13 unified-classifier category keys to readable chip labels.
-// Keep in sync with RuleCategory in Backend/app/models/schemas.py.
+// Maps the unified-classifier category keys to readable chip labels.
+// Keep in sync with RuleCategory in prahari_dashboard_backend/app/models/schemas.py.
 export const CATEGORY_LABELS = {
   authority_impersonation: 'Authority Impersonation',
   credential_request: 'Credential Request',
@@ -14,6 +14,7 @@ export const CATEGORY_LABELS = {
   extortion_threat: 'Extortion Threat',
   malicious_link_bait: 'Malicious Link Bait',
   malware_attachment_delivery: 'Malware Attachment Delivery',
+  job_fraud: 'Job Fraud',
 };
 
 export const categoryLabel = (key) => CATEGORY_LABELS[key] || key;
@@ -89,6 +90,11 @@ export const SCAM_TREND_DATA = {
     trends: 'Targeting businesses and HR departments via fake job applications or invoices containing RATs (Remote Access Trojans).',
     patterns: 'An email with a sense of urgency contains a ZIP or PDF file. Opening it installs malware that steals session cookies and passwords.',
     indicators: ['Unexpected invoices or resumes', 'Files requiring passwords provided in the email', 'Double extensions (e.g., document.pdf.exe)'],
+  },
+  job_fraud: {
+    trends: 'Rising alongside genuine work-from-home hiring, often distributed via WhatsApp/Telegram groups and fake job-portal listings.',
+    patterns: 'Victim is told they have been "selected" for a role after little or no real interview, then asked to pay a refundable deposit, registration fee, or training/starter-kit charge to confirm the offer or reserve a training slot.',
+    indicators: ['Payment requested before any offer letter or employment contract', 'Vague job description with unrealistic pay for minimal work', 'Pressure to pay quickly to "lock" a limited slot', '"Refundable" framed deposit that is never actually refunded'],
   },
 };
 
