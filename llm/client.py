@@ -35,8 +35,6 @@ NVIDIA_NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 OLLAMA_MODEL = "gemma3"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 
-_gemini_client = google_genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
 
 class LLMResponse:
     def __init__(self, text: str, engine: str):
@@ -98,7 +96,23 @@ def _fallback_generate(prompt: str) -> LLMResponse:
 
 
 def _gemini_generate(prompt: str) -> LLMResponse:
-    response = _gemini_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+    # Real bug found in a production-readiness pass (2026-07-22): this used
+    # to construct google_genai.Client(...) once at MODULE IMPORT time. That
+    # constructor validates the key eagerly and raises ValueError if it's
+    # missing/empty -- so on any deployment without GEMINI_API_KEY set,
+    # `import llm.client` itself crashed, taking down every caller
+    # (ml.llm_explainer, rag.retriever, bot.agent, and this repo's own
+    # /api/chat and /api/analyze routes) before any of their own try/except
+    # handling ever got a chance to run. Groq and Nemotron were already
+    # correctly lazy (key checked inside their generate function, at call
+    # time) -- this makes Gemini consistent with that pattern instead of the
+    # one exception to it.
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or api_key == "your_gemini_api_key_here":
+        raise ValueError("GEMINI_API_KEY not configured")
+
+    gemini_client = google_genai.Client(api_key=api_key)
+    response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
     if response.text and len(response.text.strip()) > 10:
         logger.info("Engine: Gemini (%s)", GEMINI_MODEL)
         return LLMResponse(text=response.text, engine="gemini")
@@ -147,4 +161,18 @@ def generate(prompt: str, retries: int = 3, prefer_gemini: bool = False) -> LLMR
         except Exception as exc:
             logger.warning("%s fallback failed (%s) — trying next", name, exc)
 
-    return _ENGINE_FNS[order[-1]](prompt)
+    # Last tier was previously called unguarded -- every current caller
+    # (bot/agent.py x2, rag/retriever.py, ml/llm_explainer.py) already wraps
+    # its future.result() in try/except and degrades to its own fallback
+    # text, so this was never observed to crash anything live. Still a real
+    # gap for any future direct caller of generate() that doesn't do that:
+    # wrap it too, and raise one clear, combined error instead of whatever
+    # exception the last provider happens to throw, so "every engine is
+    # down" is unambiguous in logs/tracebacks rather than looking like an
+    # ollama-specific failure.
+    last = order[-1]
+    try:
+        return _ENGINE_FNS[last](prompt)
+    except Exception as exc:
+        logger.error("%s (final fallback tier) also failed (%s) — all engines in %s exhausted", last, exc, order)
+        raise RuntimeError(f"All LLM providers failed: {order}") from exc
