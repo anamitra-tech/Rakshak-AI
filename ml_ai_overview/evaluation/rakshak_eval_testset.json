@@ -1,0 +1,461 @@
+{
+  "notes": "Labeled test set for evaluating the Prahari/Rakshak AI scam classifier. 'expert_scam' cases avoid obvious trigger words (OTP, PIN, blocked) to test generalization beyond the training templates. 'false_positive_bait' cases are genuinely legitimate messages that share surface features with scams (urgency, money, the words OTP/fraud/blocked) to test whether the classifier over-triggers on keywords alone. Case fp24 is a KNOWN, currently-failing false_positive_bait case (see its own 'known_failing' field) — deliberately kept in the suite, not fixed, as a pre-identified target for Day 2's gated retraining pipeline to validate against once built. Its failure is expected; do not treat it as a new regression.",
+  "cases": [
+    {
+      "id": "es1",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "Good afternoon, I am calling from the cyber crime cell regarding a parcel registered under your Aadhaar number that was intercepted at customs. To avoid a formal FIR being filed against you, I need you to stay on this call and follow the verification process I describe."
+    },
+    {
+      "id": "es2",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "This is regarding your savings account which is scheduled for temporary restriction due to incomplete re-KYC. To complete verification instantly instead of visiting the branch, I will read out a message that will arrive on your registered mobile, please confirm the six digits you see there."
+    },
+    {
+      "id": "es3",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "I'm following up on the investment webinar you attended last month. Returns this quarter have been strong and a few slots remain in the fixed plan before it closes on the 15th, would you like me to reserve one for you today with a smaller initial amount?"
+    },
+    {
+      "id": "es4",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "Your parcel from Mumbai couriers has been held because one document is missing, this happens sometimes with international shipments, I can help you clear this over a quick verification call so it isn't returned."
+    },
+    {
+      "id": "es5",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "We noticed unusual activity from a device linked to your number, this is a routine advisory call, no action needed unless you'd like me to walk you through securing the account right now."
+    },
+    {
+      "id": "es6",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "Mom, don't panic, I'm okay, but I'm in a bit of trouble and can't talk long, my friend is going to call you about sending something for me, please just listen to him."
+    },
+    {
+      "id": "es7",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "Congratulations, you've been shortlisted for the work-from-home data entry role, HR will explain a small refundable registration process before onboarding starts."
+    },
+    {
+      "id": "es8",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "Your electricity connection is scheduled for disconnection tonight at 9:30pm due to a billing discrepancy, if this is inconvenient I can transfer you to the billing department to resolve it right now."
+    },
+    {
+      "id": "es9",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "Sir aapka account thodi der ke liye restrict ho sakta hai, main aapko verify karne ke liye ek process follow karwata hoon, bas confirm kijiye jo message aaya hai."
+    },
+    {
+      "id": "es10",
+      "label": "scam",
+      "category": "expert_scam",
+      "text": "Congratulations messages aside, the one formality that remains is a small processing fee before the disbursal team can release the transfer to your registered account."
+    },
+    {
+      "id": "fp1",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your OTP for the transaction of Rs 4500 at Amazon is 738291. Do not share this OTP with anyone. - HDFC Bank"
+    },
+    {
+      "id": "fp2",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "This is a courtesy call from your bank's fraud monitoring team. We noticed an unusual transaction attempt on your card and have blocked it as a precaution. We will never ask you for your PIN or OTP; please call the number on the back of your card if you have concerns."
+    },
+    {
+      "id": "fp3",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "This is a reminder call from Apollo Hospital for your appointment tomorrow at 10am with Dr. Sharma, please confirm if you'll be able to make it."
+    },
+    {
+      "id": "fp4",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your Amazon package will be delivered today between 2pm and 6pm, please ensure someone is available to receive it."
+    },
+    {
+      "id": "fp5",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your prepaid balance is low, recharge before midnight to avoid service interruption."
+    },
+    {
+      "id": "fp6",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "As per RBI guidelines your KYC is due for update, please visit your nearest branch with your Aadhaar and PAN card at your convenience, there's no urgency."
+    },
+    {
+      "id": "fp7",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "This is calling from the local Panchayat office regarding the Ayushman Bharat health card camp on Saturday, would you like to register?"
+    },
+    {
+      "id": "fp8",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Hi, this is regarding the complaint you registered yesterday about your gas connection, an engineer will visit tomorrow between 11 and 1."
+    },
+    {
+      "id": "fp9",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your car insurance policy is expiring on the 20th, would you like me to send the renewal quote on WhatsApp so your family can review it too?"
+    },
+    {
+      "id": "fp10",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Beta maine tumhare liye recharge karva diya hai, mobile check kar lena."
+    },
+    {
+      "id": "iso1",
+      "label": "scam",
+      "category": "isolation_scam",
+      "text": "Please don't call the bank helpline right now, that will get flagged as a duplicate report and delay resolving this. I'm already handling it directly with the fraud team, just stay on this call with me."
+    },
+    {
+      "id": "iso2",
+      "label": "scam",
+      "category": "isolation_scam",
+      "text": "There's no need to disturb your son, I know how these things can worry family unnecessarily, I'll take care of everything from my end, just tell me the code that arrives on your phone."
+    },
+    {
+      "id": "iso3",
+      "label": "scam",
+      "category": "isolation_scam",
+      "text": "Sir, just hand the phone to me for two minutes, I'll do all the steps myself since this can be a bit technical, you don't need to worry about it.",
+      "regression_locked": true,
+      "regression_note": "LOCKED REGRESSION CASE (found 2026-07-21 via eval_rag_testset.py): on the conversational /webhook pipeline, bot.agent.chat()'s LLM-based classify_intent() misrouted this exact phrasing to GENERAL_CHAT, silently skipping ScamDetector.predict() entirely (isolation_scam recall dropped to 5/6). Root cause: this text scores SUSPICIOUS (0.613) purely off the trained ML component — _rule_signals() returns {} for it (no isolation_tactics regex literally matches 'hand the phone to me'/'do all the steps myself'), so the pre-existing MANDATORY SAFETY BACKSTOP in chat() (which only checked _rule_signals()) had no way to override the LLM router's misclassification. Fixed by also checking the full ScamDetector.predict() verdict (rules + ML score) in the backstop, not just the rule layer — see bot/agent.py's classify_intent()/chat() doc comments. Do not remove or reword this case without re-verifying the fix still holds; this is what eval_rag_testset.py's isolation_scam recall guards against regressing again."
+    },
+    {
+      "id": "iso4",
+      "label": "scam",
+      "category": "isolation_scam",
+      "text": "Our field executive will come to your home this evening to collect the card and documents for verification, please have them ready, no need to visit the branch yourself."
+    },
+    {
+      "id": "iso5",
+      "label": "scam",
+      "category": "isolation_scam",
+      "text": "I understand you want to call your bank to confirm, but that number is currently overloaded with complaints like yours, staying on this call is actually faster."
+    },
+    {
+      "id": "fp11",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Don't worry, we've already blocked your card as a precaution after detecting the suspicious transaction. No further action is needed from you right now; if you'd like to confirm, feel free to call the number on the back of your card."
+    },
+    {
+      "id": "otp1",
+      "label": "scam",
+      "category": "otp_readout_scam",
+      "text": "Please read out the six-digit code that just arrived on your phone so I can verify your identity on our end."
+    },
+    {
+      "id": "otp2",
+      "label": "scam",
+      "category": "otp_readout_scam",
+      "text": "Just tell me the last four digits of your card and the one-time code you're seeing right now, this is standard verification on our side."
+    },
+    {
+      "id": "cour1",
+      "label": "scam",
+      "category": "card_courier_scam",
+      "text": "Since the card needs to be blocked immediately for your safety, our courier will come to collect your debit card from your home within the hour, please keep the PIN written down for the technician."
+    },
+    {
+      "id": "cour2",
+      "label": "scam",
+      "category": "card_courier_scam",
+      "text": "As per the cyber crime department's investigation, you need to hand over your Aadhaar-linked debit card to our verification officer who will visit you today."
+    },
+    {
+      "id": "fp12",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "For your safety, banks and RBI never ask you to share your OTP, PIN, or card details over a phone call - if anyone does, please hang up immediately and report it."
+    },
+    {
+      "id": "fp13",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your new debit card has been dispatched and will arrive by courier within 5-7 working days, please keep your ID proof ready to receive it."
+    },
+    {
+      "id": "fp14",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Sir, this is Rahul from ICICI Bank's fraud prevention team. We've detected an unauthorized transaction attempt of Rs 45,000 on your credit card about ten minutes ago and have already blocked the card as a precaution — no money has been debited. You don't need to do anything on this call; we'll courier a new card to your registered address within 5-7 days. If you'd like to verify this yourself, please hang up and call the number on the back of your old card or visit your nearest branch."
+    },
+    {
+      "id": "fp15",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "This is a reminder that the technician will visit your home tomorrow between 11am and 1pm to repair your washing machine under the extended warranty plan, please ensure someone is available."
+    },
+    {
+      "id": "fp16",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your Amazon package will be delivered to your home tomorrow between 2pm and 6pm, please ensure someone is available to receive it."
+    },
+    {
+      "id": "fp17",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "This is to confirm that the building inspector will visit your residence next Tuesday at 10am for the annual fire-safety inspection scheduled by the housing society."
+    },
+    {
+      "id": "rel1",
+      "label": "scam",
+      "category": "relative_impersonation_scam",
+      "text": "Mom please don't panic, I lost my phone so this is a friend's number, I'm in some trouble and need you to transfer 15000 rupees right now, please don't tell dad okay?"
+    },
+    {
+      "id": "rel2",
+      "label": "scam",
+      "category": "relative_impersonation_scam",
+      "text": "Papa, gaadi ka accident ho gaya hai, thoda paisa chahiye abhi turant, kisi ko mat batana, main baad mein sab bata dunga."
+    },
+    {
+      "id": "rel3",
+      "label": "scam",
+      "category": "relative_impersonation_scam",
+      "text": "Hi Aunty, this is Rohan, Priya's colleague, she's in a bit of trouble and asked me to call you, she needs you to send some money to this account urgently, please don't mention this to anyone else in the family."
+    },
+    {
+      "id": "tel1",
+      "label": "scam",
+      "category": "telecom_impersonation_scam",
+      "text": "This is a call from the Department of Telecommunications. Your mobile number will be disconnected within two hours as nine unauthorized SIM cards were issued using your Aadhaar details. Press 1 to speak with a TRAI officer immediately."
+    },
+    {
+      "id": "tel2",
+      "label": "scam",
+      "category": "telecom_impersonation_scam",
+      "text": "Sir, aapka sim card 24 ghante mein band ho jaayega kyunki aapke KYC documents verify nahi hue hain, isse bachne ke liye turant humare executive se baat kijiye."
+    },
+    {
+      "id": "tel3",
+      "label": "scam",
+      "category": "telecom_impersonation_scam",
+      "text": "This is TRAI calling regarding your telecom connection, unauthorized documents were used to activate a second SIM in your name for illegal activities, to avoid your number being blocked stay on the line."
+    },
+    {
+      "id": "ext1",
+      "label": "scam",
+      "category": "extortion_threat_scam",
+      "text": "We have recorded a video call with you and captured some private images. Transfer 50000 rupees to this UPI ID within the next 30 minutes or we will send everything to your entire contact list."
+    },
+    {
+      "id": "ext2",
+      "label": "scam",
+      "category": "extortion_threat_scam",
+      "text": "Aapki kuch private tasveerein hamare paas hain, agar aapne turant payment nahi kiya to hum inhe aapke sabhi contacts aur family ko bhej denge."
+    },
+    {
+      "id": "ext3",
+      "label": "scam",
+      "category": "extortion_threat_scam",
+      "text": "I have access to your device and personal photos. Pay in bitcoin within one hour, otherwise this gets uploaded and shared with your social media contacts and workplace."
+    },
+    {
+      "id": "fp18",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Beta, maine tumhare college ki fees jama karwa di hai, ek baar check kar lena ki aa gaye."
+    },
+    {
+      "id": "fp19",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Hi Mom, just letting you know I landed safely, will call you properly once I settle in, talk soon!"
+    },
+    {
+      "id": "fp20",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "This is a message from your telecom operator: your SIM card KYC re-verification is due by month end as per DoT guidelines, please visit your nearest store at your convenience with a valid ID, there is no urgency and no action is needed over a phone call."
+    },
+    {
+      "id": "fp21",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your new SIM card activation is complete and your number is now active. If you did not request this SIM, please call our customer care number listed on our official website."
+    },
+    {
+      "id": "fp22",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Hi, could you send me the photos from the wedding when you get a chance? No rush at all, whenever is convenient for you."
+    },
+    {
+      "id": "fp23",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "This is a reminder that your video call with the doctor is scheduled for 4pm today, please join a few minutes early to complete the check-in."
+    },
+    {
+      "id": "fp24",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Beta, maine tumhare college fees ke liye 20000 rupaye tumhare account mein transfer kar diye hain, check kar lena aur confirm karna.",
+      "known_failing": true,
+      "known_failing_note": "Currently scores SUSPICIOUS at 0.512 (rule_categories: [] — pure ML baseline, no rule pattern fires). Confirmed via feature-attribution analysis to be driven by the base ~31-template classifier's association of 'account'/'transfer'/'rupaye'/4-5-digit amounts with FRAUD regardless of tense or family context (see CLAUDE.md §6.3). Not fixed here — kept as a pre-identified target for Day 2's gated retraining pipeline; eval_testset.py will report this as a false positive until that lands, which is expected, not a regression."
+    },
+    {
+      "id": "otp3",
+      "label": "scam",
+      "category": "otp_readout_scam",
+      "text": "Ma'am, I'm following up on the case file we discussed. Everything you told me matches our records, so I don't think this needs to go further today. Just to close this out formally, I'll need you to confirm the verification code on your screen, and then we're done — no further calls needed after this.",
+      "regression_note": "Added after tracing a bug where this exact message displayed a fabricated 'Fear induction (arrest/jail threats)' reason from voice_fraud.py's own independent MANIPULATION_CUES matcher (triggered by 'case file'), while ml.detector.py correctly found rule_categories=[] for the same text. Two fixes made this pass: (1) analyze_transcript() now sources its displayed reason/signals from ScamDetector.build_reason()/build_signals() over its own rule_categories only, never from MANIPULATION_CUES; (2) otp_readout_request gained 'confirm the verification code' / 'confirm the code on your screen' patterns to close the coverage gap this message exposed (no digit-count word, no read/tell/share verb). Expected: FRAUD via credential_request+otp_readout_request, with the displayed reason being the OTP-readout explanation — not any mention of arrest/jail."
+    },
+    {
+      "id": "otp4",
+      "label": "scam",
+      "category": "otp_readout_scam",
+      "text": "Please send the otp",
+      "regression_note": "otp_readout_request's verb list only covered read/tell/share/say/speak (English) and bata/bol (Hindi) — 'send'/'bhej'/'bhejo' were missing entirely, so this exact phrase matched no pattern in either ml/detector.py or its Kotlin offline mirror (android OfflineRuleEngine), despite being a plain OTP-readout request. Fixed by adding 'send' to the tell/share/say/speak alternation and 'bhej' to the bata/bol alternation, in both files identically. Expected: FRAUD via otp_readout_request."
+    },
+    {
+      "id": "otp5",
+      "label": "scam",
+      "category": "otp_readout_scam",
+      "text": "Send the 3 digit verification code",
+      "regression_note": "Two gaps in otp_readout_request: (1) the digit-count pattern only recognized 'confirm the [N]-digit...', not 'send'/'share'/'tell the [N]-digit...' — fixed by widening confirm to (confirm|send|share|tell). (2) the tell/share/say/speak/send credential-word list (otp|pin|cvv|one-time code) didn't include plain 'code' or 'verification code' — fixed by adding both, still gated on the same verb list so this doesn't fire on unrelated uses of the word 'code'. Matched in both ml/detector.py and its Kotlin offline mirror (OfflineRuleEngine) identically. Expected: FRAUD via otp_readout_request."
+    },
+    {
+      "id": "otp6",
+      "label": "scam",
+      "category": "otp_readout_scam",
+      "text": "please send otp",
+      "regression_note": "Added to lock in coverage of the no-article phrasing (no 'the'/'your' before the credential word), following a suspicion that the otp4 'send' fix required 'the' literally. Checked and disproved: the (tell|share|say|speak|send)...(the\\s+|your\\s+)?(otp|...) pattern already had the article group as optional ('?'), same as the read\\s+ pattern above it, so 'please send otp' already matched with no code change needed. Kept as a regression case so this stays proven, not just asserted. Expected: FRAUD via otp_readout_request."
+    },
+    {
+      "id": "otp7",
+      "label": "scam",
+      "category": "otp_readout_scam",
+      "text": "please send the 3 digit verification code",
+      "regression_note": "Combines both otp5 fixes (widened digit-count verb alternation (confirm|send|share|tell), and the tell/share/say/speak/send credential-word list gaining plain 'code'/'verification code') into one sentence with the article present, as an additional regression case distinct from otp5 (no 'please', no article) and otp6 (no digit-count). Expected: FRAUD via otp_readout_request."
+    },
+    {
+      "id": "otp8",
+      "label": "scam",
+      "category": "otp_readout_scam",
+      "text": "otp dedo pls",
+      "regression_note": "Added 2026-07-13: real user test message that slipped through otp_readout_request undetected. bata/bol/bhej (tell/say/send) were covered in Hinglish Latin script, and 'give' was covered in English ('give me the otp') and Devanagari ('otp...दें'), but not the Hinglish Latin-script 'de do'/'dedo' (give) verb itself. Fixed by adding de\\s?do as an alternative stem in both directions of the pattern pair, in ml/detector.py and its Kotlin mirror OfflineRuleEngine identically. Expected: FRAUD via otp_readout_request."
+    },
+    {
+      "id": "fp25",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Hi, just following up on your support ticket. The case is now closed and the file has been updated in our system. Thanks for your patience, have a great day.",
+      "regression_note": "Deliberately reuses 'case'/'file' in an ordinary, non-scam customer-service context to confirm the fear_induction cue-fabrication bug fixed for otp3 wasn't just replaced by a different false trigger from the same wording."
+    },
+    {
+      "id": "link1",
+      "label": "scam",
+      "category": "malicious_link_bait_scam",
+      "text": "Dear customer, your bank account will be suspended today due to KYC non-compliance. Click here immediately to complete verification: http://kyc-verify-now.xyz",
+      "regression_note": "Added 2026-07-12 for the new malicious_link_bait category — account/KYC suspension-threat framing + click instruction, English. Expected: SUSPICIOUS/FRAUD via malicious_link_bait."
+    },
+    {
+      "id": "link2",
+      "label": "scam",
+      "category": "malicious_link_bait_scam",
+      "text": "Aapka SBI khaata 24 ghante mein block ho jayega, turant is link par click karke apni KYC update karein: http://sbi-kyc.top",
+      "regression_note": "Added 2026-07-12 — Hinglish khaata/SIM block-threat + click-instruction variant of malicious_link_bait, distinct alternation from the English pattern pair. Expected: SUSPICIOUS/FRAUD via malicious_link_bait."
+    },
+    {
+      "id": "link3",
+      "label": "scam",
+      "category": "malicious_link_bait_scam",
+      "text": "Your parcel is on hold at the courier facility due to a pending customs fee of Rs 199. Click the link below within 24 hours to release your shipment or it will be returned.",
+      "regression_note": "Added 2026-07-12 — parcel/customs-fee-hold framing + click instruction, the delivery-smishing variant of malicious_link_bait (matches the kb/scams.json fake-courier card's pattern). Expected: SUSPICIOUS/FRAUD via malicious_link_bait."
+    },
+    {
+      "id": "link4",
+      "label": "scam",
+      "category": "malicious_link_bait_scam",
+      "text": "Congratulations! You have been selected to win a free smartphone. Click here now to claim your prize before this offer expires tonight.",
+      "regression_note": "Added 2026-07-12 — prize/reward-claim framing + click instruction, the lottery-bait variant of malicious_link_bait. Expected: SUSPICIOUS/FRAUD via malicious_link_bait."
+    },
+    {
+      "id": "fp26",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your order #4521 has been shipped! Click here to track your package: https://amazon.in/track/4521",
+      "regression_note": "Added 2026-07-12 as false-positive-bait for malicious_link_bait — a genuine, ordinary delivery-tracking link with no suspension/hold/customs-fee threat framing at all. Must NOT match malicious_link_bait."
+    },
+    {
+      "id": "fp27",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Thank you for completing your KYC update. Click here to download your confirmation receipt.",
+      "regression_note": "Added 2026-07-12 as false-positive-bait for malicious_link_bait — KYC is confirmed COMPLETE, not threatened with suspension, so the click instruction has nothing to pair with. Must NOT match malicious_link_bait."
+    },
+    {
+      "id": "fp28",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Your electricity bill for this month is ready. Click here to view and pay online at your convenience.",
+      "regression_note": "Added 2026-07-12 as false-positive-bait for malicious_link_bait — a routine bill-payment link with no urgency, account-suspension, parcel-hold, or prize framing. Must NOT match malicious_link_bait."
+    },
+    {
+      "id": "mal1",
+      "label": "scam",
+      "category": "malware_attachment_delivery_scam",
+      "text": "Statement of Account6.25.zip. Please isko apni company ke finance manager ko verification ke liye forward kar dijiye. Please ise computer par open kijiye.",
+      "regression_note": "Added 2026-07-12 — the real message that exposed this gap: scored SAFE before malware_attachment_delivery existed (no impersonation, no credential request, so no prior category covered it). The exact combination this category targets: forward-to-finance-manager instruction + explicit computer-specific open instruction (not phone) + a risky .zip extension in the filename text. Expected: FRAUD via malware_attachment_delivery (score 0.85, structural combo bump, same treatment as extortion_threat)."
+    },
+    {
+      "id": "mal2",
+      "label": "scam",
+      "category": "malware_attachment_delivery_scam",
+      "text": "This invoice.docm needs urgent review, please forward it to your manager and open on your desktop.",
+      "regression_note": "Added 2026-07-12 — English variant: forward-to-manager + open-on-desktop, macro-enabled .docm extension present too. Expected: FRAUD via malware_attachment_delivery."
+    },
+    {
+      "id": "mal3",
+      "label": "scam",
+      "category": "malware_attachment_delivery_scam",
+      "text": "Please forward the attached statement.zip to your finance team for verification.",
+      "regression_note": "Added 2026-07-12 — tests the risky-extension pairing alone (forward instruction + .zip filename), no explicit open-on-computer instruction present, and the extension sits between the forward-verb and the role-mention rather than after the combined clause (a real ordering variant this category's patterns had to be widened to catch). Expected: FRAUD via malware_attachment_delivery."
+    },
+    {
+      "id": "fp29",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Please forward this invoice PDF to accounts for payment, thanks.",
+      "regression_note": "Added 2026-07-12 as false-positive-bait for malware_attachment_delivery — ordinary business attachment-forwarding: a forward instruction to a finance-adjacent role, but no device-specific open instruction and no risky extension (PDF is not in the risky-extension list). Must NOT match malware_attachment_delivery."
+    },
+    {
+      "id": "fp30",
+      "label": "safe",
+      "category": "false_positive_bait",
+      "text": "Please forward this presentation.pptx to the team before the meeting.",
+      "regression_note": "Added 2026-07-12 as false-positive-bait for malware_attachment_delivery — confirms the risky-extension list doesn't over-match on an ordinary office-document extension (.pptx) not in (.zip/.exe/.scr/.js/.docm/.xlsm/.bat). Must NOT match malware_attachment_delivery."
+    },
+    {
+      "id": "iso6",
+      "label": "scam",
+      "category": "isolation_scam",
+      "text": "From the Jasi Cyber Crime Cell. Immediate notice. There is a suspicion that your Aadhaar card and number 245 were used in illegal financial transactions. Your name is on file for a thorough investigation. Until the investigation is complete, please do not inform anyone about this matter. If you do not confirm your identity within 30 minutes, legal action may be initiated regarding the case. To view the details, use the link below.",
+      "added_note": "Real, live-observed false negative (2026-07-16): this is the actual Sarvam gu-IN->en-IN translation of a real WhatsApp-submitted Gujarati digital-arrest scam screenshot (OCR via the Tesseract cascade, see CLAUDE.md Section 13). Scored SAFE 0.49/rule_categories=[] before the cyber-crime-cell authority_impersonation pattern was added; scores FRAUD 0.95 after."
+    }
+  ]
+}

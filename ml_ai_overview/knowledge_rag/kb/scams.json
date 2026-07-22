@@ -1,0 +1,2489 @@
+[
+  {
+    "id": "digital_arrest_001",
+    "scam_type": "digital_arrest",
+    "channel": "video_call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "CBI/ED officer impersonation — virtual custody demand",
+    "example_messages": [
+      "This is CBI officer. Your Aadhaar number is linked to a money laundering case. You are under digital arrest. Do not disconnect.",
+      "Main ED se bol raha hoon. Aapke naam pe arrest warrant hai. Abhi video call pe aaiye warna police aayegi.",
+      "Your courier parcel contains illegal items. You must stay on this call for investigation or you will be arrested.",
+      "Customs department. A package registered under your name has been seized. Pay settlement amount to avoid arrest.",
+      "Aap digital arrest mein hain. Camera band mat karo. Kisi ko mat batao — yeh confidential investigation hai."
+    ],
+    "call_script": "Caller claims to be from CBI, ED, Customs, or Narcotics. Says victim's Aadhaar, bank account, or courier is linked to crime. Demands victim stay on video call continuously. Tells victim not to inform family. Shows fake badge, fake FIR number. Eventually demands money transfer to a 'safe RBI account' or 'Supreme Court verified account' to avoid arrest.",
+    "red_flags": [
+      "Impersonates CBI, ED, Customs, Police, or Narcotics officer",
+      "Claims Aadhaar, bank account, or parcel is linked to crime",
+      "Demands victim stay on video call and not tell family",
+      "Uses words: digital arrest, warrant, money laundering, settlement",
+      "Asks for money transfer to 'safe' or 'RBI' or 'Supreme Court' account",
+      "Creates extreme urgency and fear of immediate arrest",
+      "Shows fake government badges, fake FIR documents on screen"
+    ],
+    "what_to_do": "Disconnect immediately. No real government agency — CBI, ED, Police, Customs — ever arrests anyone over a phone or video call, or demands money to avoid arrest. Do not transfer any money. Do not share OTP, bank details, or install any app. Call your family immediately. Report on helpline 1930 or at cybercrime.gov.in.",
+    "source": {
+      "name": "I4C / MHA Advisory — Digital Arrest Scams",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "digital_arrest_002",
+    "scam_type": "digital_arrest",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Supreme Court / Judge impersonation — bail payment demand",
+    "example_messages": [
+      "This is Supreme Court registry. A case has been filed against you. Pay bail amount of Rs 50,000 immediately.",
+      "Judge sahab ne aapke case mein interim relief diya hai. Processing fee bhejiye turant.",
+      "Your name appeared in a drug trafficking FIR. To get anticipatory bail, transfer the amount now.",
+      "CBI has filed chargesheet against you. To avoid public arrest pay the clearance amount within 2 hours."
+    ],
+    "call_script": "Caller claims to be a court official or CBI prosecutor. References a real-sounding case number. Says victim has 2 hours to pay bail or clearance money before arrest becomes public. May follow up with another caller pretending to be a lawyer offering to 'help settle' for a fee.",
+    "red_flags": [
+      "Claims to be from Supreme Court, High Court, or judiciary",
+      "Gives fake case numbers or FIR numbers",
+      "Demands bail or clearance payment over phone",
+      "Creates 2-hour or same-day deadline",
+      "May have a second caller posing as a helpful lawyer"
+    ],
+    "what_to_do": "No court in India contacts citizens by phone to collect bail money. Disconnect. Verify any legal matter only by visiting the actual court or contacting a registered lawyer yourself. Report to 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C / MHA Advisory — Digital Arrest Scams",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "bank_otp_001",
+    "scam_type": "bank_otp_kyc",
+    "channel": "sms",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Bank KYC expiry — OTP/PIN demand",
+    "example_messages": [
+      "Dear customer, your SBI KYC has expired. Your account will be blocked in 24 hours. Click link to update: http://sbi-kyc-update.xyz",
+      "HDFC Alert: Your debit card will be blocked. Share OTP received on your mobile to keep account active.",
+      "Aapka account suspend ho jayega. Abhi OTP batao warna permanent block ho jayega. Urgent.",
+      "Your KYC is pending. Update now at this link or your UPI will stop working from midnight."
+    ],
+    "call_script": "SMS or call claiming bank account/KYC/UPI will be blocked unless victim shares OTP, CVV, or PIN immediately. May send a fake link that looks like the bank's website. Real message then requests OTP the victim receives.",
+    "red_flags": [
+      "Claims account/KYC/UPI/debit card will be blocked urgently",
+      "Asks you to share OTP, PIN, CVV, or net banking password",
+      "Sends a link that is NOT the official bank domain",
+      "Creates same-day or overnight urgency",
+      "Caller/SMS asks you to 'confirm' details the bank should already have"
+    ],
+    "what_to_do": "No bank ever asks for your OTP, PIN, or CVV over SMS, call, or link. Real KYC updates happen at the branch or official bank app only. Do not click any link in the SMS. Do not share any code with anyone. Call your bank's official helpline (on the back of your card) to check. Report to 1930.",
+    "source": {
+      "name": "RBI Consumer Awareness — Never Share OTP",
+      "url": "https://www.rbi.org.in/Scripts/PublicationsView.aspx?id=20572",
+      "date": "2023-2025"
+    }
+  },
+  {
+    "id": "bank_otp_002",
+    "scam_type": "bank_otp_kyc",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake bank officer — remote access / screen share demand",
+    "example_messages": [
+      "I am calling from HDFC bank fraud department. We have detected suspicious activity on your account. Please install AnyDesk so we can help you secure it.",
+      "Sir main aapke bank ka officer hoon. Account hack ho gaya hai. Abhi screen share karo taki hum fix kar sakein.",
+      "Your account shows unauthorized login. Download TeamViewer and share the code so our tech team can block the hacker."
+    ],
+    "call_script": "Caller pretends to be bank's fraud team. Says account is under attack. Convinces victim to install remote-access software (AnyDesk, TeamViewer, QuickSupport). Once installed, caller controls phone, transfers money, collects OTPs in real time.",
+    "red_flags": [
+      "Asks you to install AnyDesk, TeamViewer, QuickSupport, or any remote app",
+      "Asks to share a 9-digit access code from that app",
+      "Claims to be fixing a security problem on your account",
+      "Stays on call while you install the app"
+    ],
+    "what_to_do": "No bank ever asks you to install remote-access software. Disconnect immediately. Uninstall any app you may have installed. Call your bank's official number immediately to check your account. Report to 1930.",
+    "source": {
+      "name": "I4C Advisory — Remote Access Fraud",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "smishing_001",
+    "scam_type": "smishing_link",
+    "channel": "sms",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake delivery / parcel link scam",
+    "example_messages": [
+      "Your package from Amazon could not be delivered. Update your address: http://amz-delivery.xyz/track",
+      "DTDC: Parcel held at customs. Pay Rs 49 clearance fee: http://dtdc-customs.online/pay",
+      "India Post: Your registered parcel is on hold. Verify details within 24 hours at: http://indiapost-verify.top"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "SMS about undelivered parcel with a suspicious link",
+      "Link domain does not match official company website",
+      "Asks for small payment (Rs 49, Rs 99) via link",
+      "Creates 24-hour urgency to click",
+      "Sender number is unknown or international"
+    ],
+    "what_to_do": "Do not click the link. Real delivery companies (Amazon, India Post, DTDC) only use their official apps and official domains for tracking. Type the official website address yourself in your browser. If in doubt, call the company's official customer care number. Report suspicious SMS to 1930.",
+    "source": {
+      "name": "I4C Advisory — Smishing / Fake Delivery Scams",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "smishing_002",
+    "scam_type": "smishing_link",
+    "channel": "whatsapp",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "WhatsApp fake job / part-time work link",
+    "example_messages": [
+      "Work from home! Earn Rs 5,000 daily by liking YouTube videos. Register here: http://earn-now.xyz/join",
+      "Part time job available. No experience needed. Rs 3,000 per day. Click to apply: http://job-india.top",
+      "Aapko ghar se kaam karne ka mauka mil raha hai. Sirf 2 ghante rojana, 4000 rupaye daily. Link: http://workfromhome.cf"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Promises very high daily income for simple tasks (liking, clicking)",
+      "Sent via WhatsApp from unknown number",
+      "Link is a short URL or suspicious domain",
+      "Asks for registration fee or bank details to start",
+      "Claims no experience or qualifications needed"
+    ],
+    "what_to_do": "No legitimate job pays thousands per day for liking videos or clicking links. Do not click the link. Do not pay any registration fee. Do not share your bank account or Aadhaar. Block and report the number on WhatsApp. Report to 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C Advisory — Fake Job / Task Scams",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2025"
+    }
+  },
+  {
+    "id": "qr_fraud_001",
+    "scam_type": "qr_code_fraud",
+    "channel": "whatsapp",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "QR code payment scam — receive money trick",
+    "example_messages": [
+      "Scan this QR code to receive your cashback of Rs 2,000 from us.",
+      "I am buying your OLX item. Scan this QR to get the payment directly in your account.",
+      "Aapka refund process ho raha hai. Yeh QR scan karein aur amount receive karein.",
+      "Army officer wants to buy your product. Scan QR code to get Rs 15,000 instantly."
+    ],
+    "call_script": "Scammer contacts seller on OLX/Facebook Marketplace. Pretends to be a buyer (often claims to be army/defence officer). Sends a QR code saying 'scan this to receive payment.' Victim scans and is actually authorizing a payment OUT of their account.",
+    "red_flags": [
+      "Someone asks you to SCAN a QR code to RECEIVE money",
+      "Buyer sends QR code instead of transferring directly",
+      "Claims to be army, defence, or government employee",
+      "Found you on OLX, Facebook Marketplace, or social media",
+      "Asks you to enter UPI PIN after scanning"
+    ],
+    "what_to_do": "You NEVER need to scan a QR code or enter your UPI PIN to RECEIVE money. Scanning a QR code and entering your PIN means money goes OUT of your account, not in. If someone sends you a QR code to 'receive' payment, it is a scam. Refuse. Report to 1930.",
+    "source": {
+      "name": "I4C Advisory — QR Code Fraud",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "investment_001",
+    "scam_type": "investment_fraud",
+    "channel": "whatsapp",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake stock tips / crypto doubling scheme",
+    "example_messages": [
+      "Join our SEBI-registered expert group. Guaranteed 40% monthly returns on stock tips. Limited slots.",
+      "Crypto doubling scheme — send 1000 USDT and receive 2000 within 24 hours. 100% guaranteed profit.",
+      "Our AI trading bot gives 200% returns. Invest Rs 10,000 today and withdraw Rs 30,000 next week.",
+      "Humara Telegram group mein free stock tips milte hain. Abhi tak 95% accuracy. Join karo."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Promises guaranteed or very high returns (40%+ monthly)",
+      "Asks you to join a WhatsApp or Telegram group for tips",
+      "Claims SEBI registration but cannot show proof",
+      "Asks you to invest via crypto or unofficial app",
+      "Shows fake profit screenshots as proof"
+    ],
+    "what_to_do": "No investment guarantees returns. SEBI-registered advisors never solicit through WhatsApp groups or promise guaranteed profits. Do not send money. Do not download unknown trading apps. Verify any investment advisor on SEBI's official website (sebi.gov.in). Report to 1930.",
+    "source": {
+      "name": "SEBI Investor Awareness — Fake Investment Advisors",
+      "url": "https://www.sebi.gov.in/investors.html",
+      "date": "2024-2025"
+    }
+  },
+  {
+    "id": "lottery_001",
+    "scam_type": "lottery_prize_fraud",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "KBC / lottery prize — processing fee demand",
+    "example_messages": [
+      "Congratulations! You have won Rs 25 lakh in KBC lucky draw. Call this number to claim your prize.",
+      "Aapka number lucky draw mein select hua hai. Rs 50 lakh ka inam jeeta hai. Processing fee Rs 5,000 bhejein.",
+      "You are selected for Amazon mega prize of Rs 15 lakh. Pay GST of Rs 2,500 to release funds.",
+      "Government scheme — aapko 10 lakh ka prize mila hai. Registration fee bhejiye."
+    ],
+    "call_script": "Caller says victim has won a lottery, KBC prize, or government scheme reward. To 'release' the prize, victim must pay a small processing fee, GST, or legal fee. Each payment leads to a new demand. Prize never arrives.",
+    "red_flags": [
+      "Claims you won a prize you never entered for",
+      "Asks for processing fee, GST, or legal fee to release prize",
+      "Uses KBC, Amazon, government scheme names",
+      "Prize amount is very large (lakhs)",
+      "Pressures you to pay quickly before prize expires"
+    ],
+    "what_to_do": "You cannot win a prize you never entered. No legitimate prize ever requires a fee to be paid before receiving it. Do not send any money. Do not share your bank details. Disconnect and report to 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C Advisory — Lottery and Prize Fraud",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "location_lure_001",
+    "scam_type": "location_lure",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Physical lure — come to this location scam",
+    "example_messages": [
+      "Your loan has been approved. Come to our office at this address to collect the cheque and sign documents.",
+      "Aapka interview select hua hai. Kal is address pe aaiye. Joining letter aur cash incentive milega.",
+      "Police station mein aapki presence required hai regarding a case. Come alone, do not tell anyone.",
+      "Your prize delivery requires in-person collection. Come to this address with your Aadhaar and Rs 500 token amount."
+    ],
+    "call_script": "Victim is lured to a physical location — fake office, fake police station, or isolated address. At the location they may be robbed, further scammed, photographed for blackmail, or coerced into signing documents.",
+    "red_flags": [
+      "Asks you to come to an unofficial address to collect money or prize",
+      "Says come alone and do not tell family",
+      "Requires you to bring cash, Aadhaar, or valuables",
+      "Address is unusual — residential area, isolated location",
+      "Police asking you to come to a location via phone (real police send written summons)"
+    ],
+    "what_to_do": "Do not go alone to any unknown address for money, prize, or job collection. Real police summons come in writing, not by phone call. If asked to visit a police station, take a family member or lawyer. Verify the address is real before going. Report suspicious calls to 1930.",
+    "source": {
+      "name": "I4C Advisory — Physical Lure and Offline Fraud",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "multi_call_001",
+    "scam_type": "multi_call_escalation",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Multi-call coordinated pressure — escalating callers",
+    "example_messages": [
+      "First call: This is Mumbai police, a complaint has been filed against you. Second call same day: This is your lawyer, I can help settle this for Rs 20,000. Third call: This is the senior officer, your case has been escalated.",
+      "Call 1: CBI case against you. Call 2: Same day — 'I am calling from RBI, your account is frozen.' Call 3: 'Pay now or case goes to court tomorrow.'",
+      "Multiple callers, different numbers, same day — all claiming to be different authorities about the same fake case."
+    ],
+    "call_script": "Coordinated team of scammers calls the same victim multiple times in one day. Each caller plays a different role: police officer, lawyer, court official, bank officer. Each call raises pressure and urgency. Victim feels overwhelmed and surrounded by 'authorities.' Final call demands payment.",
+    "red_flags": [
+      "Multiple calls from different numbers on the same day about the same issue",
+      "Each caller plays a different authority role",
+      "Pressure builds across calls — each one more urgent than last",
+      "Callers seem to know what previous callers said (coordinated)",
+      "Final call always demands immediate money transfer"
+    ],
+    "what_to_do": "Coordinated calls from multiple 'authorities' in one day is a classic organised scam operation. Real agencies do not coordinate calls this way. Stop answering. Block all the numbers. Tell a trusted family member immediately. Report all the numbers to 1930 — they can trace the network.",
+    "source": {
+      "name": "I4C Analysis — Organised Cybercrime Call Patterns",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "corporate_malware_bec_001",
+    "scam_type": "corporate_malware_bec",
+    "channel": "whatsapp",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake Account Statement ZIP — Malware via WhatsApp",
+    "example_messages": [
+      "Statement of account zip file aaya WhatsApp pe finance manager ko forward karo aur computer pe kholo",
+      "Bank statement document attached as ZIP please forward to your accounts team and open on desktop computer",
+      "Invoice aur payment receipt bhej raha hoon zip mein finance ko de dena aur PC pe open karna",
+      "Maine woh zip file khol di computer pe ab kya karna chahiye",
+      "Unhone jo zip file bheja tha woh open kar liya accidentally ab kya karein",
+      "File run ho gayi computer pe extract kar liya zip file ka kya karna chahiye"
+    ],
+    "call_script": "Scammer sends a ZIP file named like a financial document on WhatsApp and asks victim to forward it to their finance manager and open on a computer. File contains malware (RAT/keylogger) giving attacker access to corporate banking, UPI, and Tally.",
+    "red_flags": [
+      "ZIP or APK disguised as bank statement or invoice",
+      "Asks you to forward to finance or accounts team",
+      "Insists on opening on computer not phone",
+      "File size 10MB or more for what should be a small document",
+      "Message in Hinglish to appear informal and trusted",
+      "Already forwarded through company WhatsApp groups"
+    ],
+    "what_to_do": "DO NOT download or open the ZIP. Do not forward it to anyone. Warn your finance team immediately. Report sender to cybercrime.gov.in or call 1930.",
+    "if_already_opened": "URGENT: Disconnect from WiFi and mobile data RIGHT NOW. Do not restart the computer. From a DIFFERENT device, change net banking password, UPI PIN, email password, and Tally login immediately. Call 1930 and file complaint at cybercrime.gov.in under Financial Fraud. Warn all colleagues who received the same forwarded file. Report to 1930 or cybercrime.gov.in.",
+    "post_open_keywords": [
+      "already opened",
+      "khol diya",
+      "khol di",
+      "open kar liya",
+      "download kar liya",
+      "file run ho gayi",
+      "clicked on it",
+      "extracted the zip"
+    ],
+    "severity": "CRITICAL",
+    "source": {
+      "name": "CERT-In Advisory CI-2024-001 / I4C BEC Advisory 2024",
+      "url": "https://www.cert-in.org.in",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "sanchar_saathi_sim_swap_001",
+    "scam_type": "sanchar_saathi_sim_swap",
+    "channel": "whatsapp",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake Sanchar Saathi Link — SIM Swap via Aadhaar Theft",
+    "example_messages": [
+      "Sanchar Saathi ka link aaya SIM block ho raha hai Aadhaar number dena hoga",
+      "Your SIM will be blocked visit this Sanchar Saathi portal and verify Aadhaar immediately",
+      "SIM swap ho raha hai aapka is link pe jaake block karein fake sancharsaathi link",
+      "Aapka number kisi aur ne register kiya hai Sanchar Saathi portal pe OTP verify karein",
+      "Received message sancharsaathi portal visit karo SIM block karne ke liye Aadhaar do"
+    ],
+    "call_script": "Scammer sends a fake Sanchar Saathi portal link on WhatsApp. Link closely resembles sancharsaathi.gov.in but has a wrong domain. Victim is asked to enter Aadhaar number and OTP to block stolen SIM. Attacker intercepts OTP and performs real SIM swap to drain bank accounts.",
+    "red_flags": [
+      "Link claiming to be sancharsaathi.gov.in but domain name is different",
+      "Asks for Aadhaar number and OTP on the website",
+      "Promises to block stolen or misused SIM",
+      "Urgency — SIM will be disconnected within hours",
+      "Sent via WhatsApp or SMS from unknown number"
+    ],
+    "what_to_do": "Do not click the link. Visit only sancharsaathi.gov.in by typing the address directly in your browser. Never enter Aadhaar or OTP on a link received via WhatsApp. Call 1930 to report. If SIM is already swapped contact your telecom operator immediately.",
+    "source": {
+      "name": "CERT-In Advisory 2024 / Sanchar Saathi Official Advisory",
+      "url": "https://sancharsaathi.gov.in",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "fake_job_apk_001",
+    "scam_type": "fake_job_offer_apk",
+    "channel": "whatsapp",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake HR APK — Job Application Form Malware",
+    "example_messages": [
+      "HR ne APK bheja job application form ke liye please install karein",
+      "Job apply karne ke liye yeh APK install karo Play Store pe nahi milega",
+      "Fresher vacancy hai yeh form APK mein hai download karke fill karein",
+      "Company ka application form APK format mein hai install karo aur fill karke bhejo",
+      "WhatsApp pe ek HR ne APK file bheja job form bolke kya yeh safe hai"
+    ],
+    "call_script": "Fake HR representative sends an APK file on WhatsApp claiming it is a job application form. Victim installs APK which is actually a Remote Access Trojan. Malware collects OTPs, bank credentials, and personal data. Predominantly targets freshers in UP, Bihar, and other states.",
+    "red_flags": [
+      "APK file sent from unknown WhatsApp number claiming to be HR",
+      "Says fill this form to apply for job — form is an APK not a PDF",
+      "File is not available on Google Play Store",
+      "Asks for suspicious permissions after install such as SMS access",
+      "Job offer too good to be true for fresher"
+    ],
+    "what_to_do": "Never install APK files received via WhatsApp from unknown contacts. Legitimate companies only use official websites or verified Play Store apps for job applications. Block and report the number on WhatsApp. Report to 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "PIB Fact Check / I4C Advisory 2024",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "aadhaar_biometric_freeze_001",
+    "scam_type": "aadhaar_biometric_freeze",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake Aadhaar Biometric Freeze Call — OTP Theft",
+    "example_messages": [
+      "Aadhaar biometric misuse ho raha hai OTP do turant",
+      "Your Aadhaar linked mobile number is being used fraudulently press 1 to freeze",
+      "UIDAI se bol rahe hain aapka biometric data leak hua hai",
+      "Aadhaar freeze karne ke liye yeh OTP share karein",
+      "Mujhe call aaya UIDAI se Aadhaar biometric lock karna hai OTP maang rahe hain"
+    ],
+    "call_script": "Caller impersonates UIDAI, CBI, or a government officer. Claims victim's Aadhaar biometric is being misused. Asks for OTP sent to victim's phone to freeze biometric lock. Real biometric lock can only be done at uidai.gov.in or mAadhaar app — no caller ever needs your OTP for this.",
+    "red_flags": [
+      "Unsolicited call claiming Aadhaar biometric is being misused",
+      "Creates urgency — biometric is being used right now",
+      "Asks for OTP received on your phone to freeze Aadhaar",
+      "Caller claims to be from UIDAI CBI or government",
+      "Threatens legal action if you do not share OTP immediately"
+    ],
+    "what_to_do": "Hang up immediately. No government caller ever asks for OTP to freeze your Aadhaar biometric. Biometric lock can only be done by YOU on uidai.gov.in or the mAadhaar app. If concerned visit uidai.gov.in directly or call UIDAI helpline 1947. Report suspicious call to 1930.",
+    "source": {
+      "name": "UIDAI Advisory / Sanchar Saathi Bulletin 2024",
+      "url": "https://uidai.gov.in",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "csk_blackmoon_malware",
+    "scam_type": "digital_arrest",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Blackmoon Malware",
+    "example_messages": [
+      "Blackmoon Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "https://github.com/eSentire/iocs/blob/main/SyncFuture%20Espionage%20Campaign/SyncFuture_Espionage_Campaign_IOCS_Jan2026.txt",
+      "Don't open attachments in unsolicited e-mails, even if they come from people in your contact list, and never click on a URL contained in an unsolicited e-mail, even if the link seems benign. In cases of genuine URLs close out the e-mail and go to the organization’s website directly through browser.",
+      "Update software and operating systems with the latest patches. Outdated applications and operating systems are the targets of most attacks.",
+      "It is advised to block office applications from creating executable files.",
+      "Install ad blockers to combat exploit kits such as Fallout that are distributed via malicious advertising.",
+      "Do not download and install applications from untrusted sources [offered via unknown websites/ links on unscrupulous messages]. Install applications downloaded from reputed application market only. Users must be aware while clicking on links during web search.",
+      "Prohibit external FTP connections and blacklist downloads of known offensive security tools."
+    ],
+    "what_to_do": "SyncFuture Espionage Targeted Campaign (Blackmoon Malware) Original Issue Date:- February 06, 2026 Virus Type:- Backdoor Severity:- Medium It is reported that a targeted cyber-espionage campaign is affecting users and organisations in India. The campaign is assessed to be highly targeted indicating deliberate victim selection and reconnaissance by the threat actors. It primarily leverages social engineering and trusted-looking government communication themes to gain initial access, making it particularly dangerous for unsuspecting users.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Blackmoon-malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_remcos_rat",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Remcos RAT",
+    "example_messages": [
+      "Remcos RAT"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "bf32ff64ac0cfee67f4b2df27733576a",
+      "b63178f562b948b850f4676d4b8db1c0",
+      "55e5c8b8cba2ca2f152bf70dde2113f53f3dd42649cae535f55f0362b426e97c",
+      "readysteaurants[.]com",
+      "hxxps://0x0[.]st/8KuV.ps1",
+      "193[.]142[.]146.101",
+      "162[.]254[.]39.129"
+    ],
+    "what_to_do": "Remcos RAT Original Issue Date:- June 26, 2025 Virus Type:- Remote Access Trojan Severity:- Medium It is reported that a malware dubbed as Remcos RAT (Remote Control and Surveillance Trojan) which is a sophisticated Remote Access Trojan (RAT), is being escalated by the threat actors for espionage, credential theft, and system takeover. Remcos (Remote Control and Surveillance) is a Remote Access Trojan (RAT) created by Breaking Security and initially promoted as a legitimate tool for remote system management. However, it has since been extensively used by cybercriminals and Advanced Persistent Threat (APT) groups for malicious activities.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Remcos_RAT.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_spymax_android_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "SpyMax Android Malware",
+    "example_messages": [
+      "SpyMax Android Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "104.234.167[.]145",
+      "154.213.65[.]28:7771",
+      "https://telegroms[.]icu/assets/download/ready.apk",
+      "com.cristal.bristral.tristal[.]mistral - c58b2bacd7c34ef998497032448e3095",
+      "com.android[.]pictach - 66a7fd9bd39b1ba0c097698b68fd94a7",
+      "reputation.printer[.]garmin - 9C42A99693A2D68D7A19D7F090BD2977",
+      "All users should avoid downloading APKs from outside Google Play and be cautious with risky permission requests while installing any app."
+    ],
+    "what_to_do": "SpyMax Android Malware Original Issue Date:- June 25, 2025 Virus Type:- Android Remote Access Trojan Severity:- Medium It is reported that a variant of an Android-based Remote Access Trojan (RAT) named SpyMax is currently being distributed via social engineering campaigns. Cybercriminals are targeting mobile users by spreading a fake messaging app such as Telegram or fake wedding invitation app through messaging platforms like WhatsApp. The malware disguises itself as a legitimate app to lure users into granting dangerous permissions, allowing attackers to gain full control over infected devices.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/SpyMax_android_malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_latrodectus_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Latrodectus Malware",
+    "example_messages": [
+      "Latrodectus Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "hxxps://delview[.]com/MobileDefault[.]aspx?reff=hxxps://cutt[.]ly/seU8MT6t#_fZ0NmW",
+      "hxxps://cutt[.]ly/seU8MT6t#_fZ0NmW",
+      "hxxps://digitalpinnaclepub[.]com/?3",
+      "topguningit[.]com",
+      "lofiramegi[.]com",
+      "carflotyup[.]com",
+      "daringdesigners[.]com"
+    ],
+    "what_to_do": "Latrodectus Malware Original Issue Date:- June 20, 2025 Virus Type:- Backdoor/ Loader Severity:- Medium It is reported that a malware campaign distributing sophisticated malware, named as Latrodectus (aka BlackWidow), is currently active. This malware acts as loader and backdoor which is often attributed to the same threat actor behind IcedID (aka LunarSpider) malware campaign. It is typically distributed via phishing emails targeting various sectors.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Latrodectus_Malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_lumma_infostealer",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Lumma Infostealer",
+    "example_messages": [
+      "Lumma Infostealer"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "Deceptive CAPTCHA screens: Attackers mislead users into running harmful PowerShell commands by disguising them as part of a human verification check",
+      "Abuse of Discord CDN: Cybercriminals use Discord's Content Delivery Network to store and spread malicious software.",
+      "Deceptive Browser Update Prompts: Users are tricked into installing bogus updates that actually download and launch malware",
+      "ClickFix Method: Victims are manipulated through social engineering to run PowerShell commands supplied by the attacker, resulting in the installation of Lumma Stealer malware",
+      "6F94CFAABB19491F2B8E719D74AD032D4BEB3F29",
+      "C5D3278284666863D7587F1B31B06F407C592AC4",
+      "5FA1EDC42ABB42D54D98FEE0D282DA453E200E99"
+    ],
+    "what_to_do": "Lumma Infostealer Original Issue Date:- June 12, 2025 Virus Type:- Infostealer Severity:- Medium It is reported that an info stealer dubbed as Lumma stealer, which is an advanced info-stealing malware, is being offered through a Malware-as-a-Service (MaaS) platform. First discovered in 2022, it has quickly gained traction among cybercriminals for its ease of use and high effectiveness. Designed to target Windows systems, it steals sensitive data such as stored browser credentials, cookies, cryptocurrency wallet details, two-factor authentication (2FA) codes, credit card information, session tokens and other personal data.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Lumma_infostealer.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_securidropper",
+    "scam_type": "fake_job_offer_apk",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "SecuriDropper",
+    "example_messages": [
+      "SecuriDropper"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "SecuriDropper is disguised as a legitimate app and is sideloaded onto the device by mimicking the marketplace's installation process.",
+      "Once installed, the dropper prompts the user for critical permissions such as \"Read & Write External Storage\" and \"Install & Delete Packages.\"",
+      "Once the permissions are granted, the dropper checks for the payload on the device.",
+      "If the payload is not found, the dropper dynamically manages interfaces, presenting messages tailored to the device's language and location, prompting users to install the payload by clicking the \"Reinstall\" button.",
+      "Once the user clicks \"Reinstall,\" the dropper downloads the payload from a remote server and installs it on the device.",
+      "Once the payload is installed, the dropper launches it and hands over execution control.",
+      "The payload then performs its malicious activities, such as stealing personal information or financial data.\""
+    ],
+    "what_to_do": "SecuriDropper Original Issue Date:- November 17, 2023 Virus Type:- Dropper-as-a-Service (DaaS) Severity:- High It has been reported that newly discovered Dropper-as-a-Service (DaaS), called SecuriDropper can bypass Android's security solutions including Android 13's Restricted Settings that prevents side-loaded applications (APK files) installed from outside Google Play. It disguises itself as a legitimate app and utilizing a 'session-based' installer, sideloads malware by mimicking the marketplace's installation process. SecuriDropper is a two-stage infection process, wherein the dropper installs a secondary payload belonging to malware categories of spyware or banking Trojans on devices.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/SecuriDropper.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_ramnit_banking_trojan",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Ramnit Banking Trojan",
+    "example_messages": [
+      "Ramnit Banking Trojan"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "185.197.75[.]10",
+      "B564ED3DE7A49673AC19B6231E439032AE6EAA68",
+      "7FDBCB40E0BE3563B7093F32F4B2967A0550437F",
+      "bureaucratica[dot]org",
+      "packerd[dot]me",
+      "image.orchas[dot]com",
+      "https://www.cybereason.com/blog/research/banking-trojan-delivered-by-lolbins-ramnit-trojan"
+    ],
+    "what_to_do": "Ramnit Banking Trojan Original Issue Date:- November 02, 2023 Virus Type:- Banking Trojan Severity:- Medium It has been reported that a trojan dubbed as “Ramnit”, which can steal sensitive data like personal information, banking credentials, FTP passwords, and session cookies is spreading across the globe. Infection Mechanism In attacking campaign, a spear-phishing email is used to target the victim, containing a hyperlink leading to a compromised website. Upon clicking the hyperlink and accessing the site, the victim is prompted to download an additional payload, specifically a compressed ZIP file which contains both, a harmless .jpg file and a .lnk shortcut file.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Ramnit_Banking_Trojan.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_luadream_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "LuaDream Malware",
+    "example_messages": [
+      "LuaDream Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "%ProgramData%\\FaxConfig",
+      "%ProgramData%\\FaxLib",
+      "mode.encagil[dot]com<1-24>",
+      "ssl.explorecell[dot]com",
+      "Do not download and install applications from untrusted sources [offered via unknown websites/ links on unscrupulous messages]. Install applications downloaded from reputed application market only. Users must be aware while clicking on links during web search.",
+      "Update software and operating systems with the latest patches. Outdated applications and operating systems are the targets of most attacks.",
+      "Don't open attachments in unsolicited e-mails, even if they come from people in your contact list, and never click on a URL contained in an unsolicited e-mail, even if the link seems benign. In cases of genuine URLs close out the e-mail and go to the organization’s website directly through browser."
+    ],
+    "what_to_do": "LuaDream Malware Original Issue Date:- October 03, 2023 Virus Type:- Backdoor malware Severity:- Medium It has been reported that a newly surfaced info-stealing malware, named 'LuaDream,' is spreading across the globe. The threat actors, tagged as Sandman, targeting the telecommunications sector in various regions to pose significant risks to victims, including potential data theft and further malicious activities. Infection Mechanism: The malicious campaign utilizes DLL hijacking for its operation.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/LuaDream_Malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_raccoon_infostealer_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Raccoon Infostealer Malware",
+    "example_messages": [
+      "Raccoon Infostealer Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "Extracting the application file containing sensitive data.",
+      "Copying the file to a designated folder (%Temp%).",
+      "Creating and saving a text file that holds stolen information in the target application's folder.",
+      "195.201.225[.]248 – Resolves to telete[.]in and related domains",
+      "95.216.186[.]40 – Resolves to tttttt[.]me and related domains",
+      "012e382049b88808e2d0b26e016dc189f608deea9b6cc993ce24a57c99dd93d1",
+      "18c27b85f26566dd782171e00ea5b5872546b23526cca0ebb185caca35fdec93"
+    ],
+    "what_to_do": "Raccoon infostealer malware Original Issue Date:- August 22, 2023 Virus Type:- infostealer malware Severity:- Medium It has been reported that a new variant of Raccoon Stealer malware is spreading across the globe with malicious activities. The malware can steal a variety of sensitive information including user data, credentials, browser information, bank account details, and cryptocurrency wallet information. The new iteration of Raccoon emphasizes the heightened risk to sectors like finance, which are attractive targets for cyberattacks and financial fraud.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Raccoon_stealer.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_nitrogen_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Nitrogen Malware",
+    "example_messages": [
+      "Nitrogen Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "0af013ad0548b992d50287e3b11963cad9aa0af1f1e47e254637d28ee05208d8",
+      "0daf5c0f374e9a03fbe24dbcb4f0a24837a35bc2f0ca76ca35bb705f8c079486",
+      "104.18.25[.]181",
+      "104.234.11[.]121",
+      "https://github.com/sophoslabs/IoCs/blob/master/Nitrogen%202023-07.csv",
+      "It is advisable for users to periodically check their system performance and CPU usage.",
+      "Enterprises ought to take measures to prevent users from downloading pirated software from Warez/Torrent websites, as the presence of malware in \"Hack Tool\" found on sites like YouTube, Torrent sites, etc., is a concern."
+    ],
+    "what_to_do": "Nitrogen Malware Original Issue Date:- August 11, 2023 Virus Type:- Trojan Severity:- Medium It has been reported that a new malware called \"Nitrogen\" is targeting organizations for malicious activities. The attackers can infiltrate the compromised systems, carrying out unusual activities and extracting sensitive information such as passwords, banking details, and more. This is achieved by downloading malicious IT tools through deceptive ads on search engines.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Nitrogen_malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_supremebot_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "SupremeBot Malware",
+    "example_messages": [
+      "SupremeBot Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "MD5- 90647ec1bc00c6d35ba3fd7ee214cd20",
+      "SHA1- 0eb317fb165e87c23770ab6dff45e92dbd209b66",
+      "SHA256- e9cc8222d121a68b6802ff24a84754e117c55ae09d61d54b2bc96ef6fb267a54",
+      "MD5- 54d4bcd4e789a196022632e1f0922dd7",
+      "SHA1- 41ff5729fdeafec9879f12faffa3a62391e0a6f5",
+      "SHA256- 41d1024209b738785ace023c36b2165d95eab99b0d892327212b8a5f7c311610",
+      "hxxp://silentlegion[.]duckdns[.]org/gate/update[.]php"
+    ],
+    "what_to_do": "SupremeBot Malware Original Issue Date:- August 11, 2023 Virus Type:- Trojan Severity:- Medium It has been reported that a new trojanized Super Mario Bros game installer is being circulated, which contains various malicious components, including the SupremeBot mining client, XMR miner, and the Open-source Umbral stealer. The malware is capable of stealing sensitive information and Valuable data, financial losses, etc. Infection Mechanism Due to Mario's immense popularity as an entertaining game with millions of downloads, threat actors have taken advantage of this by distributing a modified version of the game's installer through various channels such as social media, phishing etc.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/SupremeBot_malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_gravityrat_android_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "GravityRat Android Malware",
+    "example_messages": [
+      "Instead, users download it from a website as a free messaging and sharing app in .apk extension.",
+      "and only these victims are given access to download malicious application."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "75.2.37[dot]224",
+      "104.21.12[dot]211",
+      "104.21.24[dot]109",
+      "2B448233E6C9C4594E385E799CEA9EE8C06923BD",
+      "25715A41250D4B9933E3599881CE020DE7FA6DC3",
+      "1E03CD512CD75DE896E034289CB2F5A529E4D344",
+      "jre.jdklibraries[dot]com"
+    ],
+    "what_to_do": "GravityRat Android Malware Original Issue Date:- August 11, 2023 Virus Type:- Android Malware Severity:- Medium It has been reported that a new variant of 'GravityRat’ Android malware is infecting Android OS for malicious operations. GravityRat targets victims through the BingeChat application, aiming to steal their data, including WhatsApp backup files and other sensitive information. Infection Mechanism : The GravityRat malware exfiltrates Whatsapp backups and receives commands to delete files.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/GravityRat_android_malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_shampoo_chromeloader_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Shampoo ChromeLoader Malware",
+    "example_messages": [
+      "Shampoo ChromeLoader Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "mysitesext[dot]com",
+      "worldtimesext[dot]com",
+      "cesprincipledecli[dot]com",
+      "dogsfanext[dot]com",
+      "HKCU:\\Software\\Mirage Utilities\\Licence Protector",
+      "%LOCALAPPDATA%\\chrome_display\\",
+      "%LOCALAPPDATA%\\chrome_test\\"
+    ],
+    "what_to_do": "Shampoo ChromeLoader malware Original Issue Date:- August 11, 2023 Virus Type:- Malware Loader Severity:- Medium It has been reported that a new variant of malicious ChromeLoader extension called “Shampoo” is infecting users via fake advertisement activity. ChromeLoader is a component of Google Chrome browser extension malware, capable of installing malicious extensions in Google Chrome for advertising purposes. This extension can collect sensitive personal information, including search queries, and has the ability to redirect searches and inject advertisements into the victim's browsing session.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Shampoo_ChromeLoader.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_qakbot_trojan",
+    "scam_type": "smishing_link",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "QakBot Trojan",
+    "example_messages": [
+      "As observed Qakbot is spreading through malicious emails that contain a link to download a file."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "75b2593da627472b1c990f244e24d4e971c939e7 (aficionado.tmp)",
+      "3a852c006085d0ce8a18063e17f525e950bb914c (cob_54.dll)",
+      "jesofidiwi[dot]com (Cobalt Strike C2)",
+      "dimingol[dot]com (Cobalt Strike-related domain used for DNS exfiltration)",
+      "tevokaxol[dot]com (Cobalt Strike C2)",
+      "108.177.235[.]29",
+      "144.202.42[.]216"
+    ],
+    "what_to_do": "Qakbot Trojan (alias QBot or Pinkslipbot) Original Issue Date:- August 03, 2023 Virus Type:- Trojan Severity:- Medium It has been reported that a new trojanized malware, named “Qakbot(a)” is being distributed across the globe. Qakbot is a malware that can steal sensitive information, and valuable data, and cause financial loss. Usually, Spam or phishing emails containing malicious URL links marked the initiation of QakBot infections.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/QakBot_Trojan.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_daam_android_botnet",
+    "scam_type": "digital_arrest",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Daam Android Botnet",
+    "example_messages": [
+      "Daam Android Botnet"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "49cfc64d9f0355fadc93679a86e92982",
+      "99580a341b486a2f8b177f20dc6f782e",
+      "ee6aec48e19191ba6efc4c65ff45a88e",
+      "67a3def7ad736df94c8c50947f785c0926142b69",
+      "bc826967c90acc08f1f70aa018f5d13f31521b92",
+      "f3b135555ae731b5499502f3b69724944ab367d5",
+      "37d4c5a0ea070fe0a1a2703914bf442b4285658b31d220f974adcf953b041e11"
+    ],
+    "what_to_do": "Daam Android Botnet Original Issue Date:- May 25, 2023 Virus Type:- Android Botnet Severity:- Medium It has been reported that an android malware, namely \"Daam\" is spreading, which is capable of stealing sensitive data, bypassing antivirus programs, and deploying ransomware on the targeted devices. The Daam malware is communicating with various Android APK files to infect the device. It is being distributed through third-party websites or applications downloaded from untrusted/unknown sources.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Daam_android_botnet.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_vipersoftx_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Vipersoftx Malware",
+    "example_messages": [
+      "Never click \"Agree\" or \"OK\" to close a window that you suspect might be spyware.",
+      "Instead, click the red \"x\" in the corner of the window or press Alt + F4 on your keyboard to close a window."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "A list of indicators can be found in thistext file",
+      "Download software and applications from official platforms and sources.",
+      "Refrain using pirated software, instead use genuine software only.",
+      "Download security solutions that can detect and block malicious components in seemingly legitimate and non-malicious software and applications.",
+      "Read all security warnings, license agreements, and privacy statements that are associated with any software that you download.",
+      "Never click \"Agree\" or \"OK\" to close a window that you suspect might be spyware. Instead, click the red \"x\" in the corner of the window or press Alt + F4 on your keyboard to close a window.",
+      "Be wary of popular \"free\" music and movie file-sharing programs, and make sure that you understand all the software packaged with those programs"
+    ],
+    "what_to_do": "ViperSoftX Malware Original Issue Date:- May 03, 2023 Virus Type:- Remote Access Trojan Severity:- High It has been reported that a new version of the ViperSoftX information-stealing malware is spreading, featuring sophisticated encryption methods and anti-analysis techniques such as byte remapping and web browser communication blocking. The latest version of this JavaScript-based Remote Access Trojan (RAT) has enhanced capabilities to target password managers and scans for the presence of KeePass 2 and 1Password password managers. The threat actors behind the malware deployed carriers in the form of fake software update for multimedia editors, video format converters, or cryptocurrency apps.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Vipersoftx.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_goldoson_android_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Goldoson Android Malware",
+    "example_messages": [
+      "Goldoson Android Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "bhuroid[d0t]com",
+      "enestcon[d0t]com",
+      "htyyed[d0t]com",
+      "discess[d0t]net",
+      "com.lottemembers.android",
+      "com.Monthly23.SwipeBrickBreaker",
+      "com.realbyteapps.moneymanagerfree"
+    ],
+    "what_to_do": "Goldoson Android Malware Original Issue Date:- April 25, 2023 Virus Type:- Android Banking Trojan Severity:- Low It has been reported that an android malware, dubbed “Goldoson” is affecting the official Google Play store's /Android’s applications through the malicious library, which belongs to a third party and utilized by developers in their application. The malware is capable of collecting sensitive information from multiple applications. Once it infects the device, it would begin to collect sensitive data about installed applications and the history of Wi-Fi & Bluetooth connected devices, GPS location, etc.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Goldoson.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_nexus_android_banking_trojan",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Nexus Android Banking Trojan",
+    "example_messages": [
+      "Nexus is a framework for Account Takeover attacks (ATO) through which Threat Actors attack target application."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "3dcd8e0cf7403ede8d56df9d53df26266176c3c9255a5979da08f5e8bb60ee3f : Nexus APK",
+      "1c99c658e30c672927dccbd8628107abf36d990d : Nexus APK",
+      "d87e04db4f4a36df263ecbfe8a8605bd : Nexus APK",
+      "hxxp://5.161.97[.]57:5000",
+      "Reduce the risk of downloading potentially harmful apps by limiting your download sources to official app stores,\n            such as your device’s manufacturer or operating system app store.",
+      "Prior to downloading / installing apps on android devices (even from Google Play Store):",
+      "Always review the app details, number of downloads, user reviews, comments and \"ADDITIONAL\n                    INFORMATION\" section."
+    ],
+    "what_to_do": "Nexus Android Banking Trojan Original Issue Date:- April 24, 2023 Virus Type:- Android Banking Trojan Severity:- Medium It has been reported that a malware campaign spreading Nexus Android banking trojan through Malware-as-a-Service (MaaS) platform is active. The campaign is active on underground/private forums where threat actor provides it on a subscription basis. Nexus is a framework for Account Takeover attacks (ATO) through which Threat Actors attack target application.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Nexus.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_formbook_infostealer_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "FormBook Infostealer Malware",
+    "example_messages": [
+      "FormBook Infostealer Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "15DB79699DCEF4EB5D731108AAD6F97B2DC0EC9C   :  MalVirt loader sample",
+      "655D0B6F6570B5E07834AA2DD8211845B4B59200   :  0onfirm .NET assembly",
+      "www.togsfortoads[.]com",
+      "www.popimart[.]xyz",
+      "https://www.sentinelone.com/labs/malvirt-net-virtualization-thrives-in-malvertising-attacks/",
+      "https://www.csk.gov.in/security-tools.html",
+      "Do not download and install applications from untrusted sources [offered via unknown websites/ links on unscrupulous messages]. Install applications downloaded from reputed application market only. Users must be aware while clicking on links during web search"
+    ],
+    "what_to_do": "Formbook infostealer Original Issue Date:- February 10, 2023 Virus Type:- infostealer Severity:- Medium It has been reported that a new malware named \"Formbook\" is currently targeting users with its malicious activity, enabling attackers to infiltrate compromised systems, engage in suspicious activities, and extract sensitive information. This nefarious activity is achieved through the downloading of malicious attachments from emails, with malicious spam being frequently disseminated via macro-enabled Office documents. Infection Mechanism: Formbook, in addition to its keylogging, screenshot theft, and credential theft capabilities, can also be used to stage additional malware, making it a versatile info-stealer malware.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/FormBook_infostealer.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_malvirt_malware_loader",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "\"MalVirt\" Malware Loader",
+    "example_messages": [
+      "\"MalVirt\" Malware Loader"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "15DB79699DCEF4EB5D731108AAD6F97B2DC0EC9C :  MalVirt loader sample",
+      "655D0B6F6570B5E07834AA2DD8211845B4B59200  :  0onfirm .NET assembly",
+      "BC47E15537FA7C32DFEFD23168D7E1741F8477ED  :  Process Explorer driver",
+      "51582417D24EA3FEEBF441B8047E61CBE1BA2BF4  :  Infostealer malware payload",
+      "www.togsfortoads[.]com    :  Contacted domain as part of C2 disguise traffic",
+      "www.popimart[.]xyz       :  Contacted domain as part of C2 disguise traffic",
+      "www.kajainterior[.]com     :  Contacted domain as part of C2 disguise traffic"
+    ],
+    "what_to_do": "\"MalVirt\" malware loader Original Issue Date:- February 08, 2023 Virus Type:- malware loader Severity:- High It is reported that a new malvertising campaign, distributing virtualized .NET malware loader that further deploys info-stealer malware, is currently active. The loader, dubbed as “MalVirt” and is distributing malware of “Formbook” info-stealing family. The campaign utilizes KoiVM virtualization technique to evade detection and analysis.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/MalVirt-loader.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_vidar_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Vidar Malware",
+    "example_messages": [
+      "Although, this may be bypassed by threat actor through updating download URL to another site.",
+      "Download the softwares from their official OEM website.",
+      "Limit users who can log in using Remote Desktop, set an account lockout policy."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "Follow safe practices when browsing the web. Ensure the web browsers are secured enough with appropriate content controls.",
+      "Users are advised to update their devices with patches as & when released by respective OEM.",
+      "If devices found infected, it is recommended to re-install the browsers.",
+      "Be aware of the risks of downloading and installing software from untrusted sources and clicking ads or links on suspicious websites.",
+      "Monitor system/ VM resources activity for any abnormal high usage.",
+      "Use a host-based firewall to only allow connections to administrative shares via server message block (SMB) from a limited set of administrator machines.",
+      "Download the softwares from their official OEM website."
+    ],
+    "what_to_do": "Vidar (info-stealing malware) Original Issue Date:- January 13, 2023 Virus Type:- info-stealing malware Severity:- Medium It is reported that a new malware campaign, spreading “Vidar” info-stealing malware through spoofing of AnyDesk site is active. More than 1300 domains, impersonating the genuine AnyDesk site, are involved in malicious campaign and redirect to Dropbox folder pushing Vidar and infect endpoints. Since AnyDesk is a popular remote desktop application, it is often abused by malicious actors.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Vidar_malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_sova_android_trojan",
+    "scam_type": "bank_otp_kyc",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "SOVA Android Trojan",
+    "example_messages": [
+      "SOVA Android Trojan"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "collect keystrokes",
+      "steal cookies",
+      "intercept multi-factor authentication (MFA) tokens",
+      "take screenshots and record video from a webcam",
+      "perform gestures like screen click, swipe etc. using android accessibility service",
+      "adding false overlays to a range of apps",
+      "mimic over 200 banking and payment applications"
+    ],
+    "what_to_do": "SOVA Android Trojan Original Issue Date:- September 15, 2022 Virus Type:- Android Banking Trojan Severity:- Critical It is reported that Indian banking customers are being targeted by a new type of mobile banking malware campaign using SOVA Android Trojan.The first version of this malware appeared for sale in underground markets in September 2021 with the ability to harvest usernames and passwords via keylogging, stealing cookies and adding false overlays to a range of apps.SOVA was earlier focusing on countries like the USA, Russia and Spain, but in July 2022 it added several other countries, including India, to its list of targets. The latest version of this malware hides itself within fake Android applications that show up with the logo of a few famous legitimate apps like Chrome, Amazon, NFT platform to deceive users into installing them. This malware captures the credentials when users log into their net banking apps and access bank accounts.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/SOVA.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_autolycos_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Autolycos Malware",
+    "example_messages": [
+      "Autolycos Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "Vlog Star Video Editor (com.vlog.star.video.editor) – 1 million downloads",
+      "Creative 3D Launcher (app.launcher.creative3d) – 1 million downloads",
+      "Wow Beauty Camera (com.wowbeauty.camera) – 100,000 downloads",
+      "Gif Emoji Keyboard (com.gif.emoji.keyboard) – 100,000 downloads",
+      "Freeglow Camera 1.0.0 (com.glow.camera.open) – 5,000 downloads",
+      "Coco Camera v1.1 (com.toomore.cool.camera) –1,000 downloads",
+      "'Funny Camera' by KellyTech –  500,000 downloads"
+    ],
+    "what_to_do": "Autolycos Malware Original Issue Date:- July 22, 2022 Virus Type:- Android Malware Severity:- High It has been reported that a recently surfaced Android malware named ‘Autolycos Malware’ was hosted on Google Play Store and reportedly downloaded over 3,000,000 times. The malware belonging to the category of fleeceware has been discovered to be present in at least eight Android apps that subscribe users to premium services without their knowledge or consent by accessing users’ SMS messages. These 8 infected applications have been removed from the Google Play Store, but those users who still have them installed on their devices are on the risk of being charged with costly subscription fees by the malware's activities.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Autolycos_Malware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_escobar_android_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Escobar Android Malware",
+    "example_messages": [
+      "Escobar Android Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "Package Name: com.escobar[.]pablo",
+      "a9d1561ed0d23a5473d68069337e2f8e7862f7b72b74251eb63ccc883ba9459f",
+      "Use genuine mobile security solutions that can protect devices against online threats, malicious applications, and even data loss.",
+      "Do not download and install applications from untrusted sources [offered via unknown websites/ links on unscrupulous messages]. Install applications downloaded from reputed application market only.",
+      "Install and maintain updated antivirus solution on android devices. Scan the suspected device with antivirus solutions to detect and clean infections.",
+      "Prior to downloading / installing apps on android devices (even from Google Play Store), Always review the app details, number of downloads, user reviews, comments and \"ADDITIONAL INFORMATION\" section.",
+      "Verify app permissions and grant only those permissions which have relevant context for the app's purpose."
+    ],
+    "what_to_do": "Escobar Android Malware Original Issue Date:- March 15, 2022 Virus Type:- Android Banking Malware Severity:- High It has been reported that a newly surfaced Android financial malware, named as ‘Escobar’ is spreading as disguised antivirus app. It allows attackers to steal sensitive banking information such as user credentials, personal information and even steals one-time codes from Google Authenticator. The app can also steal SMS text messages and media files, make phone calls, track location, use the phone's camera, uninstall apps, inject new URLs into web browsers and use the VNC remote-desktop function to completely control the infected mobile device(s).",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Escobar.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_diavol_ransomwarebotenago_malwarerevil_aka_sodinik",
+    "scam_type": "digital_arrest",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Diavol RansomwareBotenaGo malwareREvil aka Sodinikibi RansomwareCrackonosh Cryptocurrency MinerSiloscape MalwareSarbloh RansomwareAdrozek MalwareCyber Threat Signal 2021Mozi IoT BotnetEgregor RansomwareDokiProLock RansomwareAndroid: BlackRock MalwareCLOP RansomwareThiefQuest RansomwareConti RansomwareCredit card Skimmer targets Microsoft ASP.NET sitesWasted Locker RansomwareLucifer MalwareThanos RansomwareSnatch RansomwareTycoon RansomwareAndroid: EventBot Malware (Banking Trojan)VictoryGate BotnetMaze RansomwareKinsing Malware“STOP” RansomwareNecurs BotnetInformation stealing malware spreading via fraudulent emails purporting to originate from Income Tax DepartmentClipsa: Password StealerLinux: Lilu/Lilocked RansomwareAndroid Monokle MalwareAndroid Rootnik MalwareAndroid qyslyWin/Phorpiex WormAndroid: Agent SmithSodin RansomwareWannaLocker/Slocker Android RansomwareHiddenwasp Linux MalwareAndroid: HiddadAndroid: UupayRobinhood RansomwareMicrosoft Windows Remote Desktop Services Remote Code Execution Vulnerability (BlueKeep)ServHelper MalwarePowerratankba MalwareBokBot MalwareANDROIDOS_MOBSTSPY SpywareNRS Miner MalwareSamSam RansomwareStolen Pencil Malware CampaignDNSpionage MalwareTriton MalwareDark PulsarMagniber RansomwareKuik AdwareEmotet TrojanTrojan Panda Banker / Zeus PandaAndroid Malware MaikspyTrojan GluptebaSpartacus RansomwareThanatos RansomwareGandcrab RansomwareAndr/HiddnAd-AJAndroid Malware RedDropAndromeda BotnetAndroid Malware Gooligan/GhostPushAndroid Banker TrojanMirai BotnetDouble Locker Android RansomwareBad Rabbit RansomwareIOT Reaper/IOTRoop BotnetXafekopyLocky Ransomware spreading through massive spam campaignMamba RansomwareVariants of Petya Ransomware Spreading with EternalBlueTrickbot Banking TrojanIOT Botnets Targeting Vulnerable IP CamerasDvmap-Android MalwareFireball-Browser Hijacker/AdwareAndroid-Judy MalwareAdylkuzz-Cryptocurrency Mining MalwareWannacry/WannaCrypt RansomwareBrickerBot: IoT MalwareAvalanche BotnetNivdortLOCKY RansomwareDorkbotCorebotZeroAccessSality",
+    "example_messages": [
+      "Once opened (mounted) on the users system, the LNK file masqueraded as a Document entices the user to click/open it."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "DESKTOP-4LUGU5I-reuser_W10019041.C3F3799FE69249579857D2039BBBAB11",
+      "85ec7f5ec91adf7c104c7e116511ac5e7945bcf4a8fdecdcc581e97d8525c5ac (locker.exe)",
+      "Update software and operating systems with the latest patches. Outdated applications and operating systems are the targets of most attacks.",
+      "Scan all incoming and outgoing emails to detect threats and filter executable files from reaching end users.",
+      "Network segmentation and segregation into security zones - help protect sensitive information and critical services. Separate administrative network from business processes with physical controls and Virtual Local Area Networks.",
+      "Restrict users’ permissions to install and run software applications, and apply the principle of “least privilege” to all systems and services. Restricting these privileges may prevent malware from running or limit its capability to spread through a network.",
+      "Configure firewalls to block access to known malicious IP addresses."
+    ],
+    "what_to_do": "Diavol Ransomware Original Issue Date:- December 21, 2021 Virus Type:- Ransomware Severity:- Low It has been reported that a newly surfaced malware named ‘Diavol Ransomware’ compiled with Microsoft Visual C/C++ Compiler is encrypting files using user-mode Asynchronous Procedure Calls (APCs) with an asymmetric encryption algorithm. Recently, it has been reported that the Diavol malware has been spreading via email, which includes a link to OneDrive. The OneDrive link, directs the user to download a zipped file which included an ISO file containing a LNK file and a DLL.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Diavol_Ransomware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_botenago_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "BotenaGo malware",
+    "example_messages": [
+      "BotenaGo malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "SHA256- 0c395715bfeb8f89959be721cd2f614d2edb260614d5a21e90cc4c142f5d83ad",
+      "It is recommended to keep the software up to date with latest security updates.",
+      "Install the latest firmware and use a properly configured firewall.",
+      "Ensure minimal exposure to the Internet on Linux servers and IoT devices.",
+      "Monitor network traffic, outbound port scans, and unreasonable bandwidth usage.",
+      "It is advised to carry out timely patching of internet-connected devices to avoid becoming a victim of BotenaGo or any other IoT botnets.",
+      "Restrict Web Management Interface access of IoT devices to authorized users only and change default username/passwords"
+    ],
+    "what_to_do": "BotenaGo malware Original Issue Date:- November 18, 2021 Virus Type:- Backdoor/Malware botnet Severity:- High It has been reported that a newly surfaced malware written in Google’s open-source programming language Golang, is targeting Linux-embedded routers and Internet of Things (IoT) devices through botnets. The malware is utilizing 33 different exploits to compromise routers and IoT devices. It works by creating a backdoor to the device and then waits to either receive a target to attack from a remote operator through port 19412 or from another related module running on the same machine.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/BotenaGo.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_crackonosh_cryptocurrency_miner",
+    "scam_type": "multi_call_escalation",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Crackonosh Cryptocurrency Miner",
+    "example_messages": [
+      "Crackonosh Cryptocurrency Miner"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "C:\\Windows\\System32\\7B296FC0-376B-497d-B013-58F4D9633A22-5P-1.B5841A4C-A289-439d-8115-50AB69CD450",
+      "C:\\Windows\\System32\\7B296FC0-376B-497d-B013-58F4D9633A22-5P-1.B5841A4C-A289-439d-8115-50AB69CD450B",
+      "C:\\Windows\\System32\\StartupCheckLibrarry.dll",
+      "UserAccountControlSettingsDevice.dat",
+      "C:\\Windows\\System32\\diskdriver.exe",
+      "C:\\Windows\\System32\\install.vbs",
+      "C:\\Windows\\System32\\maintenance.vbs"
+    ],
+    "what_to_do": "“Crackonosh” Malware Original Issue Date:- July 01, 2021 Virus Type:- cryptocurrency miner Severity:- High It is reported that a new strain of cryptocurrency miner dubbed as Crackonosh is spreading through abusing windows Safe mode in its attack and escape detection. The malware is distributed through illegal and cracked copies of popular software. Crackonosh has been circulating since at least June 2018.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Crackonosh.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_siloscape_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Siloscape Malware",
+    "example_messages": [
+      "Siloscape Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "Uses Windows container escape techniques to escape the container and gain code execution on the underlying node.",
+      "Attempts to abuse the node's credentials to spread in the cluster.",
+      "Siloscape uses the Tor proxy and an “.onion” domain to anonymously connect to its command and control (C2) server.",
+      "5B7A23676EE1953247A0364AC431B193E32C952CF17B205D36F800C270753FCB",
+      "81046F943D26501561612A629D8BE95AF254BC161011BA8A62D25C34C16D6D2A",
+      "010859BA20684AEABA986928A28E1AF219BAEBBF51B273FF47CB382987373DB7",
+      "https://unit42.paloaltonetworks.com/siloscape/"
+    ],
+    "what_to_do": "“Siloscape” Malware Original Issue Date:- June 14, 2021 Virus Type:- Malware targeting windows containers Severity:- Medium It has been reported that a new category of malware is targeting misconfigured Kubernetes clusters through Windows containers to compromise cloud environments. The malware variant gains initial access by exploiting vulnerabilities in common cloud applications or a vulnerable web page or database and then utilizes windows container escape techniques, executes code on underlying node and then spreads in poorly configured Kubernetes clusters to open a backdoor in order to run/deploy malicious containers. Once cluster is compromised, the attacker might be able to steal critical information such as usernames and passwords, an organization’s confidential and internal files or even entire databases hosted in the cluster.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/Siloscape.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_adrozek_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Adrozek Malware",
+    "example_messages": [
+      "Infection Mechanism: The malware is distributed via classic drive-by download schemes."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "Disabling browser updates.",
+      "Disabling file integrity checks.",
+      "Disabling the Safe Browsing feature.",
+      "Registering and activating the extension they added in a previous step.",
+      "Allowing their malicious extension to run in incognito mode.",
+      "Allowing the extension to run without obtaining the appropriate permissions.",
+      "Hiding the extension from the toolbar."
+    ],
+    "what_to_do": "Adrozek Malware Original Issue Date:- December 11, 2020 Virus Type:- Browser modifiers Severity:- Medium It has been reported that a new malware named Adrozek is affecting user’s device globally. It infects the device and then proceeds to modify web browsers and their settings in order to inject ads into search results pages. Infection Mechanism: The malware is distributed via classic drive-by download schemes.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/AdrozekMalware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_android_blackrock_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Android: BlackRock Malware",
+    "example_messages": [
+      "Android: BlackRock Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "ayxzygxgagiqhdnjnfduerzbeh.hme.egybgkeziplb",
+      "cmbmpqod.bfrtuduawoyhr.mlmrncmjbdecuc",
+      "fpjwhqsl.dzpycoeasyhs.cwnporwocambskrxcxiug",
+      "onpekpikylb.bcgdhxgzwd.dzlecjglpigjuc",
+      "ezmjhdiumgiyhfjdp.bjucshsqxhkigwyqqma.gqncehdcknrtcekingi",
+      "51f9c37c3eec0b6f8325aa1c8fe64a0615ab920584042df557426473b1270b40",
+      "6fa4baef8a811f429cee4b383d7a4776b7b363b62551c8d8e0f93bad33adefbd"
+    ],
+    "what_to_do": "Android: BlackRock Malware Original Issue Date:- July 27, 2020 Virus Type:- Android Trojan Severity:- Medium It is reported that a new Android malware strain, dubbed “BlackRock”, equipped with data stealing capabilities, is attacking a wide range of android applications. The malware is developed using the source code of Xerxes banking malware, which itself is a variant of LokiBot android Trojan. The noteworthy feature of this malware is that the target list of applications of this malware which contains 337 applications includes not only banking and financial applications but also non-financial well known commonly used brand name apps on android device with a focus on social, communication, networking and dating platforms.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/BlackRockAndroidMalware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_lucifer_malware",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Lucifer Malware",
+    "example_messages": [
+      "Lucifer Malware"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "180[.]126[.]161[.]27",
+      "210[.]112[.]41[.]71",
+      "122[.]112[.]179[.]189:15888 (version 1)",
+      "C:\\\\ProgramData\\\\spread.txt",
+      "C:\\\\ProgramData\\\\index.html",
+      "C:\\\\ProgramData\\\\spreadXfghij.exe",
+      "C:\\\\ProgramData\\\\SMB.exe"
+    ],
+    "what_to_do": "Lucifer Malware Original Issue Date:- July 07, 2020 Virus Type:- crypto-jacking Malware Severity:- Medium It has been reported that a new self-propagating malware, dubbed ”Lucifer”, targeting Windows systems with crypto-jacking and DDoS attacks is spreading. The latest variant of this malware was discovered recently related to exploitation of vulnerability in Laravel Framework (CVE-2019-9081) that can be leveraged for remote code execution (RCE) attacks. Reports indicate that this malware utilizes an exhaustive list of unpatched critical vulnerabilities.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/LuciferMalware.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "csk_android_eventbot_malware_banking_trojan",
+    "scam_type": "corporate_malware_bec",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Android: EventBot Malware (Banking Trojan)",
+    "example_messages": [
+      "Android: EventBot Malware (Banking Trojan)"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Security Tools",
+      "Security Best Practices",
+      "Announcements",
+      "185.158.249[.]141",
+      "185.158.248[.]102",
+      "50.63.202[.]81",
+      "185.158.248[.]102",
+      "31.214.157[.]6",
+      "208.91.197[.]91",
+      "http://themoil[.]site/gate_cb8a5aea1ab302f0_c"
+    ],
+    "what_to_do": "Android: EventBot Malware (Banking Trojan) Original Issue Date:- May 08, 2020 Virus Type:- Banking Trojan Severity:- Low It has been observed that a new android mobile malware named EventBot is spreading. It is a Mobile banking trojan and infostealer that abuses Android’s in-built accessibility features to steal user data from financial applications, read user SMS messages and intercepts SMS messages allowing malware to bypass two-factor authentication. EventBot targets over 200 different financial applications including banking applications, money transfer services and cryptocurrency wallets/ financial applications based in US and Europe region at the moment but the some services may affect Indian users as well.",
+    "source": {
+      "name": "CSK / CERT-In",
+      "url": "https://www.csk.gov.in/alerts/EventBot.html",
+      "date": "00-11-4949"
+    }
+  },
+  {
+    "id": "ss_beware_of_investment_scam",
+    "scam_type": "investment_fraud",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Beware of Investment Scam",
+    "example_messages": [
+      "Categories of fraud communication reportable via Chakshu: impersonation calls, KYC/payment fraud, job/lottery offers.",
+      "KYC and Payment related to Bank / Electricity / Gas / Insurance etc.",
+      "Any Other Suspected Fraud ."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Caller claims to be from Police / CBI / Customs / UIDAI / RBI",
+      "Asks for OTP, Aadhaar details, or bank account information",
+      "Offers online job or prize that requires advance payment",
+      "Undeliverable parcel requiring customs duty payment",
+      "Unsolicited loan offer via SMS or WhatsApp"
+    ],
+    "what_to_do": "Visit Sanchar Saathi portal (sancharsaathi.gov.in), use Chakshu facility to report suspected fraud communication. Call 1930 for financial fraud.",
+    "source": {
+      "name": "Sanchar Saathi / DoT",
+      "url": "https://sancharsaathi.gov.in/SancharSaathiDocuments/KeepYourselfAwareDocuments/InvestmentScam.pdf",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "ss_beware_of_fake_job_calls",
+    "scam_type": "fake_job_offer_apk",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Beware of Fake Job Calls",
+    "example_messages": [
+      "Categories of fraud communication reportable via Chakshu: impersonation calls, KYC/payment fraud, job/lottery offers.",
+      "KYC and Payment related to Bank / Electricity / Gas / Insurance etc.",
+      "Any Other Suspected Fraud ."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Caller claims to be from Police / CBI / Customs / UIDAI / RBI",
+      "Asks for OTP, Aadhaar details, or bank account information",
+      "Offers online job or prize that requires advance payment",
+      "Undeliverable parcel requiring customs duty payment",
+      "Unsolicited loan offer via SMS or WhatsApp"
+    ],
+    "what_to_do": "Visit Sanchar Saathi portal (sancharsaathi.gov.in), use Chakshu facility to report suspected fraud communication. Call 1930 for financial fraud.",
+    "source": {
+      "name": "Sanchar Saathi / DoT",
+      "url": "https://sancharsaathi.gov.in/SancharSaathiDocuments/KeepYourselfAwareDocuments/FakeJobCalls.pdf",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "ss_beware_of_loan_scam",
+    "scam_type": "lottery_prize_fraud",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Beware of Loan Scam",
+    "example_messages": [
+      "Categories of fraud communication reportable via Chakshu: impersonation calls, KYC/payment fraud, job/lottery offers.",
+      "KYC and Payment related to Bank / Electricity / Gas / Insurance etc.",
+      "Any Other Suspected Fraud ."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Caller claims to be from Police / CBI / Customs / UIDAI / RBI",
+      "Asks for OTP, Aadhaar details, or bank account information",
+      "Offers online job or prize that requires advance payment",
+      "Undeliverable parcel requiring customs duty payment",
+      "Unsolicited loan offer via SMS or WhatsApp"
+    ],
+    "what_to_do": "Visit Sanchar Saathi portal (sancharsaathi.gov.in), use Chakshu facility to report suspected fraud communication. Call 1930 for financial fraud.",
+    "source": {
+      "name": "Sanchar Saathi / DoT",
+      "url": "https://sancharsaathi.gov.in/SancharSaathiDocuments/KeepYourselfAwareDocuments/LoanScam.pdf",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "ss_beware_of_fake_traffic_challan",
+    "scam_type": "digital_arrest",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Beware of Fake Traffic Challan",
+    "example_messages": [
+      "Categories of fraud communication reportable via Chakshu: impersonation calls, KYC/payment fraud, job/lottery offers.",
+      "KYC and Payment related to Bank / Electricity / Gas / Insurance etc.",
+      "Any Other Suspected Fraud ."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Caller claims to be from Police / CBI / Customs / UIDAI / RBI",
+      "Asks for OTP, Aadhaar details, or bank account information",
+      "Offers online job or prize that requires advance payment",
+      "Undeliverable parcel requiring customs duty payment",
+      "Unsolicited loan offer via SMS or WhatsApp"
+    ],
+    "what_to_do": "Visit Sanchar Saathi portal (sancharsaathi.gov.in), use Chakshu facility to report suspected fraud communication. Call 1930 for financial fraud.",
+    "source": {
+      "name": "Sanchar Saathi / DoT",
+      "url": "https://sancharsaathi.gov.in/SancharSaathiDocuments/KeepYourselfAwareDocuments/FakeTrafficChallan.pdf",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "ss_beware_of_sms_bombarding_unsolicited_commercial_co",
+    "scam_type": "multi_call_escalation",
+    "channel": "unknown",
+    "languages": [
+      "en"
+    ],
+    "title": "Beware of SMS Bombarding / Unsolicited Commercial Communication",
+    "example_messages": [
+      "Categories of fraud communication reportable via Chakshu: impersonation calls, KYC/payment fraud, job/lottery offers.",
+      "KYC and Payment related to Bank / Electricity / Gas / Insurance etc.",
+      "Any Other Suspected Fraud ."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "Caller claims to be from Police / CBI / Customs / UIDAI / RBI",
+      "Asks for OTP, Aadhaar details, or bank account information",
+      "Offers online job or prize that requires advance payment",
+      "Undeliverable parcel requiring customs duty payment",
+      "Unsolicited loan offer via SMS or WhatsApp"
+    ],
+    "what_to_do": "Visit Sanchar Saathi portal (sancharsaathi.gov.in), use Chakshu facility to report suspected fraud communication. Call 1930 for financial fraud.",
+    "source": {
+      "name": "Sanchar Saathi / DoT",
+      "url": "https://sancharsaathi.gov.in/SancharSaathiDocuments/KeepYourselfAwareDocuments/SMSBombarding.pdf",
+      "date": "2024"
+    }
+  },
+  {
+    "id": "pib_digital_arrest_001",
+    "scam_type": "digital_arrest",
+    "channel": "video_call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Beware of 'Digital Arrest' Fraud Calls",
+    "example_messages": [
+      "Main CBI officer hoon. Aapka Aadhaar money laundering case mein linked hai. Aap digital arrest mein hain.",
+      "This is CBI. You are under digital arrest for drug trafficking. Do not disconnect this call.",
+      "Your Aadhaar is connected to a money laundering case. Stay on video call or you will be arrested.",
+      "ED office se bol raha hoon. Aapke naam pe arrest warrant hai. Abhi video call pe rahiye."
+    ],
+    "call_script": "Caller claims to be CBI, ED, Customs, or Police and says victim is linked to money laundering or drug trafficking. Victim is told they are under 'digital arrest' and must remain on video call for hours or days. Caller creates fear of immediate arrest and eventually demands money transfer.",
+    "red_flags": [
+      "Caller claims to be CBI, ED, NCB, or Police officer",
+      "Says your Aadhaar or phone number is linked to a crime",
+      "Demands you stay on video call — 'digital arrest'",
+      "Asks for money transfer to 'clear your name'",
+      "Shows fake arrest warrants or court orders on screen",
+      "Creates extreme urgency and fear"
+    ],
+    "what_to_do": "Hang up immediately. No government agency conducts arrests via video call. Real agencies send written notices, not video calls. Do not pay anything. Call your family. Report on 1930 or cybercrime.gov.in.",
+    "if_already_opened": "If you already paid, immediately call your bank to reverse the transfer, then report on helpline 1930.",
+    "post_open_keywords": [
+      "digital arrest",
+      "cbi call",
+      "ed officer",
+      "stay on call",
+      "warrant"
+    ],
+    "severity": "critical",
+    "source": {
+      "name": "PIB MHA Advisory — Digital Arrest Scams",
+      "url": "https://pib.gov.in/allRel.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "pib_investment_fraud_001",
+    "scam_type": "investment_fraud",
+    "channel": "whatsapp",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake Stock Trading Apps and WhatsApp Investment Groups",
+    "example_messages": [
+      "Join our exclusive investment group. Our SEBI advisor gives guaranteed 40% monthly returns.",
+      "Sir aapko Rs 10,000 invest karne par guaranteed Rs 14,000 return milega 30 din mein.",
+      "Our trading app gave 38% profit last month. Download link sent — start with Rs 5,000.",
+      "You have earned Rs 85,000 profit. To withdraw, pay 18% GST of Rs 15,300 first."
+    ],
+    "call_script": "Victim is added to a WhatsApp or Telegram group where members post screenshots of large profits. A 'SEBI advisor' recommends a trading app not on official stores. Small withdrawals succeed to build trust. Victim deposits large amounts. App then freezes or demands a tax payment before withdrawal. Funds disappear.",
+    "red_flags": [
+      "Unsolicited WhatsApp or Telegram add to investment group",
+      "Promises guaranteed returns of 30–40 percent monthly",
+      "Asks to install a trading app not on Play Store or App Store",
+      "Initial small withdrawal succeeds to build trust",
+      "Suddenly requires tax payment to withdraw profits",
+      "Advisor claims SEBI registration but cannot be verified at sebi.gov.in"
+    ],
+    "what_to_do": "Never invest via WhatsApp or Telegram tips. Verify any advisor's SEBI registration at sebi.gov.in. Legitimate investments never guarantee fixed returns. Report to 1930 or cybercrime.gov.in.",
+    "if_already_opened": "Stop all further payments. Screenshot the app and chats. Report on 1930 and file at cybercrime.gov.in with transaction IDs.",
+    "post_open_keywords": [
+      "investment group",
+      "sebi advisor",
+      "guaranteed returns",
+      "trading app",
+      "withdraw profit",
+      "tax payment"
+    ],
+    "severity": "high",
+    "source": {
+      "name": "PIB SEBI Advisory — Fake Trading Apps",
+      "url": "https://pib.gov.in/allRel.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "pib_courier_scam_001",
+    "scam_type": "digital_arrest",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake FedEx Courier Scam with Drugs Planted in Package",
+    "example_messages": [
+      "This is FedEx. A parcel registered to your Aadhaar contains illegal drugs. Please stay on the line.",
+      "Sir, aapke naam ka courier Mumbai customs mein pakda gaya. Usme drugs hain.",
+      "This is NCB. Your package contained cocaine. You must pay settlement to avoid arrest.",
+      "Your parcel was flagged at Delhi airport. Drugs and fake currency found. Officer calling shortly."
+    ],
+    "call_script": "Caller poses as FedEx or Blue Dart agent, says a package in victim's name was seized containing drugs, fake currency, or SIM cards. Call is transferred to a 'CBI' or 'NCB' officer who shows a fake FIR and demands immediate settlement money. Victim is told to keep the matter secret from family.",
+    "red_flags": [
+      "Call from courier company about a package you did not send",
+      "Package allegedly contains drugs, fake currency, or SIM cards",
+      "Call transferred to fake CBI or NCB officer",
+      "Demands immediate money transfer to avoid arrest",
+      "Asks you to keep the call secret from family"
+    ],
+    "what_to_do": "Hang up. Legitimate courier companies and government agencies never resolve criminal cases over a phone call. No phone payment can settle a drug case. Report on 1930 immediately.",
+    "if_already_opened": "Call your bank immediately to block the transfer. Report at 1930 and cybercrime.gov.in. Save all call recordings as evidence.",
+    "post_open_keywords": [
+      "fedex",
+      "courier",
+      "package drugs",
+      "ncb officer",
+      "parcel seized",
+      "customs call"
+    ],
+    "severity": "critical",
+    "source": {
+      "name": "PIB MHA I4C Advisory — Courier Scam",
+      "url": "https://cybercrime.gov.in",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "pib_sextortion_001",
+    "scam_type": "multi_call_escalation",
+    "channel": "video_call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Sextortion via WhatsApp Video Call",
+    "example_messages": [
+      "I have your video. Pay Rs 50,000 or I will send it to your family and office.",
+      "Aapka video mere paas hai. Agar paise nahi diye toh contacts ko bhej dunga.",
+      "You accepted a WhatsApp call. The recording will go viral unless you pay now.",
+      "Your contacts will receive this video in 2 hours unless Rs 25,000 is transferred."
+    ],
+    "call_script": "Fraudster calls victim on WhatsApp video. A woman briefly appears on screen. Call ends and victim immediately receives a message saying the video was recorded and will be shared with contacts and employer unless payment is made via UPI or crypto. Paying does not stop the blackmail — demands escalate further.",
+    "red_flags": [
+      "Unexpected video call from an unknown number",
+      "Woman appears briefly on screen during the call",
+      "Immediately followed by blackmail threat and payment demand",
+      "Demands urgent payment via UPI, crypto, or gift cards",
+      "Threatens to share video with family and employer"
+    ],
+    "what_to_do": "Do not pay. Paying emboldens the scammer and demands will increase. Block the number. Take screenshots of threats. Report at cybercrime.gov.in with evidence and call 1930.",
+    "if_already_opened": "Stop all payments immediately — paying will not end the blackmail. Block the number, collect evidence, and report at cybercrime.gov.in. Victims are not at fault.",
+    "post_open_keywords": [
+      "video call recorded",
+      "whatsapp video",
+      "sextortion",
+      "pay or share",
+      "blackmail",
+      "send to contacts"
+    ],
+    "severity": "high",
+    "source": {
+      "name": "PIB MHA Advisory — Sextortion Scams",
+      "url": "https://pib.gov.in/allRel.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "pib_fake_customs_001",
+    "scam_type": "digital_arrest",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake Customs Officer — Package Seized at Airport",
+    "example_messages": [
+      "This is Customs Department. A package in your name at Delhi Airport contains banned items.",
+      "Sir, aapke naam ka parcel airport customs mein roka gaya hai. Duty bharne par hi milega.",
+      "Your shipment has been seized. Pay Rs 15,000 customs clearance fee to avoid arrest.",
+      "Customs officer here. Illegal goods found in your parcel. Pay now or face legal action."
+    ],
+    "call_script": "Caller poses as an airport Customs officer and says a package in the victim's name was seized for containing banned items. Victim is asked to pay a clearance fee by phone to release the shipment. Amount keeps increasing. If victim resists, caller threatens public arrest and media exposure.",
+    "red_flags": [
+      "Call claiming your package was seized at airport customs",
+      "Asks for customs duty payment over the phone to release package",
+      "Threatens arrest if payment is not made immediately",
+      "May show fake customs officer ID during a video call",
+      "Amount increases each time the victim makes a payment"
+    ],
+    "what_to_do": "Real customs issues arrive via official written notices, never phone calls. Never pay customs duty over a phone call. Visit the customs office in person for any genuine shipment query. Report to 1930.",
+    "if_already_opened": "Contact your bank to block the transfer. Report at 1930 and visit a police station to file an FIR with the caller number and UPI ID used.",
+    "post_open_keywords": [
+      "customs",
+      "airport package",
+      "seized parcel",
+      "customs duty",
+      "clearance fee"
+    ],
+    "severity": "high",
+    "source": {
+      "name": "PIB Customs MHA Advisory — Fake Customs Calls",
+      "url": "https://pib.gov.in/allRel.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "i4c_monthly_underground_banking_report_may_2026",
+    "scam_type": "smishing_link",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Monthly Underground Banking Report May – 2026",
+    "example_messages": [
+      "Dear customer, your bank account has been compromised.",
+      "We noticed suspicious activity on your card, please update your details.",
+      "We have a special offer for you on loan repayments, click here."
+    ],
+    "call_script": "Victim receives a call from a 'bank representative,' claiming their account has been compromised, and then the scam unfolds.",
+    "red_flags": [
+      "Unsolicited calls asking for sensitive information.",
+      "Suspicious links or attachments from unknown sources.",
+      "Overpayment or advance fee scams offered.",
+      "Request for personal or financial information via phone."
+    ],
+    "what_to_do": "Do not respond to unsolicited calls or messages and report suspicious activities to authorities.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "May 13 2026"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_misuse_of_matrimonial_platforms_for_investment_cry",
+    "scam_type": "investment_fraud",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Misuse of Matrimonial Platforms for Investment/Crypto Frauds.",
+    "example_messages": [
+      "I feel our love is meant to be, let's start a business together",
+      "I need 50k to complete a deal, it will make our future secure",
+      "I love you, can you send me some gift so that I celebrate my birthday"
+    ],
+    "call_script": "The scam starts with a romantic profile created on a matrimonial platform and ends with a demand for investment or financial information",
+    "red_flags": [
+      "Partner demands immediate investment for a lucrative business opportunity",
+      "They claim to be in love despite very short interactions or time apart",
+      "Request access to personal financial information or sensitive details",
+      "Unusual requests for money or gifts under false pretenses",
+      "They use romantic language to gain your trust and then ask for investments",
+      "Claim to have a lucrative business deal but requires an initial payment"
+    ],
+    "what_to_do": [
+      "Do not share personal financial information or sensitive details with any stranger online",
+      "Be cautious when interacting with someone you met on a matrimonial platform and have not met in person"
+    ],
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "October 31 2025"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_whatsapp_web_account_renting_scam_using_facebook_i",
+    "scam_type": "multi_call_escalation",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "WhatsApp Web Account Renting Scam – using Facebook & Instagram.",
+    "example_messages": [
+      "WhatsApp Web Account Renting Scam – using Facebook & Instagram."
+    ],
+    "call_script": "",
+    "red_flags": [
+      "See official I4C advisory for details"
+    ],
+    "what_to_do": "WhatsApp Web Account Renting Scam – using Facebook & Instagram.. The National Cybercrime Threat Analytics Unit of I4C has identified an emerging transnational crime trend where certain Facebook & Instagram accounts....",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "October 15 2025"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_advisory_on_rise_in_fake_captcha_filling_jobs_base",
+    "scam_type": "fake_job_offer_apk",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Advisory on 'Rise in Fake Captcha Filling Jobs' based cybercrime",
+    "example_messages": [
+      "Earn up to ₹25,000 by just solving CAPTCHAs from home",
+      "Get ₹18,000 per month by filling captchas",
+      "Solve captcha and get paid in your bank account"
+    ],
+    "call_script": "Victims are lured through fake job postings and convinced to pay for CAPTCHA-filling training.",
+    "red_flags": [
+      "Received unsolicited job offers with no background check",
+      "Promises of high earnings with minimal effort required",
+      "Unfamiliar URLs or suspicious payment methods used",
+      "Job involves typing CAPTCHAs or answering simple questions"
+    ],
+    "what_to_do": "Do not provide any personal or financial information and do not make any payments. Instead, report the incident to the local police.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "April 08 2025"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_advisory_on_digital_arrest_based_cybercrime_in_ind",
+    "scam_type": "digital_arrest",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Advisory on 'Digital Arrest' based cybercrime in India",
+    "example_messages": [
+      "We have video evidence of you committing a crime go to this link to pay fine.",
+      "Aapke digital arrest k liye taiyaar hain (Your digital arrest is ready)",
+      "You will be physically arrested if you don't pay this fine immediately"
+    ],
+    "call_script": "The scammer threatens the victim with digital arrest, asks for money or information, and may escalate to physical threats if payment is not made.",
+    "red_flags": [
+      "You are threatened with digital arrest and fine on fake charges",
+      "Your online identity is being tracked and misused",
+      "You are asked to pay a fine or risk physical arrest"
+    ],
+    "what_to_do": "Immediately contact local police to report the fraud and block the offender's access to your digital account.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "March 06 2025"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_advisory_regarding_fake_job_racket_targeting_india",
+    "scam_type": "fake_job_offer_apk",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Advisory regarding fake job racket targeting Indian youth",
+    "example_messages": [
+      "You have been selected for the job of a data entry operator.",
+      "Aapko job ki announcement mil gayi hai.",
+      "You have been shortlisted for the position of an executive in our company."
+    ],
+    "call_script": "The scammer contacts the victim via email or phone with a fake job offer, collects personal and financial information, and eventually asks for transfer of money.",
+    "red_flags": [
+      "Fake email IDs and phone numbers used",
+      "Urgency and time pressure to apply online",
+      "Asking for personal or financial info",
+      "Job promises with low salaries or skills mismatch",
+      "Unusual communication via WhatsApp or SMS",
+      "Suspicious links or attachments in messages"
+    ],
+    "what_to_do": "Report to cybercrime authorities and do not respond to the emails or messages. Be cautious of job offers that seem too good to be true.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "June 27 2024"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_fraudsters_using_heat_signatures_of_fingertips_on",
+    "scam_type": "digital_arrest",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fraudsters using heat signatures of fingertips on keypads to crack passwords/PINs.",
+    "example_messages": [
+      "Your PIN was compromised, please change it right away",
+      "A suspicious transaction was detected, your PIN is changed",
+      "Enter your PIN for security verification"
+    ],
+    "call_script": "The scam involves a fraudster using a heat signature device to detect and record keypad entries, then using that information to gain unauthorized access.",
+    "red_flags": [
+      "Unusually hot or sweaty keypad area",
+      "Fingerprints on keypad without obvious use",
+      "Unattended proximity to sensitive equipment",
+      "Unusual noise or whirring near keypad",
+      "Unusual keypad or screen flickering"
+    ],
+    "what_to_do": "Avoid using the same PIN or password for multiple accounts and change them regularly. Contact bank and report the incident immediately.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "October 17 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_fraudsters_sending_fake_job_offer_smss_to_perpetra",
+    "scam_type": "fake_job_offer_apk",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fraudsters sending Fake Job Offer SMSs to perpetrate Cybercrime.",
+    "example_messages": [
+      "URGENT! Get Job Offer of ₹20,000/Month. Contact - 9876543210",
+      "Job Offer of ₹30,000/Month. Apply within 24 hours. Call - 1111111111",
+      "Hurry! Get a Job of ₹50,000/Month. No experience required. Dial - 2222222222"
+    ],
+    "call_script": "The fraudster sends a suspicious job offer SMS, extracts personal details, and asks for a payment in exchange for the job.",
+    "red_flags": [
+      "SMS with offer of a job without prior interview or application",
+      "Sender claims urgency and asks for personal details immediately",
+      "Request for payment in exchange for a job offer"
+    ],
+    "what_to_do": "Do not share any personal details or financial information.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "August 29 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_cybercriminals_using_malicious_browser_extensions",
+    "scam_type": "corporate_malware_bec",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Cybercriminals using malicious browser extensions to perpetrate Cybercrime.",
+    "example_messages": [
+      "Your account has been compromised. Please reinstall browser immediately.",
+      "You have been selected for an exclusive offer. Download and install this extension.",
+      "To fix browser issues, please download and install this helper extension."
+    ],
+    "call_script": "Cybercriminals trick victims into installing a malicious browser extension, which then captures sensitive information or locks the device until a ransom is paid.",
+    "red_flags": [
+      "Unwanted software is installed on the computer without consent",
+      "Browser settings are changed without user knowledge or permission",
+      "Unknown or suspicious icons appear on the browser toolbar",
+      "Computer performance slowdown or frequent freezing",
+      "Unusual pop-ups or advertisements appear on websites"
+    ],
+    "what_to_do": "Users should regularly update their browsers and remove any unnecessary extensions",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "August 30 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_cybercriminals_using_fake_social_media_verificatio",
+    "scam_type": "smishing_link",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Cybercriminals using fake Social Media Verification Badge to steal credentials.",
+    "example_messages": [
+      "We have detected an issue with your verification and require you to verify your credentials by sharing your account information.",
+      "Kya aapka id banva hai? Verify karein aur apne accout details dein.",
+      "Your account has been flagged for verification. Kindly provide your credentials to proceed."
+    ],
+    "call_script": "Victims receive a fake Social Media Verification Badge on their account, receive malicious messages about verifying sensitive information, and end up sharing credentials with the scammers.",
+    "red_flags": [
+      "Fake Social Media Verification Badge appears on your account",
+      "Spam messages asking to verify your account details",
+      "Unusual login activity or login attempts from unknown locations",
+      "Friend requests from unfamiliar contacts",
+      "Unusual links or attachments in messages"
+    ],
+    "what_to_do": "Do not click on any suspicious links, do not share your credentials, and report such activities to your social media platform's support.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "August 30 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_cybercriminals_using_caller_id_spoofing_to_perpetr",
+    "scam_type": "digital_arrest",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Cybercriminals using Caller ID Spoofing to perpetrate Cybercrime.",
+    "example_messages": [
+      "Hello, this is from RBI, press one to avoid account freeze.",
+      "Hello, your Amazon package is stuck, provide your card details.",
+      "Aapke aakaanksha ka khata khatam ho gya hai, press 1."
+    ],
+    "call_script": "Cybercriminals use spoofed caller IDs, claim to represent a trusted agency, and demand immediate action.",
+    "red_flags": [
+      "Unknown caller ID display number",
+      "Number starts with local prefix but unknown number",
+      "Caller claims to be from a government agency",
+      "Press one for assistance claim",
+      "Immediate action required warning"
+    ],
+    "what_to_do": "Do not engage with the caller. Hang up and block the number.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "August 31 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_fraudsters_using_army_personnel_details_to_perpetr",
+    "scam_type": "digital_arrest",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fraudsters using Army personnel details to perpetrate financial cyber frauds",
+    "example_messages": [
+      "You have won a prize. Please deposit money in our account.",
+      "Your Army officer is in trouble. Please send money now.",
+      "You need to update your PAN card details online."
+    ],
+    "call_script": "The scam starts with an email or phone call, and the victim is tricked into transferring money to a fake account.",
+    "red_flags": [
+      "Unfamiliar email requests for confidential information",
+      "Urgency to transfer funds to a fake account",
+      "Impersonation of Army personnel or their families",
+      "Requests for personal financial information",
+      "Unverified links or attachments in emails",
+      "Suspicious or unfamiliar phone calls"
+    ],
+    "what_to_do": "Immediately block the suspicious email or call. Do not share any personal or financial information.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "July 06 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_fake_smss_related_to_unpaid_electricity_bill_to_du",
+    "scam_type": "smishing_link",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Fake SMSs related to unpaid Electricity Bill to dupe citizens",
+    "example_messages": [
+      "This is to inform you that there is an unpaid electricity bill of ₹ 1,000/-.",
+      "Payment of electricity bills are due.",
+      "Your electricity connection will be suspended."
+    ],
+    "call_script": "Victims receive a fake SMS claiming their electricity bill is due, and they must click on a suspicious link to pay or face disconnection.",
+    "red_flags": [
+      "Fake SMS about unpaid electricity bills",
+      "Urgent messages requiring immediate action",
+      "Unverified links or phone numbers",
+      "Demands for personal or financial info",
+      "Grammar and spelling mistakes"
+    ],
+    "what_to_do": "Ignore texts about unpaid electricity bills and do not click on links.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "May 10 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_cybercriminals_tampering_with_qr_codes_to_defraud",
+    "scam_type": "qr_code_fraud",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Cybercriminals Tampering with QR Codes to defraud Citizens",
+    "example_messages": [
+      "Your Flipkart package awaits at http://link.click here with qr code",
+      "Verify your Paytm wallet at http://link.click here click on qr code"
+    ],
+    "call_script": "Victim receives a suspicious QR code link via SMS/Email, scans it, and is redirected to a phishing site where they are asked to input sensitive information",
+    "red_flags": [
+      "Suspicious websites or links sent via SMS/Email with QR code attachments",
+      "Unfamiliar QR code on receipts or packages",
+      "QR code scans lead to suspicious or unfamiliar websites"
+    ],
+    "what_to_do": "Do not scan any unfamiliar QR codes, verify with the merchant before making payments",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "April 26 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_banking_trojans_malware_stealing_confidential_info",
+    "scam_type": "corporate_malware_bec",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Banking Trojans (Malware) stealing confidential information to defraud citizens",
+    "example_messages": [
+      "Banking Trojans (Malware) stealing confidential information to defraud citizens"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "See official I4C advisory for details"
+    ],
+    "what_to_do": "Banking Trojans (Malware) stealing confidential information to defraud citizens. Eavesdropping attacks happen when cyber criminals intercept, delete, or modify network traffic traveling over computers....",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "April 21 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_cybercriminals_using_fake_customer_care_numbers_he",
+    "scam_type": "smishing_link",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Cybercriminals using Fake Customer Care Numbers / Helplines to defraud citizens",
+    "example_messages": [
+      "Your bank account has been hacked. Call back on 1800-123-4567 for assistance.",
+      "To avoid account freezing, please call me back at 98765-43210.",
+      "Your card is blocked. Please send me your card details to unblock."
+    ],
+    "call_script": "Victims receive fake calls from scammers, who pretend to be customer care reps and gain trust to steal money.",
+    "red_flags": [
+      "Unusual increase in calls for assistance",
+      "Requests for banking credentials or sensitive info",
+      "Threats of account suspension or fine",
+      "Demands for payment to resolve issues",
+      "Poor language or spelling in communication",
+      "Lack of authentication when needed"
+    ],
+    "what_to_do": "Do not share sensitive info with unknown callers. Hang up and contact customer service directly.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "March 21 2022"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_cybercriminals_committing_business_partnership_sca",
+    "scam_type": "investment_fraud",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Cybercriminals committing Business Partnership scam to defraud citizens",
+    "example_messages": [
+      "Your bank account is selected to receive the bonus payment. You need to pay a small fee in advance.",
+      "मेरे बिजनेस पार्टनरशिप में पैसे लगाओ, 50-50 कमाई की गारंटी है",
+      "Want to make instant money by investing small amount from home"
+    ],
+    "call_script": "The scammer initially lures the victim into a business partnership, promising a large sum of money, and then demands advance payment or sensitive information.",
+    "red_flags": [
+      "Unexpected business offers with promise of large sums of money",
+      "Request for advance payment or sensitive information",
+      "Suspicious emails or messages from unknown senders",
+      "Urgency to make a decision quickly without checking",
+      "Requests for remote access to your computer or account"
+    ],
+    "what_to_do": "Do not respond or click on any links. Block the sender's email and report the incident to local authorities.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "July 16th 2021"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "i4c_cybercriminals_defrauding_citizens_going_on_holida",
+    "scam_type": "lottery_prize_fraud",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Cybercriminals defrauding citizens going on holiday as travel restrictions ease",
+    "example_messages": [
+      "Cybercriminals defrauding citizens going on holiday as travel restrictions ease"
+    ],
+    "call_script": "",
+    "red_flags": [
+      "See official I4C advisory for details"
+    ],
+    "what_to_do": "Cybercriminals defrauding citizens going on holiday as travel restrictions ease. Inheritance fraud is when you are told that someone rich has died and you’re in line to receive a huge inheritance.",
+    "source": {
+      "name": "I4C / cybercrime.gov.in Advisory",
+      "url": "https://cybercrime.gov.in/Webform/Advisory.aspx",
+      "date": "05th Aug 2021"
+    },
+    "if_already_opened": "",
+    "post_open_keywords": [],
+    "severity": ""
+  },
+  {
+    "id": "isolation_tactics_001",
+    "scam_type": "isolation_tactics",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "Isolation / anti-verification tactics — category-agnostic warning sign",
+    "example_messages": [
+      "Sir please do not call the bank yourself, that line is always busy and it will only cause delay. I will verify it for you.",
+      "No need to worry your son or daughter about this, I will handle everything myself so you don't have to disturb them.",
+      "Just give me the phone, I will enter the details myself so you don't need to worry about the process.",
+      "There is no need for you to visit the branch. Our representative will come to your home to collect the documents and card.",
+      "Ghar walo ko batane ki zaroorat nahi hai, main khud sab sambhal lunga, unhe pareshan mat karo."
+    ],
+    "call_script": "This is not a standalone scam type but a tactic layered onto bank fraud, digital arrest, courier scams, and family-emergency scams alike. The caller actively discourages the victim from independently verifying what is happening: telling them the bank/police helpline is busy or that calling again will cause delay or a duplicate report, telling them there is no need to worry or inform family, offering to take the phone or complete the process 'for' or 'on behalf of' the victim instead of walking them through it, or arranging for an agent/courier to visit in person to collect cash, cards, or documents instead of the victim visiting a branch or police station themselves.",
+    "red_flags": [
+      "Discourages calling the bank or police through their official number",
+      "Claims the helpline is busy or that verifying again will cause delay or a duplicate complaint",
+      "Discourages telling or 'disturbing' family members",
+      "Offers to handle the process, take the phone, or act 'on your behalf' instead of letting the victim do it themselves",
+      "Arranges for an agent, representative, or courier to visit in person to collect cash, cards, or documents"
+    ],
+    "what_to_do": "A genuine bank, police officer, or government official will never discourage you from hanging up and verifying independently — through the bank's official number, a family member, or in person. Any instruction to skip that step, handle it yourself on the caller's behalf, or avoid \"disturbing\" family is itself the warning sign, regardless of how calm or convincing the caller sounds. Hang up, verify independently through a number you look up yourself (not one the caller gives you), and involve a family member before taking any action.",
+    "source": {
+      "name": "I4C / MHA Advisory — cross-cutting scam-script pattern",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "otp_readout_request_001",
+    "scam_type": "otp_readout_request",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "OTP/PIN/CVV read-aloud request — category-agnostic warning sign",
+    "example_messages": [
+      "Please read out the six-digit code that just arrived on your phone so I can verify your identity on our end.",
+      "Just tell me the last four digits of your card and the one-time code you're seeing right now, this is standard verification on our side.",
+      "OTP bata dijiye, verification ke liye chahiye.",
+      "Confirm the code you see on your screen so we can process this."
+    ],
+    "call_script": "This is not a standalone scam type but a request that appears inside bank fraud, digital arrest, courier, and lottery scripts alike. The caller asks the victim to read out, tell, share, or confirm an OTP, PIN, CVV, or 'the code you're seeing right now', framed as routine verification, identity confirmation, or standard process — regardless of the excuse given, this is the moment the scammer gains direct access to the account.",
+    "red_flags": [
+      "Asks you to read out, tell, share, or speak an OTP, PIN, or CVV",
+      "Refers to 'the code you're seeing right now' or 'the six-digit code that just arrived'",
+      "Frames the request as verification, identity confirmation, or a standard process",
+      "Asks for this over a phone call rather than through an app you opened yourself"
+    ],
+    "what_to_do": "No bank, police officer, or government official will ever ask you to read out your OTP, PIN, or CVV over a phone call. Anyone asking for this is trying to access your account directly. Hang up immediately, do not share the code with anyone, and report on 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C / MHA Advisory — cross-cutting scam-script pattern",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  },
+  {
+    "id": "card_collection_request_001",
+    "scam_type": "card_collection_request",
+    "channel": "call",
+    "languages": [
+      "en",
+      "hi",
+      "hinglish"
+    ],
+    "title": "In-person card collection request — category-agnostic warning sign",
+    "example_messages": [
+      "Since the card needs to be blocked immediately for your safety, our courier will come to collect your debit card from your home within the hour, please keep the PIN written down for the technician.",
+      "As per the cyber crime department's investigation, you need to hand over your Aadhaar-linked debit card to our verification officer who will visit you today.",
+      "Hamara agent aapke ghar aakar card collect kar lega, PIN likh kar rakhiye."
+    ],
+    "call_script": "This is not a standalone scam type but a tactic layered onto bank fraud, digital arrest, and courier scams alike. A caller — posing as a courier, agent, 'verification officer', or technician — arranges to visit the victim in person specifically to physically take their EXISTING/active debit or credit card, or asks the victim to have the PIN ready or written down for that person. This is distinct from, and should not be confused with, a legitimate notice that a NEW card is being couriered TO the customer (normal banking, no card is being taken from the customer in that case).",
+    "red_flags": [
+      "Someone will come to your home to collect, pick up, or take your card",
+      "Asked to hand over your card to a courier, agent, 'verification officer', or technician",
+      "Asked to keep your PIN ready or written down for someone to collect",
+      "Framed as urgent (\"immediately\", \"within the hour\") to prevent you from pausing to verify"
+    ],
+    "what_to_do": "Banks and government bodies do not send someone to your home to collect your active debit or credit card. If your card needs to be blocked, it can be done remotely — no one needs to physically take it from you. Do not hand over your card or PIN to anyone who visits in person. Call your bank's official number yourself to verify, and report on 1930 or cybercrime.gov.in.",
+    "source": {
+      "name": "I4C / MHA Advisory — cross-cutting scam-script pattern",
+      "url": "https://i4c.mha.gov.in/advisories.aspx",
+      "date": "2024-2026"
+    }
+  }
+]
