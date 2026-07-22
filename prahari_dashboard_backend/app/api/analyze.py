@@ -10,9 +10,7 @@ from fastapi import APIRouter
 
 from app.models.schemas import AnalyzeRequest, AnalyzeResponse
 
-# --- SWAP THIS IMPORT ONCE THE REAL FILE EXISTS ---
-# from app.services.classifier import classify
-from app.services.classifier_placeholder import classify
+from app.services.classifier import classify
 
 router = APIRouter()
 

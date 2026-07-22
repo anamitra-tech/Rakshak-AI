@@ -7,9 +7,7 @@ from fastapi import APIRouter
 
 from app.models.schemas import NetworkGraphResponse, NetworkClustersResponse
 
-# --- SWAP THIS IMPORT ONCE THE REAL FILE EXISTS ---
-# from app.services import graph as graph_service
-from app.services import graph_placeholder as graph_service
+from app.services import graph as graph_service
 
 router = APIRouter()
 

@@ -6,9 +6,11 @@ from fastapi import APIRouter
 
 from app.models.schemas import ExtractEntitiesRequest, ExtractEntitiesResponse
 
-# --- SWAP THIS IMPORT ONCE THE REAL FILE EXISTS ---
-# from app.services.entity_extraction import extract_entities
-from app.services.entity_extraction_placeholder import extract_entities
+# Real implementation lives in app/utils/entity_extraction.py (regex-based,
+# already matches this exact contract — see that file's docstring) rather
+# than app/services/entity_extraction.py as the placeholder's comment
+# guessed.
+from app.utils.entity_extraction import extract_entities
 
 router = APIRouter()
 

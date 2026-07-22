@@ -1,3 +1,15 @@
+import os
+import sys
+
+# Real AI/ML logic (ml/, graph/, dashboard/, llm/, data/) lives at the repo
+# root, two levels above this file (repo_root/prahari_dashboard_backend/app/
+# main.py) -- not inside this FastAPI project. Add it to sys.path so
+# app.services.classifier / app.services.graph can import those packages
+# regardless of the process's cwd when uvicorn is launched.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
