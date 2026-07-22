@@ -1,0 +1,31 @@
+# Trimmed dependency set for webhook.app's Render free-tier deploy --
+# excludes torch/faiss-cpu/FlagEmbedding/rank_bm25 (RAG stack, only pulled in
+# by bot.agent and assistant.pipeline, both lazily imported only inside
+# /webhook and /chat -- both commented out in webhook/app.py for this
+# deploy, see the comments there) and beautifulsoup4/feedparser/pdfplumber
+# (not imported anywhere in webhook/app.py's actual import chain -- those
+# exist for data/scraper.py, unrelated). google-genai/groq are also dropped:
+# webhook/app.py never calls llm/client.py or ml/llm_explainer.py (unlike
+# api/server.py, which does and keeps them in requirements-api.txt).
+#
+# Everything below IS needed by the routes that stay live: /whatsapp/webhook,
+# /feedback, /evidence/*, /stt/sarvam, /ocr/tesseract, /graph, /health.
+fastapi>=0.110
+uvicorn>=0.27
+pydantic>=2.0
+python-multipart>=0.0.9
+twilio>=9.0
+python-dotenv>=1.0
+requests>=2.31
+
+numpy>=1.24
+scikit-learn>=1.3
+networkx>=3.0
+
+# WhatsApp media handling -- OCR for images, Sarvam STT for audio.
+easyocr>=1.7
+sarvamai>=0.1
+
+# Android app's /ocr/tesseract endpoint -- self-hosted OCR fallback.
+pytesseract>=0.3.10
+Pillow>=10.0

@@ -69,23 +69,22 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _warm_up_models():
-    """Pre-loads the RAG embedding model (BAAI/bge-m3, rag/embedder.py
-    instantiates it at import time) and the EasyOCR reader eagerly at
-    process start, instead of lazily on the first real webhook request.
-    Added 2026-07-13: repeated real WhatsApp tests showed the first
-    message after every restart taking 20-30s+ (measured: bge-m3 weight
-    loading alone took ~15s) before this — a real, user-visible latency
-    problem, not an assumption. This is a one-time cost per process
-    lifetime either way; moving it to startup just means the app itself
-    is slower to report "ready" instead of the first user being the one
-    who pays for it. Wrapped in try/except so a slow/failed download here
-    degrades to the original lazy-load-on-first-request behavior rather
-    than blocking startup entirely — same safety property the lazy import
-    below (bot.agent inside /webhook) was already written to preserve.
+    """Pre-loads the EasyOCR reader eagerly at process start, instead of
+    lazily on the first real webhook request. Added 2026-07-13, originally
+    also pre-warmed the RAG embedding model (BAAI/bge-m3 via `import
+    bot.agent`) for the same reason (measured 15s+ first-request latency).
+
+    RENDER FREE-TIER DEPLOY (2026-07-22): the bot.agent pre-warm is removed
+    here, not just skipped — bge-m3 is a ~2GB model and won't fit Render
+    free tier's 512MB RAM regardless of when it's loaded. Since /chat and
+    /webhook (the only two routes that ever need bot.agent /
+    assistant.pipeline's RAG stack) are commented out below for the same
+    reason, nothing in this process needs bot.agent at all anymore — so it
+    is deliberately never imported, eager or lazy. See the comments at
+    those two route definitions.
     """
     try:
-        logging.info("Pre-warming RAG stack (bot.agent) and OCR reader...")
-        import bot.agent  # noqa: F401 — import side effect loads bge-m3
+        logging.info("Pre-warming OCR reader...")
         _get_ocr_reader()
         logging.info("Pre-warming complete — models are warm.")
     except Exception as e:
@@ -1457,19 +1456,26 @@ def _require_chat_api_key(x_api_key: str | None = Header(default=None)):
         raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key header")
 
 
-@app.post("/chat", dependencies=[Depends(_require_chat_api_key)])
-async def chat_endpoint(req: ChatRequest):
-    from assistant.pipeline import handle_chat_multilang
-
-    try:
-        return handle_chat_multilang(req.session_id, req.message)
-    except Exception:
-        logging.exception("Unhandled /chat failure for session %s", req.session_id)
-        return {
-            "reply": "Something went wrong on our side. Please call 1930 directly or try again.",
-            "sources": [],
-            "metrics": {"error": "unhandled_exception"},
-        }
+# RENDER FREE-TIER DEPLOY (2026-07-22): /chat commented out. Its lazy
+# `from assistant.pipeline import handle_chat_multilang` import pulls in the
+# same bge-m3/faiss RAG stack as bot.agent (~2GB), which won't fit Render
+# free tier's 512MB RAM -- confirmed as the same constraint already
+# documented for webhook.app in render.yaml and applied identically to
+# rakshak-dashboard's /api/chat. Every other route in this file is
+# unaffected and stays live.
+# @app.post("/chat", dependencies=[Depends(_require_chat_api_key)])
+# async def chat_endpoint(req: ChatRequest):
+#     from assistant.pipeline import handle_chat_multilang
+#
+#     try:
+#         return handle_chat_multilang(req.session_id, req.message)
+#     except Exception:
+#         logging.exception("Unhandled /chat failure for session %s", req.session_id)
+#         return {
+#             "reply": "Something went wrong on our side. Please call 1930 directly or try again.",
+#             "sources": [],
+#             "metrics": {"error": "unhandled_exception"},
+#         }
 
 
 # ── Missed-escalation evidence delivery ──────────────────────────────────
@@ -1763,63 +1769,72 @@ def _process_webhook_message(
     _send_whatsapp_reply(From, reply)
 
 
-@app.post("/webhook")
-async def webhook(
-    background_tasks: BackgroundTasks,
-    request: Request,
-    Body: str = Form(default=""),
-    From: str = Form(default=""),
-    FromCountry: str = Form(default=""),
-    FromCity: str = Form(default=""),
-    NumMedia: str = Form(default="0"),
-    MediaUrl0: str = Form(default=""),
-    MediaContentType0: str = Form(default=""),
-):
-    session_id = From.replace("whatsapp:", "")
-    try:
-        text = Body.strip()
-
-        # Same first-contact / language-change gate as /whatsapp/webhook
-        # (shared _lang_prefs store, keyed identically off session_id) —
-        # see that handler's matching doc comment for why this runs before
-        # any media/OCR work or classification.
-        selected_tag = _parse_language_selection(text)
-        if selected_tag:
-            _lang_prefs[session_id] = selected_tag
-            _send_whatsapp_reply(From, _language_confirmation_reply(selected_tag))
-            logging.info(f"webhook session={session_id} | language set to {selected_tag}")
-            return Response(content="", media_type="application/xml")
-        if session_id not in _lang_prefs:
-            _send_whatsapp_reply(From, _LANGUAGE_INTRO)
-            logging.info(f"webhook session={session_id} | first contact, sent language menu")
-            return Response(content="", media_type="application/xml")
-        lang_tag = _lang_prefs[session_id]
-
-        # Same real, measured OCR-reliability gate as /whatsapp/webhook --
-        # see _OCR_RELIABLE_LANGUAGES' doc comment for the audit this is
-        # based on.
-        if (
-            NumMedia != "0"
-            and MediaContentType0.lower().startswith("image/")
-            and lang_tag not in _OCR_RELIABLE_LANGUAGES
-        ):
-            _send_whatsapp_reply(From, _ocr_unreliable_reply(lang_tag))
-            logging.info(f"webhook session={session_id} | image upload blocked, OCR unreliable for {lang_tag}")
-            return Response(content="", media_type="application/xml")
-
-        # Media extraction / translate / chat() / reply -- genuinely slow
-        # (RAG stack + LLM call, plus OCR/STT for attachments) -- scheduled
-        # as a background task for the same reason as /whatsapp/webhook.
-        # See _process_webhook_message's doc comment.
-        background_tasks.add_task(
-            _run_serialized_per_session,
-            _process_webhook_message,
-            session_id, From, text, lang_tag, FromCountry, FromCity, NumMedia, MediaUrl0, MediaContentType0,
-        )
-    except Exception as e:
-        logging.error(f"webhook error for session={session_id}: {e}")
-
-    return Response(content="", media_type="application/xml")
+# RENDER FREE-TIER DEPLOY (2026-07-22): /webhook commented out. Its
+# background handler (_process_webhook_message) does `from bot.agent import
+# chat, _sessions` -- same bge-m3/RAG stack as /chat above, same 512MB RAM
+# problem. /whatsapp/webhook (below) is the deterministic, non-RAG twin of
+# this route (mirrors the Android app's analyze_voice/analyze_session
+# pipeline) and stays live -- if this Twilio WhatsApp number's webhook URL
+# in the Twilio console currently points at /webhook specifically, it needs
+# to be repointed at /whatsapp/webhook for WhatsApp to keep working under
+# this free-tier deploy.
+# @app.post("/webhook")
+# async def webhook(
+#     background_tasks: BackgroundTasks,
+#     request: Request,
+#     Body: str = Form(default=""),
+#     From: str = Form(default=""),
+#     FromCountry: str = Form(default=""),
+#     FromCity: str = Form(default=""),
+#     NumMedia: str = Form(default="0"),
+#     MediaUrl0: str = Form(default=""),
+#     MediaContentType0: str = Form(default=""),
+# ):
+#     session_id = From.replace("whatsapp:", "")
+#     try:
+#         text = Body.strip()
+#
+#         # Same first-contact / language-change gate as /whatsapp/webhook
+#         # (shared _lang_prefs store, keyed identically off session_id) —
+#         # see that handler's matching doc comment for why this runs before
+#         # any media/OCR work or classification.
+#         selected_tag = _parse_language_selection(text)
+#         if selected_tag:
+#             _lang_prefs[session_id] = selected_tag
+#             _send_whatsapp_reply(From, _language_confirmation_reply(selected_tag))
+#             logging.info(f"webhook session={session_id} | language set to {selected_tag}")
+#             return Response(content="", media_type="application/xml")
+#         if session_id not in _lang_prefs:
+#             _send_whatsapp_reply(From, _LANGUAGE_INTRO)
+#             logging.info(f"webhook session={session_id} | first contact, sent language menu")
+#             return Response(content="", media_type="application/xml")
+#         lang_tag = _lang_prefs[session_id]
+#
+#         # Same real, measured OCR-reliability gate as /whatsapp/webhook --
+#         # see _OCR_RELIABLE_LANGUAGES' doc comment for the audit this is
+#         # based on.
+#         if (
+#             NumMedia != "0"
+#             and MediaContentType0.lower().startswith("image/")
+#             and lang_tag not in _OCR_RELIABLE_LANGUAGES
+#         ):
+#             _send_whatsapp_reply(From, _ocr_unreliable_reply(lang_tag))
+#             logging.info(f"webhook session={session_id} | image upload blocked, OCR unreliable for {lang_tag}")
+#             return Response(content="", media_type="application/xml")
+#
+#         # Media extraction / translate / chat() / reply -- genuinely slow
+#         # (RAG stack + LLM call, plus OCR/STT for attachments) -- scheduled
+#         # as a background task for the same reason as /whatsapp/webhook.
+#         # See _process_webhook_message's doc comment.
+#         background_tasks.add_task(
+#             _run_serialized_per_session,
+#             _process_webhook_message,
+#             session_id, From, text, lang_tag, FromCountry, FromCity, NumMedia, MediaUrl0, MediaContentType0,
+#         )
+#     except Exception as e:
+#         logging.error(f"webhook error for session={session_id}: {e}")
+#
+#     return Response(content="", media_type="application/xml")
 
 @app.get("/health")
 async def health():

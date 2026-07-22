@@ -1,8 +1,13 @@
-# webhook.app (port 8001) -- the RAG /chat endpoint (kb/legal_info.json) plus
-# the WhatsApp webhook path. Separate, heavier image from api.server's
-# Dockerfile.api: this one needs OCR (Tesseract + EasyOCR), the bge-m3
-# embedding model (FlagEmbedding/faiss for hybrid_search.py), and Sarvam STT/
-# translate.
+# webhook.app (port 8001) -- WhatsApp webhook (/whatsapp/webhook), OCR
+# (Tesseract + EasyOCR), Sarvam STT/translate, evidence delivery, /graph.
+#
+# RENDER FREE-TIER DEPLOY (2026-07-22): /chat and /webhook (the RAG /chat
+# endpoint and its Twilio-RAG twin) are commented out in webhook/app.py --
+# both need the bge-m3/faiss/torch stack (~2GB), which won't fit free
+# tier's 512MB RAM. Uses requirements-webhook-render.txt (trimmed, no
+# torch/faiss-cpu/FlagEmbedding/rank_bm25) instead of the full
+# requirements.txt accordingly. See webhook/app.py's comments at those two
+# routes and render.yaml for the same constraint already documented there.
 FROM python:3.11-slim
 
 # tesseract-ocr: the system binary pytesseract shells out to (language data
@@ -18,8 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-webhook-render.txt .
+RUN pip install --no-cache-dir -r requirements-webhook-render.txt
 
 # tessdata/ is deliberately gitignored (see .gitignore: "~35MB of binary
 # language data") -- fetch the same tessdata_fast release files used to set
@@ -36,5 +41,5 @@ COPY . .
 ENV TESSDATA_PREFIX=/app/tessdata
 ENV PYTHONUNBUFFERED=1
 
-# Railway injects $PORT at runtime.
+# Render injects $PORT at runtime.
 CMD python -m uvicorn webhook.app:app --host 0.0.0.0 --port ${PORT:-8001}
