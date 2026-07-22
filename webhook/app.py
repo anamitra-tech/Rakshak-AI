@@ -69,26 +69,23 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _warm_up_models():
-    """Pre-loads the EasyOCR reader eagerly at process start, instead of
-    lazily on the first real webhook request. Added 2026-07-13, originally
-    also pre-warmed the RAG embedding model (BAAI/bge-m3 via `import
-    bot.agent`) for the same reason (measured 15s+ first-request latency).
+    """Originally pre-loaded both the RAG embedding model (BAAI/bge-m3 via
+    `import bot.agent`) and the EasyOCR reader eagerly at process start.
 
-    RENDER FREE-TIER DEPLOY (2026-07-22): the bot.agent pre-warm is removed
-    here, not just skipped — bge-m3 is a ~2GB model and won't fit Render
-    free tier's 512MB RAM regardless of when it's loaded. Since /chat and
-    /webhook (the only two routes that ever need bot.agent /
-    assistant.pipeline's RAG stack) are commented out below for the same
-    reason, nothing in this process needs bot.agent at all anymore — so it
-    is deliberately never imported, eager or lazy. See the comments at
-    those two route definitions.
+    RENDER FREE-TIER DEPLOY (2026-07-22): both pre-warms are removed here,
+    not just skipped. bge-m3 won't fit free tier's 512MB regardless of when
+    it's loaded -- /chat and /webhook (the only routes needing it) are
+    commented out below for the same reason. EasyOCR's warm-up is removed
+    too, based on real measured evidence, not caution alone: an earlier
+    deploy attempt with this warm-up still in place OOM-killed the process
+    outright ("Out of memory (used over 512Mi)" in Render's own logs,
+    immediately after EasyOCR's model download) -- EasyOCR pulls in torch as
+    a transitive dependency. _IMAGE_OCR_DISABLED (see that constant's doc
+    comment) now blocks every image upload before _get_ocr_reader() is ever
+    called at all, lazy or eager, so nothing in this process touches
+    EasyOCR/torch or bge-m3 anymore.
     """
-    try:
-        logging.info("Pre-warming OCR reader...")
-        _get_ocr_reader()
-        logging.info("Pre-warming complete — models are warm.")
-    except Exception as e:
-        logging.warning(f"Model pre-warm failed (will lazy-load on first request instead): {e}")
+    logging.info("Startup complete — no eager model warm-up on this deployment (see comment above).")
 
 # ── /whatsapp/webhook — same classification pipeline CheckCallActivity uses
 # (analyze_voice + analyze_session), NOT the LLM/RAG bot.agent.chat() pipeline
@@ -1080,8 +1077,27 @@ def _translate_reply_to_preference(reply_text: str, lang_tag: str) -> str:
 # other 6, not because the hallucination risk stopped applying.
 _OCR_RELIABLE_LANGUAGES = {"en-IN", "hi-IN", "mr-IN", "bn-IN", "gu-IN", "kn-IN", "ml-IN", "pa-IN", "or-IN", "ur-IN"}
 
+# RENDER FREE-TIER DEPLOY (2026-07-22): _ocr_image() (below) always tries
+# EasyOCR first, for every language in _OCR_RELIABLE_LANGUAGES above --
+# EasyOCR pulls in torch as a transitive dependency, and loading its model
+# OOM-killed this process outright on Render free tier's 512MB RAM (real,
+# measured: "Out of memory (used over 512Mi)" in Render's own deploy logs,
+# right after EasyOCR's model-download progress bar). Independent of the
+# accuracy-based per-language gate above -- this is a resource constraint,
+# not an accuracy one, and applies regardless of which language the image
+# is in. Env-var-driven (default disabled = "1") so upgrading to a paid
+# Render plan later is a dashboard env-var flip, not a code change. Does
+# NOT affect the Android app's /ocr/tesseract endpoint (pure Tesseract
+# subprocess call, no EasyOCR/torch) or Sarvam audio STT -- both unaffected.
+_IMAGE_OCR_DISABLED = os.environ.get("DISABLE_IMAGE_OCR", "1") == "1"
+
 _OCR_UNRELIABLE_TEMPLATE_EN = (
     "Text recognition for {language} isn't reliable enough yet — please type the message, "
+    "or use voice input instead."
+)
+
+_OCR_UNAVAILABLE_TEMPLATE_EN = (
+    "Image scanning is temporarily unavailable on this deployment — please type the message, "
     "or use voice input instead."
 )
 
@@ -1093,6 +1109,13 @@ def _ocr_unreliable_reply(lang_tag: str) -> str:
         return message
     translated = _translate_text_sarvam(message, "en-IN", _to_sarvam_lang_code(lang_tag))
     return translated or message
+
+
+def _ocr_unavailable_reply(lang_tag: str) -> str:
+    if lang_tag == "en-IN":
+        return _OCR_UNAVAILABLE_TEMPLATE_EN
+    translated = _translate_text_sarvam(_OCR_UNAVAILABLE_TEMPLATE_EN, "en-IN", _to_sarvam_lang_code(lang_tag))
+    return translated or _OCR_UNAVAILABLE_TEMPLATE_EN
 
 
 _ANALYZING_IMAGE_TEMPLATE_EN = "Analyzing your image, one moment…"
@@ -1373,6 +1396,10 @@ async def whatsapp_webhook(
         # of it -- that's exactly the silently-wrong-verdict failure mode
         # audited today. Redirect to typed/voice input instead, before
         # spending any OCR/translate/classify work on the image at all.
+        if NumMedia != "0" and MediaContentType0.lower().startswith("image/") and _IMAGE_OCR_DISABLED:
+            _send_whatsapp_reply(From, _ocr_unavailable_reply(lang_tag))
+            logging.info(f"whatsapp session={session_id} | image upload blocked, OCR disabled on this deployment")
+            return Response(content="", media_type="application/xml")
         if (
             NumMedia != "0"
             and MediaContentType0.lower().startswith("image/")

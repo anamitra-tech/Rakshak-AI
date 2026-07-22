@@ -8,6 +8,16 @@
 # webhook/app.py never calls llm/client.py or ml/llm_explainer.py (unlike
 # api/server.py, which does and keeps them in requirements-api.txt).
 #
+# easyocr is ALSO dropped, for a real measured reason, not by inference:
+# a first deploy attempt with easyocr installed and warmed at startup got
+# OOM-killed outright by Render ("Out of memory (used over 512Mi)") --
+# easyocr pulls in torch as a transitive dependency. _IMAGE_OCR_DISABLED in
+# webhook/app.py now blocks every WhatsApp image upload before EasyOCR's
+# code path is ever reached, so the package itself is dead weight now --
+# removing it also cuts build time significantly (no more torch/sympy/etc
+# download). Does NOT affect the Android app's /ocr/tesseract endpoint
+# (pure Tesseract subprocess call, no EasyOCR/torch) or Sarvam audio STT.
+#
 # Everything below IS needed by the routes that stay live: /whatsapp/webhook,
 # /feedback, /evidence/*, /stt/sarvam, /ocr/tesseract, /graph, /health.
 fastapi>=0.110
@@ -22,8 +32,7 @@ numpy>=1.24
 scikit-learn>=1.3
 networkx>=3.0
 
-# WhatsApp media handling -- OCR for images, Sarvam STT for audio.
-easyocr>=1.7
+# WhatsApp audio messages -- Sarvam STT.
 sarvamai>=0.1
 
 # Android app's /ocr/tesseract endpoint -- self-hosted OCR fallback.
