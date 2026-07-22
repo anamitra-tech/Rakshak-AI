@@ -1931,25 +1931,36 @@ async def ocr_tesseract(file: UploadFile = File(...), lang: str = Form(...)):
         return {"text": "", "found": False}
     return {"text": text, "found": True}
 
-@app.get("/graph")
-async def graph_endpoint():
-    G = build_fraud_graph_with_entities()
-    summary = get_graph_summary(G)
-    hard_links = get_hard_links(G)
-    rings = get_ring_clusters(G)
-    return {
-        "summary": summary,
-        "hard_links": hard_links,
-        "fraud_rings": rings,
-        "nodes": [{"id": n, **d} for n, d in G.nodes(data=True)],
-        "edges": [{"source": u, "target": v, **d} for u, v, d in G.edges(data=True)],
-        "intelligence": {
-            "confirmed_links": len(hard_links),
-            "probable_rings": len(rings),
-            "highest_confidence_ring": rings[0] if rings else None,
-            "alert": (
-                f"{len(rings)} probable fraud rings detected "
-                f"across {sum(r['victim_count'] for r in rings)} victim reports"
-            ) if rings else "Insufficient data for ring detection",
-        },
-    }
+# RENDER FREE-TIER DEPLOY (2026-07-22): /graph commented out. Confirmed via
+# a real 500 in Render's logs: build_fraud_graph_with_entities() ->
+# graph/fraud_graph.py's build_fraud_graph() does `from bot.agent import
+# _sessions`, which imports the same bge-m3/faiss RAG stack as /chat and
+# /webhook (both already disabled above) -- plus llm/client.py's
+# `from google import genai`, which isn't installed here either (trimmed
+# from requirements-webhook-render.txt on the same reasoning). Also
+# functionally moot on this deploy regardless: this graph's only real data
+# source is bot.agent._sessions, populated by /chat and /webhook's chat()
+# calls -- both disabled, so there would be no session data to graph even
+# if the import didn't crash.
+# @app.get("/graph")
+# async def graph_endpoint():
+#     G = build_fraud_graph_with_entities()
+#     summary = get_graph_summary(G)
+#     hard_links = get_hard_links(G)
+#     rings = get_ring_clusters(G)
+#     return {
+#         "summary": summary,
+#         "hard_links": hard_links,
+#         "fraud_rings": rings,
+#         "nodes": [{"id": n, **d} for n, d in G.nodes(data=True)],
+#         "edges": [{"source": u, "target": v, **d} for u, v, d in G.edges(data=True)],
+#         "intelligence": {
+#             "confirmed_links": len(hard_links),
+#             "probable_rings": len(rings),
+#             "highest_confidence_ring": rings[0] if rings else None,
+#             "alert": (
+#                 f"{len(rings)} probable fraud rings detected "
+#                 f"across {sum(r['victim_count'] for r in rings)} victim reports"
+#             ) if rings else "Insufficient data for ring detection",
+#         },
+#     }
