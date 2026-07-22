@@ -1,0 +1,22 @@
+# Trimmed dependency set for Render deployment -- excludes torch/faiss-cpu/
+# FlagEmbedding/rank_bm25/beautifulsoup4/feedparser/pdfplumber/easyocr/
+# sarvamai/pytesseract/Pillow/twilio/python-multipart/pytest from the full
+# requirements.txt. Those only exist to support /api/chat (bot.agent's RAG
+# stack), which is commented out in app/main.py for this deployment -- see
+# the comment there. Confirmed by grepping every import across app/ (main.py,
+# api/*.py, services/*.py, utils/*.py): nothing else in the wired routes
+# (auth, analyze, entities, network, geospatial, report, trends) touches any
+# of the excluded packages.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+google-auth>=2.32
+requests>=2.32
+itsdangerous>=2.2
+
+scikit-learn>=1.3
+networkx>=3.0
+google-genai>=1.0
+groq>=0.9
+python-dotenv>=1.0

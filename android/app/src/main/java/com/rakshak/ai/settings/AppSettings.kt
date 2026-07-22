@@ -80,6 +80,20 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_TIER3B_NUMBER, DEFAULT_TIER3B_NUMBER) ?: DEFAULT_TIER3B_NUMBER
         set(value) = prefs.edit().putString(KEY_TIER3B_NUMBER, value).apply()
 
+    /**
+     * Victim-device location sharing — off by default, same opt-in posture
+     * as [tier3bEnabled]. Must be explicitly turned on in family setup, and
+     * FamilySetupActivity never persists this true without ACCESS_FINE_LOCATION
+     * actually granted (mirrors tier3bEnabled's own permission fail-safe).
+     * When true, a Tier 2/3b escalation fetches the VICTIM'S current location
+     * (this device, never the caller's) and includes it in the trusted-contact
+     * alert — see EscalationOrchestrator.notifyTrustedContact and
+     * location/VictimLocationProvider.kt.
+     */
+    var locationSharingEnabled: Boolean
+        get() = prefs.getBoolean(KEY_LOCATION_SHARING_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_LOCATION_SHARING_ENABLED, value).apply()
+
     companion object {
         private const val KEY_BASE_URL = "prahari_base_url"
         private const val KEY_EVIDENCE_BASE_URL = "evidence_base_url"
@@ -89,9 +103,17 @@ class AppSettings(context: Context) {
         private const val KEY_CONTACT_EMAIL = "trusted_contact_email"
         private const val KEY_TIER3B_ENABLED = "tier3b_enabled"
         private const val KEY_TIER3B_NUMBER = "tier3b_phone_number"
+        private const val KEY_LOCATION_SHARING_ENABLED = "location_sharing_enabled"
 
-        // 10.0.2.2 is the emulator's alias for the host machine's localhost.
-        const val DEFAULT_BASE_URL = "http://10.0.2.2:8000"
+        // api.server deployed live on Render's free tier 2026-07-22 (see
+        // CLAUDE.md deploy notes) — HTTPS, no cleartext config needed.
+        const val DEFAULT_BASE_URL = "https://rakshak-api-l9pq.onrender.com"
+
+        // webhook.app (OCR + real Sarvam STT + /chat) deployment was
+        // deliberately deferred — its bge-m3/EasyOCR eager startup load
+        // won't fit Render free tier's 512MB RAM (see render.yaml). Still
+        // points at the emulator-local default until that service is
+        // actually deployed (paid tier or a slimmed-down build).
         const val DEFAULT_EVIDENCE_BASE_URL = "http://10.0.2.2:8001"
         const val DEFAULT_LANGUAGE = "en-IN"
 
