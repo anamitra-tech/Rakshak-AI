@@ -136,7 +136,17 @@ HIGH_RISK_PATTERNS = {
     # for this — see the near-deterministic override in predict() below.
     "otp_readout_request": [
         r"read\s+(out\s+|me\s+)?(the\s+|your\s+)?(otp|pin|cvv|code|digits|one-?time code)",
-        r"(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|code|verification code|one-?time code)",
+        # Real miss traced live 2026-07-22: "Send me the codes here directly"
+        # (Apple Gift Card codes, not an OTP) matched this pattern's bare
+        # "code" alternative and got tagged otp_readout_request -- wrong
+        # category (though the message was still correctly flagged FRAUD
+        # overall via urgency_coercion + the ML score). This pattern's own
+        # design principle, documented on the paraphrased-readout patterns
+        # below, is "not a bare code/number word" -- this one predates that
+        # discipline and violated it. Requiring "otp"/"verification code"/
+        # "one-time code" etc. explicitly (never bare "code") brings it in
+        # line with every pattern added since.
+        r"(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|one-?time code)",
         r"(code|digits)\s+(that\s+)?(just\s+)?arrived",
         r"(code|digits)\s+you'?re\s+seeing",
         r"(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit",

@@ -111,7 +111,11 @@ object OfflineRuleEngine {
 
     private val OTP_READOUT_PATTERNS = listOf(
         """read\s+(out\s+|me\s+)?(the\s+|your\s+)?(otp|pin|cvv|code|digits|one-?time code)""",
-        """(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|code|verification code|one-?time code)""",
+        // Bare "code" alternative dropped 2026-07-22, mirroring the same fix
+        // in ml/detector.py — see that file's comment (real miss: "Send me
+        // the codes here directly" for Apple Gift Card codes, not an OTP,
+        // wrongly tagged otp_readout_request via the bare "code" match).
+        """(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|one-?time code)""",
         """(code|digits)\s+(that\s+)?(just\s+)?arrived""",
         """(code|digits)\s+you'?re\s+seeing""",
         """(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit""",
