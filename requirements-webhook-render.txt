@@ -38,3 +38,8 @@ sarvamai>=0.1
 # Android app's /ocr/tesseract endpoint -- self-hosted OCR fallback.
 pytesseract>=0.3.10
 Pillow>=10.0
+
+# Identity-based, in-memory sliding-window rate limiting (see webhook/app.py's
+# Limiter setup and API_SPEC.md's rate-limiting section). Pulls in `limits`
+# transitively -- no Redis/other external service, MemoryStorage only.
+slowapi>=0.1.9

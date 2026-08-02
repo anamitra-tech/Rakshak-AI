@@ -13,6 +13,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Form, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 from twilio.rest import Client as TwilioRestClient
 from dotenv import load_dotenv
 import logging
@@ -65,6 +69,74 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Rate limiting ──────────────────────────────────────────────────────────
+# Layered, identity-based, in-memory sliding-window (moving-window) limiting
+# via slowapi (built on the `limits` package) -- see API_SPEC.md's rate-
+# limiting section for the full rationale. storage_uri="memory://" is a
+# deliberate scope decision: no Redis this close to submission, so limits are
+# per-process (fine here -- one process per deployed service, no horizontal
+# scaling). strategy="moving-window" is the actual sliding-window algorithm
+# (as opposed to `limits`' fixed-window/fixed-window-elastic-expiry
+# strategies), so a burst spanning a window boundary can't double the
+# effective limit. Default key_func (get_remote_address) covers every route
+# below that doesn't override it with an identity-specific key_func.
+limiter = Limiter(key_func=get_remote_address, storage_uri="memory://", strategy="moving-window")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# Real app traffic (Android CheckCallActivity's "Check a call/message" flow,
+# via WhatsApp) gets the most headroom. LLM-backed routes get the tightest
+# limit, since LLM calls are this deployment's expensive/rate-limited
+# resource (matches the same reasoning CLAUDE.md documents for /chat).
+_RATE_WHATSAPP = "20/minute"          # /whatsapp/webhook, keyed by sender phone number
+_RATE_CHAT_PER_KEY = "30/minute"      # /chat, keyed by CHAT_API_KEY -- shared budget across every caller using that key
+_RATE_CHAT_PER_SESSION = "10/minute"  # /chat, keyed by session_id -- the public widget's per-end-user budget (lowest/most
+                                       # restrictive: the widget's CHAT_API_KEY is a single value embedded client-side and
+                                       # shared by every visitor -- see frontend/chat-widget.html -- so the per-key limit
+                                       # alone would let one abusive browser tab exhaust every other visitor's budget; this
+                                       # second, per-session layer is what actually protects individual users from each other)
+_RATE_MEDIA = "60/minute"             # /stt/sarvam, /ocr/tesseract -- real app traffic, but CloudOcrClient.kt cascades
+                                       # through up to 9 languages (9 separate calls) for a single screenshot check, so this
+                                       # needs real headroom, not a per-screenshot-sized limit
+_RATE_DEFAULT = "20/minute"           # /feedback, /evidence/* -- low-traffic, unauthenticated-ish housekeeping routes
+
+
+def _api_key_identity(request: Request) -> str:
+    return request.headers.get("x-api-key") or "no-key"
+
+
+def _session_identity(request: Request) -> str:
+    return getattr(request.state, "rl_session_id", None) or "anon"
+
+
+def _phone_identity(request: Request) -> str:
+    return getattr(request.state, "rl_phone", None) or get_remote_address(request)
+
+
+async def _capture_chat_session_id(request: Request) -> None:
+    """FastAPI dependency, run before the route body: stashes {session_id}
+    from the JSON body onto request.state so _session_identity (a plain
+    sync function -- slowapi calls key_func synchronously, it can't itself
+    await the body) can read it. Starlette caches the raw body bytes after
+    the first read, so ChatRequest's own body parsing right after this
+    doesn't re-read the ASGI stream or see anything different."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    request.state.rl_session_id = str(data.get("session_id") or "anon")[:128]
+
+
+async def _capture_whatsapp_phone(request: Request) -> None:
+    """Same pattern as _capture_chat_session_id, for Twilio's form-encoded
+    From field instead of a JSON session_id."""
+    try:
+        form = await request.form()
+    except Exception:
+        form = {}
+    request.state.rl_phone = str(form.get("From") or get_remote_address(request))[:64]
 
 
 @app.on_event("startup")
@@ -1356,8 +1428,10 @@ def _process_whatsapp_message(
         logging.error(f"whatsapp background processing error for session={session_id}: {e}")
 
 
-@app.post("/whatsapp/webhook")
+@app.post("/whatsapp/webhook", dependencies=[Depends(_capture_whatsapp_phone)])
+@limiter.limit(_RATE_WHATSAPP, key_func=_phone_identity)
 async def whatsapp_webhook(
+    request: Request,
     background_tasks: BackgroundTasks,
     Body: str = Form(default=""),
     From: str = Form(default=""),
@@ -1442,7 +1516,8 @@ class FeedbackRequest(BaseModel):
 
 
 @app.post("/feedback")
-async def feedback(req: FeedbackRequest):
+@limiter.limit(_RATE_DEFAULT)
+async def feedback(request: Request, req: FeedbackRequest):
     """Log-only — see feedback/store.py. Exposed on this process too (not
     just api/server.py:8000) so the same endpoint shape is reachable and
     testable regardless of which Prahari process a client is pointed at."""
@@ -1490,8 +1565,20 @@ def _require_chat_api_key(x_api_key: str | None = Header(default=None)):
 # documented for webhook.app in render.yaml and applied identically to
 # rakshak-dashboard's /api/chat. Every other route in this file is
 # unaffected and stays live.
-# @app.post("/chat", dependencies=[Depends(_require_chat_api_key)])
-# async def chat_endpoint(req: ChatRequest):
+#
+# Rate limiting added below (still inert while the route itself is
+# commented out) so it's already in place the moment this is re-enabled:
+# layered by _RATE_CHAT_PER_KEY (CHAT_API_KEY -- the shared budget across
+# every caller using that key) and _RATE_CHAT_PER_SESSION (session_id --
+# the public widget's per-end-user budget; see _RATE_CHAT_PER_SESSION's own
+# comment above for why the per-key layer alone isn't enough for the widget
+# case). Verified via a standalone FastAPI TestClient harness against this
+# exact decorator stack (not against this Render deployment, since the route
+# is disabled here) -- see API_SPEC.md's rate-limiting section.
+# @app.post("/chat", dependencies=[Depends(_require_chat_api_key), Depends(_capture_chat_session_id)])
+# @limiter.limit(_RATE_CHAT_PER_KEY, key_func=_api_key_identity)
+# @limiter.limit(_RATE_CHAT_PER_SESSION, key_func=_session_identity)
+# async def chat_endpoint(request: Request, req: ChatRequest):
 #     from assistant.pipeline import handle_chat_multilang
 #
 #     try:
@@ -1540,7 +1627,8 @@ class EmailEvidenceRequest(BaseModel):
 
 
 @app.post("/evidence/whatsapp")
-async def evidence_whatsapp(req: WhatsAppEvidenceRequest):
+@limiter.limit(_RATE_DEFAULT)
+async def evidence_whatsapp(request: Request, req: WhatsAppEvidenceRequest):
     if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN):
         return {"success": False, "error": "Twilio not configured"}
     if not PUBLIC_BASE_URL:
@@ -1591,7 +1679,8 @@ async def evidence_file(filename: str):
 
 
 @app.post("/evidence/email")
-async def evidence_email(req: EmailEvidenceRequest):
+@limiter.limit(_RATE_DEFAULT)
+async def evidence_email(request: Request, req: EmailEvidenceRequest):
     if not (EMAIL_SMTP_ADDRESS and EMAIL_SMTP_APP_PASSWORD):
         logging.error(f"EMAIL_SMTP not configured — would have sent to {req.to_email}: {req.subject!r}")
         return {"success": False, "error": "Email SMTP not configured"}
@@ -1869,7 +1958,8 @@ async def health():
 
 
 @app.post("/stt/sarvam")
-async def stt_sarvam(file: UploadFile = File(...), mode: str = Form("translate")):
+@limiter.limit(_RATE_MEDIA)
+async def stt_sarvam(request: Request, file: UploadFile = File(...), mode: str = Form("translate")):
     """Called by the Android app's SarvamApiClient —
     proxies through _transcribe_audio_sarvam (this file's own, already
     battle-tested WhatsApp media-handling code) rather than having the
@@ -1903,7 +1993,8 @@ async def stt_sarvam(file: UploadFile = File(...), mode: str = Form("translate")
 
 
 @app.post("/ocr/tesseract")
-async def ocr_tesseract(file: UploadFile = File(...), lang: str = Form(...)):
+@limiter.limit(_RATE_MEDIA)
+async def ocr_tesseract(request: Request, file: UploadFile = File(...), lang: str = Form(...)):
     """Called by the Android app's ocr/CloudOcrClient.kt — online-only OCR
     for the 9 scripts ML Kit's on-device recognizer doesn't cover. [lang]
     is a 3-letter Tesseract code (ben/tam/tel/kan/mal/guj/pan/ori/urd),

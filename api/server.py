@@ -57,6 +57,7 @@ from casefile.case_generator import generate_case
 from data.synth import generate_fraud_graph
 from feedback.store import log_correction
 from llm.client import generate as llm_generate
+from ratelimit_memory import allow as _rate_allow
 
 print("Loading models...", file=sys.stderr)
 DETECTOR = ScamDetector()
@@ -67,6 +68,30 @@ print("Models ready.", file=sys.stderr)
 
 FRONTEND = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "frontend", "index.html")
+
+# ── Rate limiting ────────────────────────────────────────────────────────
+# In-memory sliding-window (moving-window) limiting via ratelimit_memory.py
+# (the `limits` package -- the same library slowapi wraps for webhook/app.py
+# -- called directly here since this is a plain stdlib http.server, not
+# FastAPI). See API_SPEC.md's rate-limiting section for the full rationale.
+# Real app traffic (Android's "Check a call/message" screen calls
+# /analyze_voice then /analyze_session for every check, per CLAUDE.md
+# section 3) gets the most headroom. LLM-backed routes (/case/generate,
+# /graph/cluster_summary) get the tightest limit, matching the same
+# reasoning applied to /chat in webhook/app.py.
+_RATE_REAL_APP = "30/minute"
+_RATE_LLM = "10/minute"
+_RATE_DEFAULT = "30/minute"
+
+# path -> (rate, identity_fn(handler, body) -> str). Falls back to
+# (_RATE_DEFAULT, client IP) for any POST path not listed here.
+_RATE_LIMIT_RULES = {
+    "/analyze_message": (_RATE_REAL_APP, lambda h, b: h.client_address[0]),
+    "/analyze_voice": (_RATE_REAL_APP, lambda h, b: h.client_address[0]),
+    "/analyze_session": (_RATE_REAL_APP, lambda h, b: str(b.get("session_id") or h.client_address[0])),
+    "/case/generate": (_RATE_LLM, lambda h, b: str(b.get("session_id") or h.client_address[0])),
+    "/graph/cluster_summary": (_RATE_LLM, lambda h, b: h.client_address[0]),
+}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -92,6 +117,14 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    def _rate_limit_ok(self, path, body):
+        rate, identity_fn = _RATE_LIMIT_RULES.get(path, (_RATE_DEFAULT, lambda h, b: h.client_address[0]))
+        identity = identity_fn(self, body)
+        if _rate_allow(rate, path, identity):
+            return True
+        self._send({"error": f"rate limit exceeded ({rate} for this endpoint) -- please slow down"}, 429)
+        return False
+
     def do_OPTIONS(self):
         self._send(b"", 204, "text/plain")
 
@@ -113,6 +146,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         b = self._body()
         p = self.path
+        if not self._rate_limit_ok(p, b):
+            return
         try:
             if p == "/analyze_message":
                 return self._send(DETECTOR.predict(b.get("text", "")))

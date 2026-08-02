@@ -838,12 +838,13 @@ the route, checked before `handle_chat()` runs at all). Missing or wrong key
 {"detail": "Missing or invalid X-API-Key header"}
 ```
 
-There is no per-client key, no rate limit, and no key rotation mechanism —
-this is a single shared secret, adequate for a known-integrator (one
-teammate's website) during testing, **not** a substitute for real per-client
-auth if this is opened up to arbitrary third parties later. Get the current
-key value from `.env`'s `CHAT_API_KEY` (not printed here — `.env` is
-gitignored, ask whoever has repo access rather than committing it).
+There is no per-client key and no key rotation mechanism — this is a single
+shared secret, adequate for a known-integrator (one teammate's website)
+during testing, **not** a substitute for real per-client auth if this is
+opened up to arbitrary third parties later. Get the current key value from
+`.env`'s `CHAT_API_KEY` (not printed here — `.env` is gitignored, ask
+whoever has repo access rather than committing it). `/chat` **is** now rate
+limited, layered on top of this shared key — see §7.1.3.
 
 #### 7.1.2 CORS — currently wide open, temporary
 
@@ -857,6 +858,118 @@ from a browser (the `X-API-Key` requirement is the actual access control,
 not CORS — CORS only controls which *browser-origin* JS is allowed to read
 the response; a non-browser client, or a proxied server-side call, is
 unaffected by CORS either way).
+
+#### 7.1.3 Rate limiting — CURRENT PROTECTION (added, both deployed services)
+
+**CURRENT PROTECTION: identity-based, in-memory, sliding-window rate
+limiting**, added across both deployed backend processes
+(`rakshak-api` = `api.server`, `rakshak-webhook` = `webhook.app`). Not a
+Redis-backed or otherwise distributed limiter — see the ROADMAP note below
+for why that's a deliberate scope decision, not an oversight.
+
+**Mechanism.** Both services ultimately use the same underlying library,
+[`limits`](https://pypi.org/project/limits/) (the package `slowapi` itself
+wraps), configured for its **moving-window** strategy — the actual
+sliding-window algorithm, as opposed to `limits`' fixed-window or
+fixed-window-elastic-expiry strategies. This matters concretely: a
+fixed-window counter resets at a clock boundary (e.g. on the minute), so a
+client can send a full window's worth of requests right before the
+boundary and a second full window's worth right after, getting roughly
+double the intended rate for a few seconds around every boundary. A moving
+(sliding) window has no such boundary to exploit — the count is always
+computed over the trailing N-second span ending *now*, not since the last
+clock tick.
+
+- **`webhook.app`** (FastAPI) uses `slowapi.Limiter` directly, with
+  `storage_uri="memory://"` and `strategy="moving-window"`, via
+  `@limiter.limit(...)` decorators on each route.
+- **`api.server`** (plain stdlib `http.server.ThreadingHTTPServer`, not
+  FastAPI — see §0/module docstring) can't attach `slowapi`'s
+  Starlette-Request-shaped decorators, so `ratelimit_memory.py` calls the
+  same `limits` package directly (`MemoryStorage` + `MovingWindowRateLimiter`)
+  inside `Handler.do_POST`, before dispatching to any route. One library,
+  one strategy, two call sites — not two independently-built rate limiters.
+
+**Identity, not just IP.** Keying purely by client IP is weak here — the
+Android app's own calls (and every WhatsApp user behind Twilio) don't have
+individually distinguishing IPs the server can see in every case, and IP-only
+limiting can't separate "one legitimate user checking several messages" from
+"one abusive caller behind the same NAT/proxy as everyone else." Each route
+below is keyed by the most specific real identity available to it:
+
+| Route(s) | Service | Identity key | Limit | Why this tier |
+|---|---|---|---|---|
+| `/analyze_voice`, `/analyze_message` | `api.server` | client IP (no session in the request body) | 30/minute | Real app traffic — Android's "Check a call/message" screen calls this on every check |
+| `/analyze_session` | `api.server` | `session_id` (the caller's phone number, per CLAUDE.md §3) | 30/minute | Same real-app tier as above, but a real identity is available here |
+| `/case/generate` | `api.server` | `session_id` if given, else client IP | 10/minute | LLM-backed (`llm.client.generate`) — this deployment's expensive/rate-limited resource |
+| `/graph/cluster_summary` | `api.server` | client IP | 10/minute | Also LLM-backed |
+| everything else in `api.server` (`/analyze_url`, `/graph/*`, `/geo/*`, `/feedback`, `/extract_entities`) | `api.server` | client IP | 30/minute (default) | Cheap, deterministic, low-traffic |
+| `/whatsapp/webhook` | `webhook.app` | sender phone number (Twilio's `From` field) | 20/minute | Real app traffic |
+| `/stt/sarvam`, `/ocr/tesseract` | `webhook.app` | client IP | 60/minute | Real app traffic, but `CloudOcrClient.kt` cascades through up to 9 languages (9 separate calls) for one screenshot — needs real headroom, not a per-screenshot-sized limit |
+| `/chat` | `webhook.app` | **layered — see below** | 30/minute (per key) **and** 10/minute (per session) | LLM-backed; layered because of the widget's shared-key problem, below |
+| `/feedback`, `/evidence/*` | `webhook.app` | client IP | 20/minute (default) | Low-traffic housekeeping |
+
+**Why `/chat` is layered, not single-keyed.** `frontend/chat-widget.html`
+embeds `CHAT_API_KEY` client-side (§7.1.1 already documents this as a
+disclosed, deliberate limitation — anyone can read it out of the page
+source). That means every visitor to a site running the widget shares one
+`X-API-Key` value. A single per-key limit alone would let *one* abusive
+browser tab exhaust the entire shared budget for every other visitor on
+that site. Two limits are checked on every `/chat` request, using `limits`'
+own hit-tracking (both checked independently; whichever trips first
+returns the 429):
+
+1. **Per `CHAT_API_KEY` (30/minute)** — the overall budget for this
+   integration, protecting the LLM cost/quota regardless of who's calling.
+2. **Per `session_id` (10/minute)** — the *public widget's* per-end-user
+   budget (the lowest, most restrictive tier of any route in this
+   project), so one visitor's session can't starve every other visitor
+   sharing the same embedded key.
+
+`/chat` is currently commented out in the deployed `webhook.app` (Render
+free-tier RAM constraint — see the "RENDER FREE-TIER DEPLOY" comment at its
+route definition and §1's coverage table); the rate-limiting code is
+already in place in that commented block so it's live the instant the route
+is re-enabled. It was verified via a standalone `fastapi.testclient`
+harness wired to the real `Limiter` instance and the real key-extraction
+functions (`_api_key_identity`, `_session_identity`), not against this
+Render deployment directly, since the route itself is inert there.
+
+**On exceeding a limit.** Every route returns a clean HTTP 429 with a JSON
+body — no crash, no hang, no silent drop:
+
+```json
+// response: HTTP 429
+{"error": "Rate limit exceeded: 20 per 1 minute"}
+```
+
+(`api.server`'s stdlib routes return the equivalent shape:
+`{"error": "rate limit exceeded (20/minute for this endpoint) -- please slow down"}`.)
+
+**Verified not to affect legitimate traffic.** Every limit above was chosen
+to sit comfortably above real demo-session usage and confirmed live: 30
+consecutive `/analyze_voice`/`/analyze_session` calls against a running
+`api.server` instance all returned 200, with the 31st cleanly 429'd; the
+same pattern was confirmed for `/graph/cluster_summary`'s 10/minute tier
+and for `webhook.app`'s real, live `/whatsapp/webhook` route (20/minute,
+phone-keyed) via `TestClient` with Twilio's send mocked out (so no real
+message/quota was spent running this check). The full detection/chat
+regression suite (`eval_testset.py`, `eval_rag_testset.py`) was re-run after
+adding rate limiting to confirm zero impact on classification accuracy —
+neither file touches any detection/RAG code path, only request handling
+ahead of it.
+
+**ROADMAP (not implemented now — deliberate scope decision):**
+Redis-backed distributed rate limiting (so limits are shared across
+multiple process instances / survive a process restart, instead of today's
+per-process `MemoryStorage`) and IP-reputation blocklisting are both
+reasonable production hardening steps, but neither is implemented here.
+This deployment runs one process per service with no horizontal scaling,
+so per-process in-memory state is a real, working limit today, not a
+placeholder — but it would need to become distributed before this could
+scale past one instance per service, and this is being flagged explicitly
+as future work given the free-tier deploy and the submission timeline, not
+silently deferred.
 
 The three examples below were captured before the `X-API-Key` requirement
 was added — every request shown still needs that header in addition to the

@@ -31,6 +31,13 @@ python-dotenv>=1.0
 requests>=2.31
 httpx>=0.27
 
+# Identity-based, in-memory sliding-window rate limiting -- webhook/app.py
+# uses slowapi directly (FastAPI); api/server.py uses the `limits` package
+# (slowapi's own dependency) directly instead, since it's a plain stdlib
+# http.server, not FastAPI. No Redis/other external service, MemoryStorage
+# only -- see API_SPEC.md's rate-limiting section.
+slowapi>=0.1.9
+
 # LLM clients
 google-genai>=1.0
 groq>=0.9
