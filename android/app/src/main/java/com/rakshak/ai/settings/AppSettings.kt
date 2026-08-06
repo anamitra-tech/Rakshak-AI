@@ -2,6 +2,7 @@ package com.rakshak.ai.settings
 
 import android.content.Context
 import com.rakshak.ai.BuildConfig
+import java.util.UUID
 
 /**
  * Setup is meant to be done once, by a family member, not the elderly user
@@ -94,6 +95,19 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_LOCATION_SHARING_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_LOCATION_SHARING_ENABLED, value).apply()
 
+    /**
+     * Random per-install identifier, generated once on first access and
+     * persisted thereafter — not a login, not tied to any personal info, just
+     * a private fingerprint sent as the `X-Device-ID` header on every Prahari
+     * request so api/server.py's rate limiter can key on "this install"
+     * instead of raw client IP (which a caller can trivially rotate via
+     * wifi/mobile-data/VPN switches to bypass a per-IP limit).
+     */
+    val deviceId: String
+        get() = prefs.getString(KEY_DEVICE_ID, null) ?: UUID.randomUUID().toString().also {
+            prefs.edit().putString(KEY_DEVICE_ID, it).apply()
+        }
+
     companion object {
         private const val KEY_BASE_URL = "prahari_base_url"
         private const val KEY_EVIDENCE_BASE_URL = "evidence_base_url"
@@ -104,6 +118,7 @@ class AppSettings(context: Context) {
         private const val KEY_TIER3B_ENABLED = "tier3b_enabled"
         private const val KEY_TIER3B_NUMBER = "tier3b_phone_number"
         private const val KEY_LOCATION_SHARING_ENABLED = "location_sharing_enabled"
+        private const val KEY_DEVICE_ID = "device_id"
 
         // api.server deployed live on Render's free tier 2026-07-22 (see
         // CLAUDE.md deploy notes) — HTTPS, no cleartext config needed.

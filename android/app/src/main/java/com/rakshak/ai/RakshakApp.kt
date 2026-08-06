@@ -64,7 +64,7 @@ class RakshakApp : Application() {
         super.onCreate()
         settings = AppSettings(this)
         callerLookupSource = MockCallerLookupSource()
-        prahariApiClient = PrahariHttpApiClient(settings.prahariBaseUrl)
+        prahariApiClient = PrahariHttpApiClient(settings.prahariBaseUrl, settings.deviceId)
 
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -94,7 +94,7 @@ class RakshakApp : Application() {
 
     /** Call after the user changes the Prahari base URL in settings. */
     fun refreshPrahariClient() {
-        prahariApiClient = PrahariHttpApiClient(settings.prahariBaseUrl)
+        prahariApiClient = PrahariHttpApiClient(settings.prahariBaseUrl, settings.deviceId)
     }
 
     /**

@@ -17,6 +17,13 @@ import java.util.concurrent.TimeUnit
  */
 class PrahariHttpApiClient(
     private val baseUrl: String,
+    // Per-install UUID (AppSettings.deviceId) sent as X-Device-ID on every
+    // request so api/server.py's rate limiter can key on "this install"
+    // instead of raw client IP -- not a login, not personal info, just a
+    // random local fingerprint. Null is a valid value (e.g. a caller that
+    // hasn't wired AppSettings through) and simply omits the header, which
+    // api/server.py already treats as "fall back to IP" for backward compat.
+    private val deviceId: String? = null,
     // Tightened from connectTimeout=5s/readTimeout=8s/writeTimeout=10s
     // (OkHttp's unset default) with no overall cap — that combination let a
     // single call wait upwards of 13s (worst case ~5s+10s if the stalling
@@ -104,10 +111,11 @@ class PrahariHttpApiClient(
     }
 
     private fun post(path: String, jsonBody: String): JSONObject {
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url(baseUrl.trimEnd('/') + path)
             .post(jsonBody.toRequestBody(jsonMediaType))
-            .build()
+        deviceId?.let { requestBuilder.addHeader("X-Device-ID", it) }
+        val request = requestBuilder.build()
         try {
             client.newCall(request).execute().use { response ->
                 val raw = response.body?.string().orEmpty()

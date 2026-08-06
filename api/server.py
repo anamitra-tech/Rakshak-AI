@@ -83,11 +83,25 @@ _RATE_REAL_APP = "30/minute"
 _RATE_LLM = "10/minute"
 _RATE_DEFAULT = "30/minute"
 
+def _device_or_ip(h, b):
+    """Identity for rate limiting: prefer the Android client's per-install
+    X-Device-ID header (stable across the IP-rotation bypass -- switching
+    wifi/mobile-data/VPN changes client_address but not this header) over raw
+    client IP. Falls back to IP when the header is absent (older app builds,
+    direct API callers) so nothing regresses for callers that never send it.
+    Prefixed with "device:" so a device ID can never collide with an IP
+    string in the same rate-limit bucket."""
+    device_id = h.headers.get("X-Device-ID")
+    if device_id:
+        return f"device:{device_id}"
+    return h.client_address[0]
+
+
 # path -> (rate, identity_fn(handler, body) -> str). Falls back to
 # (_RATE_DEFAULT, client IP) for any POST path not listed here.
 _RATE_LIMIT_RULES = {
-    "/analyze_message": (_RATE_REAL_APP, lambda h, b: h.client_address[0]),
-    "/analyze_voice": (_RATE_REAL_APP, lambda h, b: h.client_address[0]),
+    "/analyze_message": (_RATE_REAL_APP, _device_or_ip),
+    "/analyze_voice": (_RATE_REAL_APP, _device_or_ip),
     "/analyze_session": (_RATE_REAL_APP, lambda h, b: str(b.get("session_id") or h.client_address[0])),
     "/case/generate": (_RATE_LLM, lambda h, b: str(b.get("session_id") or h.client_address[0])),
     "/graph/cluster_summary": (_RATE_LLM, lambda h, b: h.client_address[0]),
