@@ -114,6 +114,76 @@ and tests standalone. Swap the in-memory stores for Redis/Neo4j without touching
 
 ---
 
+## How a request actually works
+
+A few infrastructure terms come up constantly once an app leaves your laptop and runs in
+production. Here's the plain-language version, tied to what actually happens in this project.
+
+**Server, Render, DNS.** A server is just a computer that's always on, waiting for messages and
+ready to answer them. Your laptop, every time you ran `python -m api.server 8000`, *was* a
+server — just a fragile one, since it went offline the moment your laptop slept or lost internet.
+Render is a company that keeps a computer like that permanently on in a data center, so the app no
+longer depends on your laptop at all. Every internet-connected computer has a numeric address (an
+IP address); since numbers are hard to remember, we use domain names instead
+(`your-app.onrender.com`), and **DNS** (Domain Name System) is the internet's phone book — it
+exists purely to answer "I have a name, what's the real address behind it?"
+
+**One button tap, step by step.** Say you tap "Check this" in the app after typing a scam message:
+
+1. **Your phone builds a request** — the message text gets packaged into a small, structured note
+   (JSON) addressed to `your-app.onrender.com`, asking "is this a scam?"
+2. **Your phone finds the address** — it asks DNS for the real address behind that name and sends
+   the request there.
+3. **It arrives at Render, not the code yet** — Render's reverse proxy receives it first, checks
+   that it's well-formed and properly encrypted (HTTPS), then forwards it to the container running
+   the Python code.
+4. **The code wakes up and runs** — `api.server`'s `predict()` reads the message, runs it through
+   the rules and the ML model, and decides SAFE / SUSPICIOUS / FRAUD.
+5. **The code writes an answer** — a structured note back (`risk_level`, `reason`, ...) handed to
+   Render.
+6. **Render sends it back out** — the same path in reverse, back to the phone.
+7. **The phone shows the verdict** — the warning screen, if risk was flagged.
+
+Steps 1–7 typically happen in well under a second.
+
+![Request flow: phone → DNS → reverse proxy → load balancer → one of three servers → shared Redis rate-limit counter → response](docs/images/request_flow.png)
+
+**Why Redis matters once there's more than one server.** At scale, one server can't handle every
+request alone, so a company runs several copies side by side and a **load balancer** sends each
+new request to whichever copy is free — normal and necessary. The problem is only in how counting
+works underneath. Say the rate limit is "30 requests per minute" and someone sends 90 requests
+fast, across three servers (A, B, C):
+
+- *Without a shared counter:* requests 1–30 land on Server A, which counts them 1→30 and correctly
+  blocks request 31. But requests 31–60 land on Server B, which has never seen this caller before —
+  its own private counter starts fresh at 0 and lets all 30 through. Same again on Server C. Result:
+  90 requests got through a "30 per minute" limit, because each server was keeping its own private
+  count with no idea what the others had counted.
+- *With Redis:* all three servers read and write the same shared counter. It no longer matters
+  which server a given request lands on — by request 31, whichever server receives it checks Redis,
+  sees 30 entries already recorded for that identity in the last 60 seconds, and blocks it. This is
+  exactly the migration this project made in `ratelimit_memory.py` / `webhook/app.py`: both
+  deployed processes (`api.server`, `webhook.app`) now check one shared Upstash Redis counter per
+  identity instead of two independent per-process ones.
+
+**Vertical vs. horizontal scaling.** Two different answers to "my app is getting too much
+traffic":
+- *Vertical* — make the one server stronger (more RAM, a faster CPU). Simple, but there's a
+  ceiling, and if that one machine goes down, everything goes down with it.
+- *Horizontal* — add more servers instead of making one bigger, and split the work between them
+  (the three-server scenario above). This is what makes a shared counter necessary in the first
+  place — multiple copies need one source of truth, or limits like "30/minute" silently multiply by
+  however many copies are running.
+
+**Load balancer and reverse proxy.** A load balancer sits in front of several server copies and
+decides which one handles each new request, so no single copy gets overloaded while another sits
+idle. A reverse proxy is the more general version of that idea: anything that sits between the
+outside world and the real server, passing messages back and forth on its behalf, hiding the real
+server from direct exposure and often handling extra jobs like HTTPS encryption along the way — a
+load balancer is a reverse proxy whose specific job is spreading traffic across many servers.
+
+---
+
 ## Demo script (90 seconds)
 
 1. **Citizen Shield** — paste a CBI digital-arrest message → instant FRAUD + plain advice; paste a
