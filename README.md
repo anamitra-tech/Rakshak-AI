@@ -184,6 +184,21 @@ load balancer is a reverse proxy whose specific job is spreading traffic across 
 
 ---
 
+## Live deployment
+
+Two Render web services, both free tier, both confirmed live:
+
+- **`rakshak-api`** (`api.server`, the Android app's backend) — **https://rakshak-api-l9pq.onrender.com**
+- **`rakshak-webhook`** (`webhook.app`, `/whatsapp/webhook` + evidence delivery) — **https://rakshak-webhook.onrender.com**
+
+**Neither URL follows the bare `<service-name>.onrender.com` pattern you'd guess from `render.yaml`** — `rakshak-api` in particular got a random `-l9pq` suffix because the unsuffixed name was already taken by an unrelated third party. Android's `AppSettings.DEFAULT_BASE_URL` is hard-coded to the real, confirmed `-l9pq` URL above; don't "fix" it back to the shorter guess.
+
+**A real incident, fixed 2026-08-08:** migrating rate-limit storage to Upstash Redis (see above) added a hard `raise RuntimeError` in both `ratelimit_memory.py` and `webhook/app.py` if `REDIS_URL` isn't set — and it was only ever added to the local `.env`, never to Render's dashboard. Every deploy after that migration landed crashed on boot (`RuntimeError: REDIS_URL is not set`), silently, because **Render kept serving each service's last-successful build instead of taking it down** — so `/health` stayed green throughout while every new deploy was actually failing. Fixed by adding `REDIS_URL` to both services' Environment tabs directly in the Render dashboard (this is a per-service dashboard setting — it is **not** read from the repo's `.env` or `.env.example`, and there is currently no `render.yaml` env-group wiring it in automatically, so a future service recreated from the blueprint needs this added by hand). **Both redeployed clean and were verified with real traffic** (`/analyze_voice` → live FRAUD verdict; `/whatsapp/webhook` → live Twilio send), not just a green `/health` check.
+
+`.github/workflows/keep-alive.yml` pings both real `/health` endpoints every 10 minutes (plus a manual `workflow_dispatch` trigger) so Render's free-tier ~15-minute inactivity spin-down doesn't add a 40-50s+ cold start to the first real request of the day.
+
+---
+
 ## Demo script (90 seconds)
 
 1. **Citizen Shield** — paste a CBI digital-arrest message → instant FRAUD + plain advice; paste a
