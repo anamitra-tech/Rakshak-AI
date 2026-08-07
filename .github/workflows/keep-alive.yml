@@ -1,0 +1,38 @@
+name: keep-alive
+
+# Pings both Render free-tier services' /health endpoints often enough that
+# they never hit Render's ~15-minute inactivity spin-down -- a cold start
+# after spin-down costs 40-50s+ (see the port-scan/cold-start timings
+# observed directly against rakshak-api-l9pq.onrender.com while diagnosing
+# the REDIS_URL deploy failure this workflow was built alongside). Real
+# URLs only, confirmed live against the Render dashboard, not guessed:
+#   - rakshak-api      (api.server)   -> https://rakshak-api-l9pq.onrender.com
+#   - rakshak-webhook  (webhook.app)  -> https://rakshak-webhook.onrender.com
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: rakshak-api
+            url: https://rakshak-api-l9pq.onrender.com/health
+          - name: rakshak-webhook
+            url: https://rakshak-webhook.onrender.com/health
+    steps:
+      - name: Ping ${{ matrix.service.name }} /health
+        run: |
+          code=$(curl -s -o /tmp/body.txt -w "%{http_code}" --max-time 90 "${{ matrix.service.url }}")
+          echo "status=$code"
+          cat /tmp/body.txt
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::${{ matrix.service.name }} returned HTTP $code, expected 200"
+            exit 1
+          fi
