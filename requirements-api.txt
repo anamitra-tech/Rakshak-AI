@@ -18,9 +18,11 @@ httpx>=0.27
 google-genai>=1.0
 groq>=0.9
 
-# In-memory sliding-window rate limiting (ratelimit_memory.py) -- the same
+# Redis-backed sliding-window rate limiting (ratelimit_memory.py) -- the same
 # library slowapi wraps for webhook.app, called directly here since
-# api.server is a plain stdlib http.server, not FastAPI. No Redis/other
-# external service; MemoryStorage only. See API_SPEC.md's rate-limiting
-# section.
+# api.server is a plain stdlib http.server, not FastAPI. Backed by Upstash
+# Redis (REDIS_URL env var) -- shared with webhook.app's slowapi Limiter, so
+# both processes enforce one counter per identity. See API_SPEC.md's
+# rate-limiting section.
 limits>=3.0
+redis>=5.0

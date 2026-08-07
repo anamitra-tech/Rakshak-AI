@@ -71,17 +71,28 @@ app.add_middleware(
 )
 
 # ── Rate limiting ──────────────────────────────────────────────────────────
-# Layered, identity-based, in-memory sliding-window (moving-window) limiting
-# via slowapi (built on the `limits` package) -- see API_SPEC.md's rate-
-# limiting section for the full rationale. storage_uri="memory://" is a
-# deliberate scope decision: no Redis this close to submission, so limits are
-# per-process (fine here -- one process per deployed service, no horizontal
-# scaling). strategy="moving-window" is the actual sliding-window algorithm
-# (as opposed to `limits`' fixed-window/fixed-window-elastic-expiry
-# strategies), so a burst spanning a window boundary can't double the
-# effective limit. Default key_func (get_remote_address) covers every route
-# below that doesn't override it with an identity-specific key_func.
-limiter = Limiter(key_func=get_remote_address, storage_uri="memory://", strategy="moving-window")
+# Layered, identity-based, Redis-backed sliding-window (moving-window)
+# limiting via slowapi (built on the `limits` package) -- see API_SPEC.md's
+# rate-limiting section for the full rationale. storage_uri points at the
+# same Upstash Redis instance api/server.py's ratelimit_memory.py uses, via
+# the shared REDIS_URL env var, so both deployed services enforce one
+# counter per identity instead of two independent per-process ones -- the
+# correct architecture once either service scales past one instance, even
+# though at today's single-instance-per-service scale it changes nothing
+# functionally versus the prior per-process MemoryStorage.
+# strategy="moving-window" is the actual sliding-window algorithm (as
+# opposed to `limits`' fixed-window/fixed-window-elastic-expiry strategies),
+# so a burst spanning a window boundary can't double the effective limit.
+# Default key_func (get_remote_address) covers every route below that
+# doesn't override it with an identity-specific key_func.
+_REDIS_URL = os.getenv("REDIS_URL")
+if not _REDIS_URL:
+    raise RuntimeError(
+        "REDIS_URL is not set. webhook/app.py's rate limiter requires the "
+        "same shared Redis instance (Upstash free tier) api/server.py's "
+        "ratelimit_memory.py uses. Set REDIS_URL in .env."
+    )
+limiter = Limiter(key_func=get_remote_address, storage_uri=_REDIS_URL, strategy="moving-window")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
