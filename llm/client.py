@@ -23,7 +23,12 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 
 logger = logging.getLogger(__name__)
 
-GROQ_MODEL = "llama-3.1-8b-instant"  # temporarily primary -- see generate()
+# llama-3.1-8b-instant 404s on this account (2026-09-11 audit) -- Groq's own
+# docs still list it, but GET /openai/v1/models against the real key shows
+# no Llama chat models on this account at all anymore (only a
+# meta-llama/llama-prompt-guard-2-* classifier, not usable for generation).
+# openai/gpt-oss-20b is confirmed live-working against the real key/account.
+GROQ_MODEL = "openai/gpt-oss-20b"  # temporarily primary -- see generate()
 GEMINI_MODEL = "gemini-2.5-flash"  # temporarily secondary fallback -- see generate()
 # Tested against the real account/key: "nvidia/llama-3.1-nemotron-70b-instruct"
 # (the originally guessed id) returns 404 "Function ... Not found for
