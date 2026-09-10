@@ -85,14 +85,28 @@ app.add_middleware(
 # so a burst spanning a window boundary can't double the effective limit.
 # Default key_func (get_remote_address) covers every route below that
 # doesn't override it with an identity-specific key_func.
+#
+# FAIL OPEN, not fail closed (2026-09-11 incident): the Upstash database
+# this pointed at stopped resolving (DNS NXDOMAIN), and the old hard
+# `raise RuntimeError` on a missing REDIS_URL meant a dead/unset Redis took
+# the whole service down at import time -- and swallow_errors=False meant
+# even a REDIS_URL that resolves at boot but fails later would crash every
+# request instead of just skipping that one rate-limit check. Rate limiting
+# is defense-in-depth; it must never be a single point of failure for the
+# entire API. swallow_errors=True keeps slowapi's own behavior of logging
+# each storage error loudly while letting the request through unlimited.
 _REDIS_URL = os.getenv("REDIS_URL")
 if not _REDIS_URL:
-    raise RuntimeError(
-        "REDIS_URL is not set. webhook/app.py's rate limiter requires the "
-        "same shared Redis instance (Upstash free tier) api/server.py's "
-        "ratelimit_memory.py uses. Set REDIS_URL in .env."
+    logging.getLogger(__name__).warning(
+        "REDIS_URL is not set -- webhook/app.py's rate limiter is disabled "
+        "(failing open, all requests allowed) until it's configured."
     )
-limiter = Limiter(key_func=get_remote_address, storage_uri=_REDIS_URL, strategy="moving-window")
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=_REDIS_URL or "memory://",
+    strategy="moving-window",
+    swallow_errors=True,
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
