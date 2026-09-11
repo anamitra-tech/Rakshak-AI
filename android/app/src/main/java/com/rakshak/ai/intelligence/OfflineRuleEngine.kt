@@ -115,7 +115,9 @@ object OfflineRuleEngine {
         // in ml/detector.py — see that file's comment (real miss: "Send me
         // the codes here directly" for Apple Gift Card codes, not an OTP,
         // wrongly tagged otp_readout_request via the bare "code" match).
-        """(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|one-?time code)""",
+        // "spell" added 2026-09-11, mirroring ml/detector.py's same-day fix —
+        // see that file's comment for the real gap this closes.
+        """(tell|share|say|speak|send|spell)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|one-?time code)""",
         """(code|digits)\s+(that\s+)?(just\s+)?arrived""",
         """(code|digits)\s+you'?re\s+seeing""",
         """(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit""",
