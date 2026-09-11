@@ -164,6 +164,27 @@ async def _capture_whatsapp_phone(request: Request) -> None:
     request.state.rl_phone = str(form.get("From") or get_remote_address(request))[:64]
 
 
+_SELF_PING_URL = "https://rakshak-webhook.onrender.com/health"
+_SELF_PING_INTERVAL_SECONDS = 600  # 10 minutes
+
+
+def _self_ping_loop():
+    """Keeps this Render free-tier instance from spinning down after ~15min
+    idle by pinging its own /health endpoint every 10 minutes from inside
+    the running process. Redundant with .github/workflows/keep-alive.yml's
+    external ping (same 10-minute cadence, same /health target) -- kept
+    anyway as a second, independent path that doesn't depend on GitHub
+    Actions scheduling actually firing on time.
+    """
+    while True:
+        time.sleep(_SELF_PING_INTERVAL_SECONDS)
+        try:
+            resp = requests.get(_SELF_PING_URL, timeout=30)
+            logging.info(f"self-ping: {_SELF_PING_URL} -> {resp.status_code}")
+        except Exception as exc:
+            logging.warning(f"self-ping failed: {exc}")
+
+
 @app.on_event("startup")
 async def _warm_up_models():
     """Originally pre-loaded both the RAG embedding model (BAAI/bge-m3 via
@@ -183,6 +204,7 @@ async def _warm_up_models():
     EasyOCR/torch or bge-m3 anymore.
     """
     logging.info("Startup complete — no eager model warm-up on this deployment (see comment above).")
+    threading.Thread(target=_self_ping_loop, daemon=True).start()
 
 # ── /whatsapp/webhook — same classification pipeline CheckCallActivity uses
 # (analyze_voice + analyze_session), NOT the LLM/RAG bot.agent.chat() pipeline
