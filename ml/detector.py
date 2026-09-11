@@ -910,7 +910,33 @@ class ScamDetector:
             return semantic_score, semantic_scam_type
         return None
 
-    def predict(self, text):
+    def predict(self, text, source_language=None):
+        """[source_language], added 2026-09-11: an optional BCP-47/Sarvam
+        language code (e.g. "pa-IN", "te-IN") from a caller that already
+        knows the spoken/source language -- typically STT's own reported
+        language_code, which is a strictly more reliable signal than this
+        module's own script-sniffing when it's available, and (unlike
+        script detection) works even if a caller ever hands this module
+        genuinely romanized/Latin-script non-English text, which
+        detect_native_script_lang has no way to distinguish from actual
+        English/Hinglish on its own.
+
+        Investigated live before wiring this in: tested whether Sarvam's
+        STT actually returns romanized text for Punjabi/Telugu (the
+        reported symptom) -- it does not, for either language, in every
+        test run (real audio, real API calls: both came back correctly in
+        native script, with a real language_code field alongside the
+        transcript that was simply being discarded rather than actually
+        being romanized). So this parameter is a genuine, real improvement
+        for the case it targets, not a fix for the specific misclassification
+        that prompted this request -- that traced separately to Sarvam's
+        translation output being non-deterministic and Tier 2 online's LLM
+        misjudging some resulting phrasings even once correctly translated,
+        neither of which this parameter changes. See this change's commit
+        message for the full live-traced comparison.
+
+        When omitted (every existing caller), behavior is byte-identical to
+        before -- script detection still runs exactly as it always has."""
         text = (text or "").strip()
         if not text:
             return self._format("SAFE", 0.0, "Empty message.", [], {}, mode="online", engine="rules")
@@ -940,7 +966,11 @@ class ScamDetector:
         # script -- translating first cuts that dramatically (see the
         # per-language latency numbers in this change's commit message).
         text_for_llm = text
-        source_lang = detect_native_script_lang(text)
+        # Caller-provided source_language takes priority over script
+        # sniffing when given -- see this method's docstring. Falls back to
+        # detect_native_script_lang exactly as before when not provided, so
+        # no existing caller's behavior changes.
+        source_lang = source_language if source_language else detect_native_script_lang(text)
         if source_lang and source_lang != "hi-IN":
             translated = translate_text_sarvam(text, source_lang, "en-IN")
             if translated:
