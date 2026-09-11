@@ -16,7 +16,7 @@ from rag.legal_store import retrieve
 
 logger = logging.getLogger(__name__)
 
-_LLM_TIMEOUT_SECONDS = 6.0
+_LLM_TIMEOUT_SECONDS = 30.0  # widened 2026-09-11 -- matches the live rag/legal_retriever.py fix
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="legal-explainer")
 
 _NO_MATCH_ANSWER = (

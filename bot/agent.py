@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeou
 from datetime import datetime, timezone
 
 from llm.client import generate
-from rag.retriever import retrieve_and_respond
+from rag.retriever import retrieve_and_respond, _DETECTOR as _SCAM_DETECTOR
 from rag.legal_retriever import answer_legal_query
 from graph.entity_extractor import extract_all
 from ml.detector import _rule_signals
@@ -217,15 +217,28 @@ def is_verification_lure(message: str) -> bool:
 #
 # MANDATORY SAFETY BACKSTOP (see chat()): before this classifier ever runs,
 # a message is force-routed to SCAM_CHECK regardless of what the LLM would
-# say if ml.detector's deterministic rule layer fires on it (_rule_signals).
-# Without this, an LLM misreading a live scam message as GENERAL_CHAT or
-# INFORMATIONAL_QUERY (plausible — scam scripts often arrive phrased as
-# questions, "what happens if I don't pay?") would silently skip
-# ScamDetector.predict() entirely, which is the one regression the mandatory
-# eval gate (see eval_rag_testset.py) can't catch after the fact once a
-# message has already been routed away from the detector. This backstop is
-# what makes "zero change to scam-detection behavior" enforceable rather
-# than just hoped-for.
+# say if either (a) ml.detector's deterministic rule layer fires on it
+# (_rule_signals), or (b) the full ScamDetector.predict() verdict (rules +
+# trained ML score) is non-SAFE. Without this, an LLM misreading a live scam
+# message as GENERAL_CHAT or INFORMATIONAL_QUERY (plausible — scam scripts
+# often arrive phrased as questions, "what happens if I don't pay?") would
+# silently skip ScamDetector.predict() entirely, which is the one regression
+# the mandatory eval gate (see eval_rag_testset.py) can't catch after the
+# fact once a message has already been routed away from the detector. This
+# backstop is what makes "zero change to scam-detection behavior" enforceable
+# rather than just hoped-for.
+#
+# (b) was added 2026-07-21 after a real miss traced via eval_rag_testset.py's
+# iso3 case ("Sir, just hand the phone to me for two minutes, I'll do all the
+# steps myself..."): _rule_signals() returned {} for that exact phrasing (no
+# isolation_tactics regex literally matches "hand the phone to me"/"do all
+# the steps myself"), yet ScamDetector.predict() still scored it SUSPICIOUS
+# (0.613) purely off the trained ML component, with rule_categories: []. The
+# LLM router then misclassified it as GENERAL_CHAT, and (a) alone had no way
+# to catch a purely ML-driven verdict, so the message never reached
+# ScamDetector.predict() via the SCAM_CHECK path at all. Checking the real
+# verdict directly (not just whether a rule fired) closes that gap for any
+# future paraphrase that only the trained model, not a regex, catches.
 
 _VALID_INTENTS = {
     "greeting", "language_change", "scam_check",
@@ -268,7 +281,7 @@ Reply with ONLY a JSON object, nothing else, in this exact shape:
 """
 
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="intent-router")
-_INTENT_TIMEOUT_SECONDS = 6.0
+_INTENT_TIMEOUT_SECONDS = 30.0  # widened 2026-09-11 -- 6s was timing out real Groq/Gemini calls in practice
 
 
 def _format_history(session_id: str) -> str:
@@ -404,8 +417,9 @@ def chat(session_id: str, message: str) -> dict:
     lure_detected = is_verification_lure(message)
     # MANDATORY SAFETY BACKSTOP — see the doc comment above classify_intent().
     rule_hit = bool(_rule_signals(message))
+    classifier_hit = _SCAM_DETECTOR.predict(message)["risk_level"] != "SAFE"
     language_name = None
-    if lure_detected or rule_hit:
+    if lure_detected or rule_hit or classifier_hit:
         intent = "scam_check"
     else:
         intent, language_name = classify_intent(session_id, message)

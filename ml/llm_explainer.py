@@ -36,7 +36,7 @@ EXPLAIN_LEVELS = {"SUSPICIOUS", "FRAUD"}
 # is ~3.5-5s for a prompt this size (see llm_explainer latency notes / eval
 # output) — this budget is sized to usually let a real answer land rather
 # than reflexively falling back.
-EXPLAIN_TIMEOUT_SECONDS = 6.0
+EXPLAIN_TIMEOUT_SECONDS = 30.0  # widened 2026-09-11 -- 6s was timing out real Groq/Gemini calls in practice
 
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="llm-explainer")
 

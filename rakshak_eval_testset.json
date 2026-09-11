@@ -137,7 +137,9 @@
       "id": "iso3",
       "label": "scam",
       "category": "isolation_scam",
-      "text": "Sir, just hand the phone to me for two minutes, I'll do all the steps myself since this can be a bit technical, you don't need to worry about it."
+      "text": "Sir, just hand the phone to me for two minutes, I'll do all the steps myself since this can be a bit technical, you don't need to worry about it.",
+      "regression_locked": true,
+      "regression_note": "LOCKED REGRESSION CASE (found 2026-07-21 via eval_rag_testset.py): on the conversational /webhook pipeline, bot.agent.chat()'s LLM-based classify_intent() misrouted this exact phrasing to GENERAL_CHAT, silently skipping ScamDetector.predict() entirely (isolation_scam recall dropped to 5/6). Root cause: this text scores SUSPICIOUS (0.613) purely off the trained ML component — _rule_signals() returns {} for it (no isolation_tactics regex literally matches 'hand the phone to me'/'do all the steps myself'), so the pre-existing MANDATORY SAFETY BACKSTOP in chat() (which only checked _rule_signals()) had no way to override the LLM router's misclassification. Fixed by also checking the full ScamDetector.predict() verdict (rules + ML score) in the backstop, not just the rule layer — see bot/agent.py's classify_intent()/chat() doc comments. Do not remove or reword this case without re-verifying the fix still holds; this is what eval_rag_testset.py's isolation_scam recall guards against regressing again."
     },
     {
       "id": "iso4",

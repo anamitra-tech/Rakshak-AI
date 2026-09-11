@@ -281,7 +281,7 @@ Reply with ONLY a JSON object, nothing else, in this exact shape:
 """
 
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="intent-router")
-_INTENT_TIMEOUT_SECONDS = 6.0
+_INTENT_TIMEOUT_SECONDS = 30.0  # widened 2026-09-11 -- matches the live bot/agent.py fix
 
 
 def _format_history(session_id: str) -> str:
