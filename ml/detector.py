@@ -28,8 +28,31 @@ from sklearn.pipeline import FeatureUnion, Pipeline
 
 from bot.sarvam_translate import detect_native_script_lang, translate_text_sarvam
 from data.synth import generate_messages
-from llm.client import generate_fast as llm_generate_fast
-from rag.store import retrieve as rag_retrieve, store_exists as rag_store_exists
+
+# llm.client and rag.store are imported LAZILY, inside _tier2_online() and
+# _semantic_score() below, rather than at module level -- real crash found
+# live 2026-09-11: webhook.app's Render deploy runs off
+# requirements-webhook-render.txt, a deliberately trimmed dependency set
+# (see that file's own comment) that has never included google-genai/groq
+# (llm.client's module-level `from google import genai` import) or
+# torch/faiss-cpu/FlagEmbedding (rag.store's embedding stack) -- excluded
+# specifically because a prior easyocr/torch combination already OOM-killed
+# this same free-tier (512Mi) service once before. Before this session's
+# Tier 2 redesign, ml/detector.py never imported either module, so
+# webhook.app importing ScamDetector never needed them either -- adding
+# these as ordinary module-level imports here made EVERY import of
+# ml.detector fail outright wherever those packages aren't installed
+# (confirmed via the real Render crash log: ModuleNotFoundError: No module
+# named 'google', raised from webhook/app.py importing ml.detector
+# importing llm.client, at line 14's `from google import genai`) --
+# not merely "Tier 2 online/offline unavailable there", but the entire
+# process refusing to start. Deferring both imports into the one function
+# each actually calls means a deployment without these heavy/optional
+# dependencies (webhook.app's) still imports and runs fine -- Tier 1 rules
+# +ML and Tier 2 offline/online simply degrade to "unavailable" exactly as
+# they already do for every other failure mode in these two functions --
+# while a deployment that DOES have them (api.server's requirements.txt,
+# unchanged) gets the full 3-tier behavior, unaffected.
 
 logger = logging.getLogger(__name__)
 
@@ -802,6 +825,16 @@ class ScamDetector:
             return cached
 
         result = (0.0, None)
+        try:
+            from rag.store import retrieve as rag_retrieve, store_exists as rag_store_exists
+        except ImportError as e:
+            # faiss/FlagEmbedding/torch not installed on this deployment
+            # (e.g. webhook.app's deliberately-trimmed
+            # requirements-webhook-render.txt) -- degrade to "no semantic
+            # signal", same as every other failure mode below, not a crash.
+            logger.warning("Semantic similarity unavailable (rag.store import failed): %s", e)
+            self._semantic_cache[text] = result
+            return result
         if rag_store_exists():
             try:
                 matches = rag_retrieve(text, n=1)
@@ -866,6 +899,13 @@ class ScamDetector:
             '"scam_type": "string", "reason": "one sentence"}'
         )
         try:
+            # Lazy import -- see this module's top-of-file comment on why
+            # llm.client is not a module-level import here. An ImportError
+            # (google-genai not installed on this deployment) is caught by
+            # the same except-Exception below as every other Tier 2 online
+            # failure mode, degrading to Tier 2 offline rather than crashing.
+            from llm.client import generate_fast as llm_generate_fast
+
             response = llm_generate_fast(prompt, timeout_per_attempt=TIER2_ONLINE_TIMEOUT_S, total_budget=TIER2_ONLINE_TOTAL_BUDGET_S)
             raw = response.text or ""
             try:
