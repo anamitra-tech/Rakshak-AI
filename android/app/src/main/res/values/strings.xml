@@ -104,6 +104,7 @@
     <string name="complaint_draft_copy_button">Copy for NCRP complaint</string>
     <string name="complaint_draft_copied_toast">Draft copied to clipboard</string>
     <string name="notify_status_sent">%1$s has been notified by SMS.</string>
+    <string name="notify_status_opened">SMS app opened for %1$s — please tap Send to complete the alert.</string>
     <string name="notify_status_no_contact">No trusted contact configured — here\'s a complaint draft you can copy.</string>
     <string name="notify_status_permission_missing">Could not send SMS (permission not granted) — here\'s a complaint draft you can copy.</string>
     <string name="notify_status_failed">Could not send the SMS — here\'s a complaint draft you can copy.</string>
