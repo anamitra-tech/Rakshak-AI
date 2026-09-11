@@ -17,7 +17,10 @@ neither the rules nor the small prototype classifier (see CLAUDE.md Section 6
 on its training-data limits) can be trusted alone in that band. See
 predict()/_score_text()/_llm_second_opinion() below.
 """
+import hashlib
+import json
 import logging
+import os
 import re
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -26,9 +29,67 @@ from sklearn.pipeline import FeatureUnion, Pipeline
 
 from bot.sarvam_translate import detect_native_script_lang, translate_text_sarvam
 from data.synth import generate_messages
-from llm.client import generate as llm_generate
+from rag.store import retrieve as rag_retrieve, store_exists as rag_store_exists
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# 2026-09-11 THREE-TIER REDESIGN
+#
+# Tier 1 (deterministic rules+ML, below): resolves immediately at the
+# extremes. Tier 2 online (Groq) and Tier 2 offline (semantic similarity)
+# only run for the genuinely uncertain middle band. See predict() for the
+# full flow and ScamDetector's other _tier2_* methods.
+#
+# Two components were requested by name that do not exist anywhere in this
+# repo (confirmed live, not assumed): "gemma2-9b-it" -- Groq itself returns
+# `model_decommissioned` for this id, verified with a real API call, not
+# account-specific -- and "ChromaDB"/"nomic-embed-text" -- neither package
+# is installed, in requirements.txt, or referenced anywhere in this
+# codebase. The real substitutes used below: rag/store.py's FAISS index
+# (built from kb/scams.json's 78 cards) + rag/embedder.py's BAAI/bge-m3
+# model for the semantic tier (same substitution already made and
+# disclosed for the semantic layer earlier this session), and
+# GROQ_TIER2_MODEL for the LLM tier -- chosen live against this account's
+# real /v1/models list (`groq/compound[-mini]` are agentic tool-
+# orchestration wrappers, `canopylabs/orpheus-*` are TTS, `whisper-*` are
+# ASR, `meta-llama/llama-prompt-guard-2-*` are binary jailbreak
+# classifiers, `allam-2-7b` is Arabic-focused -- none of those are usable
+# chat classifiers here) among the real candidates:
+#   openai/gpt-oss-20b  : ~1000ms, correctly read Odia natively, is_scam
+#                         confidence 0.7 on a genuinely benign bill message
+#                         (a real miscalibration, but the smaller of the two)
+#   openai/gpt-oss-120b : ~1400ms, same accuracy as the 20b, no speed benefit
+#   qwen/qwen3.8-27b    : ~400-700ms (fastest), correctly read Odia
+#                         natively, but confidence 0.85-0.92 on the same
+#                         benign bill message -- MORE confidently wrong
+#                         than gpt-oss-20b on that case; one 4.4s outlier
+#                         seen in a 7-call burst (falls through to Tier 2
+#                         offline under the 3s timeout below -- intended
+#                         degradation, not a bug)
+#   qwen/qwen3.6-27b    : hard 429 on the very first call -- this account's
+#                         tier caps it at 1000 output-tokens/minute,
+#                         unusable for real-time regardless of accuracy
+# qwen/qwen3.8-27b initially won on the three requested criteria (fastest,
+# correct Odia handling, active) and was wired in first -- but further
+# testing (a handful more calls, well short of eval_testset.py's 72 cases)
+# hit the SAME hard 429 qwen3.6-27b hit on its very first call: this
+# account's tier caps `qwen/qwen3.8-27b` at 1000 output-tokens/minute too,
+# and its replies run long enough (visible chain-of-thought-style prose
+# before the JSON) to blow through that within single-digit calls. A model
+# that rate-limits after ~7 calls is not "fast enough for real-time" in
+# practice, whatever its per-call latency looks like when it succeeds --
+# switched to openai/gpt-oss-20b instead: slower per call (~1s vs
+# qwen3.8-27b's ~0.4-0.7s) but hit zero rate limits across all testing,
+# including the full 72-case eval run below, and is already this
+# codebase's own proven default (llm/client.py's GROQ_MODEL).
+# ---------------------------------------------------------------------------
+TIER1_FRAUD_THRESHOLD = 0.7
+TIER1_SAFE_THRESHOLD = 0.2
+TIER2_ONLINE_TIMEOUT_S = 3
+GROQ_TIER2_MODEL = "openai/gpt-oss-20b"
+# Requested threshold, kept as specified (see _tier2_offline).
+TIER2_OFFLINE_SEMANTIC_THRESHOLD = 0.72
 
 # ---------------------------------------------------------------------------
 # RULE LAYER — high-precision override signals
@@ -607,6 +668,21 @@ class ScamDetector:
     def __init__(self):
         self.pipe = None
         self._train()
+        # Exact-text cache for the semantic-similarity check (see
+        # _semantic_score) -- instance-level since ScamDetector is a
+        # long-lived singleton (api/server.py's DETECTOR), so this persists
+        # across requests for the process lifetime. Caches the (score,
+        # scam_type) RESULT, not just the raw embedding: the FAISS index
+        # itself is static, so a cached result is exactly reproducible and
+        # skips the embed+search work entirely on a repeat, not just the
+        # embedding step.
+        self._semantic_cache = {}
+        # Tier 2 online (Groq) cache, keyed by sha256 of the exact message
+        # text as requested ("cache by message hash") rather than the raw
+        # text itself -- functionally identical to a text-keyed dict for
+        # exact-match caching, but matches the literal ask and avoids
+        # holding arbitrarily long raw message text as a dict key.
+        self._tier2_online_cache = {}
 
     def _train(self):
         rows = generate_messages()
@@ -686,82 +762,132 @@ class ScamDetector:
 
         return score, rules, ml_fraud
 
-    def _llm_second_opinion_call(self, text):
-        """One call to the LLM chain (Groq first, per llm.client's default
-        order). Returns True only on an unambiguous SCAM verdict with stated
-        confidence > 0.6; False on SAFE, on any unparseable reply, or if
-        every LLM provider fails."""
-        # Real false positives found live testing the bare version of this
-        # prompt (no disambiguating context): Groq consistently (3/3 each,
-        # confidence 0.8-1.0) called ordinary "click here to view/download
-        # your bill/receipt" messages SCAM — see fp27/fp28 in
-        # rakshak_eval_testset.json, both previously-passing false_positive_
-        # bait cases that started failing once this second-opinion path was
-        # added. This one-sentence disambiguator, prepended ahead of the
-        # exact required question/reply-format sentence, fixed both (12/12
-        # SAFE across fp6/fp8/fp27/fp28, re-tested 3x each) with no loss of
-        # recall on genuine scams (9/9 SCAM across three tricky cases,
-        # re-tested 3x each).
+    def _semantic_score(self, text):
+        """Embeds `text` and searches the existing RAG scam-KB's FAISS
+        index (rag/store.py, built from kb/scams.json) for the closest
+        known scam card. Cache-first: an exact repeat of `text` returns
+        instantly with no re-embedding and no index/disk I/O at all.
+        Returns (score, scam_type) of the top match, or (0.0, None) if the
+        store isn't built, the lookup fails for any reason, or there was no
+        match at all -- the threshold check is the caller's job (see
+        _tier2_offline), not this method's, since Tier 2 offline's gate is
+        stricter than a bare threshold (also requires a rule signal)."""
+        cached = self._semantic_cache.get(text)
+        if cached is not None:
+            return cached
+
+        result = (0.0, None)
+        if rag_store_exists():
+            try:
+                matches = rag_retrieve(text, n=1)
+            except Exception as e:
+                logger.warning("Semantic similarity lookup failed, skipping: %s", e)
+                matches = []
+            if matches:
+                result = (float(matches[0]["score"]), matches[0]["scam_type"])
+
+        self._semantic_cache[text] = result
+        return result
+
+    def _tier2_online(self, text):
+        """TIER 2 ONLINE: one Groq call (GROQ_TIER2_MODEL, 3s timeout,
+        cached by sha256 of `text`) asking for a direct scam verdict in
+        JSON. Returns the parsed {is_scam, confidence, scam_type, reason}
+        dict on success, or None on ANY failure (no/placeholder API key,
+        timeout, network error, unparseable reply) -- None is predict()'s
+        signal to fall through to TIER 2 OFFLINE, which is also how
+        predict() decides mode="online" vs "offline" for its response."""
+        key = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        cached = self._tier2_online_cache.get(key)
+        if cached is not None:
+            return cached
+
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key or api_key == "your_groq_api_key_here":
+            return None
+
+        # Disambiguating context added 2026-09-11: the bare version of this
+        # prompt was measured live against the full 72-case eval set at
+        # FPR=0.400 (12/30 legitimate messages misflagged -- real bank
+        # OTP/KYC/bill/delivery notices, "do not share" warnings, ordinary
+        # family/work chat). Same failure class as the earlier LLM-second-
+        # opinion feature two turns ago, worse here since this tier covers
+        # a wider uncertain band (0.2-0.7) and originally replaced the
+        # score outright rather than only ever raising it.
         prompt = (
-            "A scam message typically asks for money, OTP/PIN/CVV/bank "
-            "details, or creates urgent pressure to act immediately — a "
-            "routine bill, receipt, or appointment reminder is not a scam "
-            "on its own. Is this message a scam? Reply with only SCAM or "
-            f"SAFE and a confidence 0-1. Message: {text}"
+            "IMPORTANT: These are NOT scams:\n"
+            "- Bank OTP messages that say \"do not share\" (the bank is warning you, not asking)\n"
+            "- Transaction alerts from known banks (SBI, HDFC, ICICI, Axis, Kotak)\n"
+            "- Delivery notifications from Amazon, Flipkart\n"
+            "- Bill payment reminders from official services\n"
+            "- A message is only a scam if it ASKS you to share OTP/PIN/details, not if it warns you not to\n\n"
+            "Analyze if this message is a scam targeting Indian citizens. "
+            "Consider all Indian languages.\n"
+            f"Message: {text}\n"
+            'Reply JSON: {"is_scam": true/false, "confidence": 0.0-1.0, '
+            '"scam_type": "string", "reason": "one sentence"}'
         )
         try:
-            response = llm_generate(prompt, retries=1)
+            from groq import Groq
+
+            client = Groq(api_key=api_key)
+            response = client.chat.completions.create(
+                model=GROQ_TIER2_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                timeout=TIER2_ONLINE_TIMEOUT_S,
+                response_format={"type": "json_object"},
+            )
+            parsed = json.loads(response.choices[0].message.content)
+            result = {
+                "is_scam": bool(parsed["is_scam"]),
+                "confidence": float(parsed["confidence"]),
+                "scam_type": str(parsed.get("scam_type") or ""),
+                "reason": str(parsed.get("reason") or ""),
+            }
         except Exception as e:
-            logger.warning("LLM second opinion failed, keeping rule+ML score: %s", e)
-            return False
+            logger.warning("Tier 2 online (Groq) unavailable, falling back to offline tier: %s", e)
+            return None
 
-        raw = (response.text or "").strip()
-        verdict_match = re.search(r"\b(SCAM|SAFE)\b", raw, re.IGNORECASE)
-        confidence_match = re.search(r"(\d+(?:\.\d+)?)", raw)
-        if not verdict_match or not confidence_match:
-            logger.warning("LLM second opinion reply unparseable, keeping rule+ML score: %r", raw)
-            return False
+        self._tier2_online_cache[key] = result
+        return result
 
-        try:
-            confidence = float(confidence_match.group(1))
-        except ValueError:
-            return False
-        if confidence > 1.0:  # tolerate a percentage-style reply, e.g. "SCAM, 85"
-            confidence /= 100.0
-
-        return verdict_match.group(1).upper() == "SCAM" and confidence > 0.6
-
-    def _llm_second_opinion(self, text):
-        """Requires TWO independent calls to both come back confident SCAM
-        before upgrading the score (see predict()) — a single call, even
-        with the disambiguated prompt above, was still measured to
-        occasionally misfire on an ordinary transactional message (fp27
-        flipped in 1 of 2 full eval runs during testing, ~SAFE 5/6 - SCAM
-        1/6 sample split). Requiring both calls to agree roughly squares
-        that single-call false-positive rate, at the cost of a second ~1s
-        Groq call, only ever paid inside the already-uncertain 0.3-0.7
-        band. A single SAFE response is enough to skip the second call
-        entirely, so a clearly-safe message never pays the extra latency."""
-        first = self._llm_second_opinion_call(text)
-        if not first:
-            return False
-        return self._llm_second_opinion_call(text)
+    def _tier2_offline(self, text, rule_categories):
+        """TIER 2 OFFLINE: semantic similarity, but double-gated as
+        requested -- only "upgrades" (predict() takes max(tier1_score,
+        semantic_score)) when semantic_score > TIER2_OFFLINE_SEMANTIC_THRESHOLD
+        AND at least one Tier 1 rule category already matched. Requiring
+        both was explicitly requested as a false-positive guard, and
+        matches what an earlier, single-gated version of this same
+        semantic layer measured live: raw top-1 similarity against this
+        card corpus doesn't separate scam from safe well enough alone
+        (SCAM cases ranged 0.427-0.732, SAFE cases 0.459-0.712, almost
+        total overlap) -- requiring a rule hit too means a message with NO
+        rule signal at all (most of the false positives that regression
+        surfaced) can never be upgraded by semantic similarity alone,
+        however high its score."""
+        if rule_categories < 1:
+            return None
+        semantic_score, semantic_scam_type = self._semantic_score(text)
+        if semantic_scam_type and semantic_score > TIER2_OFFLINE_SEMANTIC_THRESHOLD:
+            return semantic_score, semantic_scam_type
+        return None
 
     def predict(self, text):
         text = (text or "").strip()
         if not text:
-            return self._format("SAFE", 0.0, "Empty message.", [], {})
+            return self._format("SAFE", 0.0, "Empty message.", [], {}, mode="online", engine="rules")
 
-        score, rules, ml_fraud = self._score_text(text)
-
-        # Translation layer: for any of the 10 non-English/Hindi target
-        # languages' native scripts, translate to English via Sarvam and
-        # score the translation too, keeping whichever run scored higher.
+        # TIER 1: deterministic rules + ML, on both the original text and
+        # (for any of the 10 non-English/Hindi target languages' native
+        # scripts) a Sarvam translation, keeping whichever scored higher.
         # English/Hindi/Hinglish (Latin script, or Devanagari — "hi-IN")
         # already work directly against this module's own patterns, so
         # they're excluded here the same way
         # bot.sarvam_translate.detect_native_script_lang already treats
         # Latin script as translation-exempt; source_lang is None for both.
+        # This is unchanged from the prior multilingual upgrade -- still
+        # "the existing rule layer" this redesign's Tier 1 refers to.
+        score, rules, ml_fraud = self._score_text(text)
         source_lang = detect_native_script_lang(text)
         if source_lang and source_lang != "hi-IN":
             translated = translate_text_sarvam(text, source_lang, "en-IN")
@@ -770,18 +896,65 @@ class ScamDetector:
                 if t_score > score:
                     score, rules, ml_fraud = t_score, t_rules, t_ml_fraud
 
-        # LLM second opinion: the rule+ML score alone is least trustworthy in
-        # the 0.3-0.7 band — clearly not SAFE-confident, not already a rule
-        # override — so ask the LLM chain and let an unambiguous, confident
-        # SCAM verdict lift a genuine scam that the rules/prototype
-        # classifier under-scored (see CLAUDE.md Section 6 on that
-        # classifier's real, documented limits) up into SUSPICIOUS/FRAUD
-        # territory. Never runs outside that band, so a clear SAFE or a
-        # clear FRAUD from the rules/ML never pays this extra latency.
-        if 0.3 <= score <= 0.7 and self._llm_second_opinion(text):
-            score = max(score, 0.75)
+        # TIER 1 immediate resolution at the extremes -- no LLM/semantic
+        # call, no network, ever, for these two bands.
+        if score >= TIER1_FRAUD_THRESHOLD:
+            level = "FRAUD"
+            signals = self.build_signals(rules)
+            reason = self.build_reason(level, rules, ml_fraud)
+            return self._format(level, round(score, 3), reason, signals, rules, mode="online", engine="rules")
+        if score <= TIER1_SAFE_THRESHOLD:
+            level = "SAFE"
+            signals = self.build_signals(rules)
+            reason = self.build_reason(level, rules, ml_fraud)
+            return self._format(level, round(score, 3), reason, signals, rules, mode="online", engine="rules")
 
-        if score >= 0.7:
+        # UNCERTAIN ZONE (TIER1_SAFE_THRESHOLD, TIER1_FRAUD_THRESHOLD):
+        # neither a clear SAFE nor a clear FRAUD from the rules/ML alone --
+        # try TIER 2 ONLINE first; None (missing key, timeout, network
+        # error, unparseable reply) means "no internet" for this purpose,
+        # so fall through to TIER 2 OFFLINE.
+        tier2_online = self._tier2_online(text)
+        if tier2_online is not None:
+            llm_says_scam = tier2_online["is_scam"]
+            llm_score = tier2_online["confidence"] if llm_says_scam else (1.0 - tier2_online["confidence"])
+            # Changed 2026-09-11: this used to be `final_score = llm_score`
+            # (a full replacement of the Tier 1 rule score) -- measured live
+            # at FPR=0.400 on the 72-case eval, since a wrong LLM verdict had
+            # no rule-based floor/ceiling to check it against at all. Now:
+            # a SCAM verdict can only ever raise the score (max with the
+            # Tier 1 rule score), and a SAFE verdict can only ever lower it
+            # (min) -- so the LLM can push a genuine scam the rules under-
+            # scored up into FRAUD/SUSPICIOUS, or pull a rule-driven false
+            # positive back down toward SAFE, but never invert a strong
+            # rule signal in either direction on its own.
+            final_score = max(score, llm_score) if llm_says_scam else min(score, llm_score)
+            if final_score >= TIER1_FRAUD_THRESHOLD:
+                level = "FRAUD"
+            elif final_score >= SUSPICIOUS_THRESHOLD:
+                level = "SUSPICIOUS"
+            else:
+                level = "SAFE"
+            signals = self.build_signals(rules)
+            if llm_says_scam and tier2_online["scam_type"]:
+                signals = signals + [f"LLM-flagged scam type: {tier2_online['scam_type']}"]
+            reason = tier2_online["reason"] or self.build_reason(level, rules, ml_fraud)
+            return self._format(level, round(final_score, 3), reason, signals, rules, mode="online", engine="llm")
+
+        # TIER 2 OFFLINE: double-gated semantic similarity (see
+        # _tier2_offline) -- only ever raises score, never replaces it the
+        # way Tier 2 online's llm_score does, since a similarity match is
+        # weaker evidence than a direct LLM verdict.
+        engine = "rules"
+        offline_match = self._tier2_offline(text, len(rules))
+        if offline_match is not None:
+            semantic_score, semantic_scam_type = offline_match
+            score = max(score, semantic_score)
+            rules = dict(rules)
+            rules["semantic_similarity"] = 1
+            engine = "semantic"
+
+        if score >= TIER1_FRAUD_THRESHOLD:
             level = "FRAUD"
         elif score >= SUSPICIOUS_THRESHOLD:
             level = "SUSPICIOUS"
@@ -790,7 +963,7 @@ class ScamDetector:
 
         signals = self.build_signals(rules)
         reason = self.build_reason(level, rules, ml_fraud)
-        return self._format(level, round(score, 3), reason, signals, rules)
+        return self._format(level, round(score, 3), reason, signals, rules, mode="offline", engine=engine)
 
     def build_signals(self, rules):
         label = {
@@ -810,6 +983,7 @@ class ScamDetector:
             "job_fraud": "Asks you to pay a deposit/fee to secure a job offer, interview, or training slot",
             "universal_scam_pattern": "Combines an official-sounding benefit/approval claim with a request to verify, confirm, or update your bank/account details before you receive anything",
             "social_engineering": "Uses a prize/lottery hook or a relative/authority-relay preamble to lead into a card/PIN/OTP number request",
+            "semantic_similarity": "Semantically similar to a known scam pattern in the knowledge base",
         }
         return [label[k] for k in rules]
 
@@ -829,7 +1003,7 @@ class ScamDetector:
         parts = self.build_signals(rules)
         return f"{level}: detected {len(parts)} risk signal(s) — " + "; ".join(parts) + "."
 
-    def _format(self, level, score, reason, signals, rules):
+    def _format(self, level, score, reason, signals, rules, mode="online", engine="rules"):
         return {
             "risk_level": level,
             "score": score,
@@ -837,6 +1011,8 @@ class ScamDetector:
             "signals": signals,
             "recommended_action": ACTION_BY_LEVEL[level],
             "rule_categories": list(rules.keys()),
+            "mode": mode,
+            "engine": engine,
         }
 
 
