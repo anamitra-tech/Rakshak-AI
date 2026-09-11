@@ -4,13 +4,31 @@ MODULE 1 — Real-Time Scam Detection Engine.
 Hybrid: TF-IDF + Logistic Regression baseline, combined with a deterministic
 rule-based override layer for high-risk patterns. Supports Hinglish/Hindi/English
 via char + word n-grams (robust to transliteration and obfuscation).
+
+2026-09-11 multilingual/subtle-scam upgrade: this module now also (1)
+translates any of the other 10 target-language native scripts to English via
+Sarvam before scoring (Hindi/English/Hinglish already work directly on this
+module's own patterns, so they're excluded the same way
+bot.sarvam_translate.detect_native_script_lang already treats Latin script as
+translation-exempt) and classifies both the original and translated text,
+keeping whichever score is higher; and (2) asks an LLM for a second opinion
+when the rule+ML score lands in the genuinely uncertain 0.3-0.7 band, since
+neither the rules nor the small prototype classifier (see CLAUDE.md Section 6
+on its training-data limits) can be trusted alone in that band. See
+predict()/_score_text()/_llm_second_opinion() below.
 """
+import logging
 import re
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 
+from bot.sarvam_translate import detect_native_script_lang, translate_text_sarvam
 from data.synth import generate_messages
+from llm.client import generate as llm_generate
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # RULE LAYER — high-precision override signals
@@ -146,7 +164,14 @@ HIGH_RISK_PATTERNS = {
         # discipline and violated it. Requiring "otp"/"verification code"/
         # "one-time code" etc. explicitly (never bare "code") brings it in
         # line with every pattern added since.
-        r"(tell|share|say|speak|send)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|one-?time code)",
+        # "spell" added 2026-09-11: real gap found live -- "Just spell the 6
+        # digit OTP on your phone to claim" scored FRAUD only via the
+        # nondeterministic LLM second-opinion path (rule_categories=[]),
+        # since none of tell/share/say/speak/send covers "spell it out"
+        # readout phrasing. Same near-deterministic confidence as the other
+        # readout verbs here -- no legitimate caller asks you to spell out
+        # a one-time code either.
+        r"(tell|share|say|speak|send|spell)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|one-?time code)",
         r"(code|digits)\s+(that\s+)?(just\s+)?arrived",
         r"(code|digits)\s+you'?re\s+seeing",
         r"(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit",
@@ -375,6 +400,77 @@ HIGH_RISK_PATTERNS = {
         r"(deposit|fee|paise|rupaye|advance|shulk).{0,40}(job|naukri|training|seat|slot)"
         r".{0,40}(confirm|book|reserve|pakka)\s*karna\s*(hoga|padega)",
     ],
+    # Added 2026-09-11 (multilingual/subtle-scam upgrade). Matched against the
+    # same whitespace-collapsed, lowercased copy every other category uses,
+    # AFTER translation to English for any of the 10 non-English/Hindi target
+    # languages — so these are written as plain English phrasing only, no
+    # Hinglish/Devanagari variants needed (translate_text_sarvam already
+    # produces English before this ever runs). Lookaheads (not sequential
+    # `.{0,N}` chains) are used deliberately so each combo fires regardless of
+    # which order the phrases appear in — translation output doesn't
+    # guarantee the same clause order as the source.
+    #
+    # First four patterns are the exact combos requested: bank-details +
+    # verification + government-scheme; account-will-be-blocked + urgency;
+    # confirm-your-details + before-amount-released; apply-now + bank-
+    # information-required. The fifth generalizes the real shape behind all
+    # of them — a "good news" benefit/payment trigger (approved/sanctioned/
+    # payment pending/selected/eligible) paired with an instruction to
+    # verify/confirm/update bank or account details — the "verify your
+    # details to receive this benefit" phishing script used for fake
+    # government-scheme, loan, subsidy, and welfare-payment (e.g. NREGA)
+    # lures. Traced live against three real tricky cases that don't use the
+    # literal combo wording at all ("Bank verification needed before
+    # release" has no "details" word; "verify account details to proceed"
+    # names no government scheme; "Update bank details ... to receive
+    # amount" names no scheme either) — neither job_fraud (requires job/
+    # interview framing) nor malicious_link_bait (requires an explicit
+    # click/tap/open instruction tied to a suspension/parcel/prize threat)
+    # covers this distinct "you're getting money, just confirm your details
+    # first" shape.
+    "universal_scam_pattern": [
+        r"(?=.*\bbank\b)(?=.*verif)(?=.*government scheme)",
+        r"(?=.*account will be blocked)(?=.*\b(immediately|within \d+|urgent(ly)?|hurry|turant|abhi|right away|as soon as possible|asap)\b)",
+        r"(?=.*\b(confirm|verify)\b.{0,10}(your |the )?details)"
+        r"(?=.*before.{0,10}(the )?amount.{0,15}(is |will be |gets )?(released|credited|disbursed|paid|transferred))",
+        r"(?=.*\bapply now\b)(?=.*bank (information|details).{0,10}(is |are )?required)",
+        r"(?=.*(approved|sanctioned|payment (is |has been )?pending|selected|eligible|shortlisted))"
+        r"(?=.*\b(verify|confirm|update|provide)\b.{0,30}(bank|account)\b.{0,15}(detail|information))",
+    ],
+    # Added 2026-09-11: card/PIN/OTP digit-count readout phrasing and prize-
+    # framing not already covered by otp_readout_request/reward_bait, plus
+    # relative/authority-relay social-engineering preludes ("your father's
+    # friend", "he told me to", "no need to panic", "we are here to help")
+    # that precede a credential ask in real digital-arrest/family-emergency
+    # scripts. Ported from a user-supplied pattern list; bounded `.{0,N}`
+    # gaps used in place of the originally-suggested unbounded `.*` to match
+    # this file's existing style (avoids pathological/greedy over-matching
+    # across an entire long message). The four bare reassurance/relay
+    # phrases ("no need to panic" etc.) are deliberately NOT added as
+    # standalone patterns — each is far too common in ordinary benign
+    # messages to flag alone (see this category's own design precedent:
+    # isolation_tactics/relative_impersonation/job_fraud all require a
+    # second, specific co-occurring concept rather than a bare phrase) — so
+    # each is tied to a nearby credential/card/OTP/PIN context instead.
+    "social_engineering": [
+        r"card.{0,20}(3|three).{0,10}(digit|number)",
+        r"\botp\b.{0,15}(spell|say|tell|share|read)",
+        r"pin.{0,20}(6|six|3|three).{0,10}(digit|number)",
+        r"lottery.{0,20}(won|win|winner|congratulation)",
+        r"won.{0,20}(car|bike|iphone|prize|cash|lakh|crore)",
+        r"congratulations.{0,20}(won|winner)", r"\blucky winner\b", r"\bjeeta hai\b",
+        r"3.{0,5}digit.{0,20}card", r"card.{0,20}cvv", r"cvv.{0,20}(3|three).{0,10}(digit|number)",
+        # Relative/authority-relay prelude + credential/card context
+        # (English + Hinglish variants).
+        r"(your father|papa ke dost|papa ne bheja|his father|her father|uncle ne bola)"
+        r".{0,120}(otp|pin|cvv|card|tell me|batao|bata do)",
+        r"(he told me to|unhone kaha)"
+        r".{0,80}(otp|pin|cvv|card|tell me|batao|bata do)",
+        r"(no need to panic|ghabrao mat|tension mat lo|we are here to help|hum help karne aaye)"
+        r".{0,120}(otp|pin|cvv|card|share|tell|batao)",
+        r"(just tell me|sirf batao|bas ek kaam)"
+        r".{0,60}(otp|pin|cvv|card|number|digit)",
+    ],
 }
 
 # Surfaced verbatim to the user when the matching near-deterministic rule
@@ -513,11 +609,12 @@ class ScamDetector:
         self.pipe.fit(X, y)
         self.classes_ = list(self.pipe.named_steps["clf"].classes_)
 
-    def predict(self, text):
-        text = (text or "").strip()
-        if not text:
-            return self._format("SAFE", 0.0, "Empty message.", [], {})
-
+    def _score_text(self, text):
+        """Pure scoring, no translation/LLM/level-decision — factored out of
+        predict() so it can be run once on the original text and, for
+        non-English/Hindi input, once more on a Sarvam translation, letting
+        predict() pick whichever run scored higher (see predict()'s docstring
+        note at the top of this module). Returns (score, rules, ml_fraud)."""
         proba = self.pipe.predict_proba([text])[0]
         pmap = dict(zip(self.classes_, proba))
         ml_fraud = float(pmap.get("FRAUD", 0.0))
@@ -573,6 +670,103 @@ class ScamDetector:
         if NEAR_DETERMINISTIC_RULES.keys() & rules.keys():
             score = max(score, 0.95)
 
+        return score, rules, ml_fraud
+
+    def _llm_second_opinion_call(self, text):
+        """One call to the LLM chain (Groq first, per llm.client's default
+        order). Returns True only on an unambiguous SCAM verdict with stated
+        confidence > 0.6; False on SAFE, on any unparseable reply, or if
+        every LLM provider fails."""
+        # Real false positives found live testing the bare version of this
+        # prompt (no disambiguating context): Groq consistently (3/3 each,
+        # confidence 0.8-1.0) called ordinary "click here to view/download
+        # your bill/receipt" messages SCAM — see fp27/fp28 in
+        # rakshak_eval_testset.json, both previously-passing false_positive_
+        # bait cases that started failing once this second-opinion path was
+        # added. This one-sentence disambiguator, prepended ahead of the
+        # exact required question/reply-format sentence, fixed both (12/12
+        # SAFE across fp6/fp8/fp27/fp28, re-tested 3x each) with no loss of
+        # recall on genuine scams (9/9 SCAM across three tricky cases,
+        # re-tested 3x each).
+        prompt = (
+            "A scam message typically asks for money, OTP/PIN/CVV/bank "
+            "details, or creates urgent pressure to act immediately — a "
+            "routine bill, receipt, or appointment reminder is not a scam "
+            "on its own. Is this message a scam? Reply with only SCAM or "
+            f"SAFE and a confidence 0-1. Message: {text}"
+        )
+        try:
+            response = llm_generate(prompt, retries=1)
+        except Exception as e:
+            logger.warning("LLM second opinion failed, keeping rule+ML score: %s", e)
+            return False
+
+        raw = (response.text or "").strip()
+        verdict_match = re.search(r"\b(SCAM|SAFE)\b", raw, re.IGNORECASE)
+        confidence_match = re.search(r"(\d+(?:\.\d+)?)", raw)
+        if not verdict_match or not confidence_match:
+            logger.warning("LLM second opinion reply unparseable, keeping rule+ML score: %r", raw)
+            return False
+
+        try:
+            confidence = float(confidence_match.group(1))
+        except ValueError:
+            return False
+        if confidence > 1.0:  # tolerate a percentage-style reply, e.g. "SCAM, 85"
+            confidence /= 100.0
+
+        return verdict_match.group(1).upper() == "SCAM" and confidence > 0.6
+
+    def _llm_second_opinion(self, text):
+        """Requires TWO independent calls to both come back confident SCAM
+        before upgrading the score (see predict()) — a single call, even
+        with the disambiguated prompt above, was still measured to
+        occasionally misfire on an ordinary transactional message (fp27
+        flipped in 1 of 2 full eval runs during testing, ~SAFE 5/6 - SCAM
+        1/6 sample split). Requiring both calls to agree roughly squares
+        that single-call false-positive rate, at the cost of a second ~1s
+        Groq call, only ever paid inside the already-uncertain 0.3-0.7
+        band. A single SAFE response is enough to skip the second call
+        entirely, so a clearly-safe message never pays the extra latency."""
+        first = self._llm_second_opinion_call(text)
+        if not first:
+            return False
+        return self._llm_second_opinion_call(text)
+
+    def predict(self, text):
+        text = (text or "").strip()
+        if not text:
+            return self._format("SAFE", 0.0, "Empty message.", [], {})
+
+        score, rules, ml_fraud = self._score_text(text)
+
+        # Translation layer: for any of the 10 non-English/Hindi target
+        # languages' native scripts, translate to English via Sarvam and
+        # score the translation too, keeping whichever run scored higher.
+        # English/Hindi/Hinglish (Latin script, or Devanagari — "hi-IN")
+        # already work directly against this module's own patterns, so
+        # they're excluded here the same way
+        # bot.sarvam_translate.detect_native_script_lang already treats
+        # Latin script as translation-exempt; source_lang is None for both.
+        source_lang = detect_native_script_lang(text)
+        if source_lang and source_lang != "hi-IN":
+            translated = translate_text_sarvam(text, source_lang, "en-IN")
+            if translated:
+                t_score, t_rules, t_ml_fraud = self._score_text(translated)
+                if t_score > score:
+                    score, rules, ml_fraud = t_score, t_rules, t_ml_fraud
+
+        # LLM second opinion: the rule+ML score alone is least trustworthy in
+        # the 0.3-0.7 band — clearly not SAFE-confident, not already a rule
+        # override — so ask the LLM chain and let an unambiguous, confident
+        # SCAM verdict lift a genuine scam that the rules/prototype
+        # classifier under-scored (see CLAUDE.md Section 6 on that
+        # classifier's real, documented limits) up into SUSPICIOUS/FRAUD
+        # territory. Never runs outside that band, so a clear SAFE or a
+        # clear FRAUD from the rules/ML never pays this extra latency.
+        if 0.3 <= score <= 0.7 and self._llm_second_opinion(text):
+            score = max(score, 0.75)
+
         if score >= 0.7:
             level = "FRAUD"
         elif score >= SUSPICIOUS_THRESHOLD:
@@ -600,6 +794,8 @@ class ScamDetector:
             "malicious_link_bait": "Pressures you to click a link, tied to an account/KYC suspension threat, a parcel/delivery hold, or a prize claim",
             "malware_attachment_delivery": "Asks you to forward an attachment (e.g. to a finance/accounts contact) and open it on a computer, or names a risky file type (.zip/.exe/.docm/etc.)",
             "job_fraud": "Asks you to pay a deposit/fee to secure a job offer, interview, or training slot",
+            "universal_scam_pattern": "Combines an official-sounding benefit/approval claim with a request to verify, confirm, or update your bank/account details before you receive anything",
+            "social_engineering": "Uses a prize/lottery hook or a relative/authority-relay preamble to lead into a card/PIN/OTP number request",
         }
         return [label[k] for k in rules]
 
