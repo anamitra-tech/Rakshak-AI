@@ -2018,7 +2018,6 @@ async def stt_sarvam(request: Request, file: UploadFile = File(...), mode: str =
 
 
 @app.post("/ocr/tesseract")
-@limiter.limit(_RATE_MEDIA)
 async def ocr_tesseract(request: Request, file: UploadFile = File(...), lang: str = Form(...)):
     """Called by the Android app's ocr/CloudOcrClient.kt — online-only OCR
     for the 9 scripts ML Kit's on-device recognizer doesn't cover. [lang]
