@@ -138,6 +138,12 @@ object OfflineRuleEngine {
         """ओटीपी.{0,12}(बताएं|बताइए|दें|सूचित करें|चाहिए)""",
         """confirm\s+the\s+(verification|security|authentication|transaction)\s+code""",
         """confirm\s+the\s+code\s+(that'?s\s+|currently\s+|showing\s+)?on\s+(your|the)\s+screen""",
+        // "enter" added 2026-09-11, mirroring ml/detector.py's same-day fix
+        // (real miss on a genuine Telugu scam, via Sarvam's non-deterministic
+        // translation) -- see that file's comment for why this is gated on
+        // an account-jeopardy phrase rather than added to the bare verb list.
+        """(?=.*\b(block|blocked|lock|locked|unlock|suspend|suspended|deactivat\w*|freeze|frozen)\b)""" +
+            """(?=.*\b(enter|type|input)\b.{0,15}(your\s+|the\s+)?(otp|pin|cvv|one-?time password))""",
     ).map { Regex(it) }
 
     private val CARD_COLLECTION_PATTERNS = listOf(

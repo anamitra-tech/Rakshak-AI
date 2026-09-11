@@ -20,7 +20,6 @@ predict()/_score_text()/_llm_second_opinion() below.
 import hashlib
 import json
 import logging
-import os
 import re
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -29,6 +28,7 @@ from sklearn.pipeline import FeatureUnion, Pipeline
 
 from bot.sarvam_translate import detect_native_script_lang, translate_text_sarvam
 from data.synth import generate_messages
+from llm.client import generate_fast as llm_generate_fast
 from rag.store import retrieve as rag_retrieve, store_exists as rag_store_exists
 
 logger = logging.getLogger(__name__)
@@ -86,8 +86,15 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 TIER1_FRAUD_THRESHOLD = 0.7
 TIER1_SAFE_THRESHOLD = 0.2
-TIER2_ONLINE_TIMEOUT_S = 3
-GROQ_TIER2_MODEL = "openai/gpt-oss-20b"
+# 2026-09-11: raised from 3s to 8s and given a 20s total-budget partner
+# below -- this is now the PER-ATTEMPT timeout passed to
+# llm.client.generate_fast()'s Groq->Gemini->Nemotron->Ollama rotation,
+# not a single Groq-only call. The model choice itself (openai/gpt-oss-20b
+# -- see the model-selection notes above) now lives in llm/client.py's own
+# GROQ_MODEL, since Tier 2 online goes through that shared rotation chain
+# rather than calling Groq directly.
+TIER2_ONLINE_TIMEOUT_S = 8
+TIER2_ONLINE_TOTAL_BUDGET_S = 20
 # Requested threshold, kept as specified (see _tier2_offline).
 TIER2_OFFLINE_SEMANTIC_THRESHOLD = 0.72
 
@@ -280,6 +287,24 @@ HIGH_RISK_PATTERNS = {
         # identical.
         r"confirm\s+the\s+(verification|security|authentication|transaction)\s+code",
         r"confirm\s+the\s+code\s+(that'?s\s+|currently\s+|showing\s+)?on\s+(your|the)\s+screen",
+        # "enter" added 2026-09-11: real miss traced live through a genuine
+        # Telugu scam ("your bank account will be blocked, [provide/enter]
+        # the OTP") -- Sarvam's translation is non-deterministic (confirmed:
+        # 4 calls on the identical Telugu input produced 3 different English
+        # phrasings), and whichever variant used "enter" instead of
+        # provide/give/share/tell/spell slipped through every existing
+        # pattern here, staying in the uncertain zone where Tier 2 online
+        # also misjudged it as "incomplete." Deliberately NOT added to the
+        # bare tell/share/provide alternations above: "enter your OTP" alone
+        # is extremely common in genuinely legitimate 2FA prompts ("enter
+        # the OTP to complete your purchase"), so unlike every other pattern
+        # in this near-deterministic category, this one is gated on an
+        # account-jeopardy phrase co-occurring in the same message (lookahead,
+        # order-independent, same technique as universal_scam_pattern) --
+        # "enter your OTP" bare stays unflagged; "your account will be
+        # blocked/locked/suspended/unlocked ... enter your OTP" is not.
+        r"(?=.*\b(block|blocked|lock|locked|unlock|suspend|suspended|deactivat\w*|freeze|frozen)\b)"
+        r"(?=.*\b(enter|type|input)\b.{0,15}(your\s+|the\s+)?(otp|pin|cvv|one-?time password))",
     ],
     # Someone arriving in person to physically take an EXISTING/active card
     # (or asking the PIN be kept ready/written down for them) — as opposed to
@@ -790,21 +815,34 @@ class ScamDetector:
         return result
 
     def _tier2_online(self, text):
-        """TIER 2 ONLINE: one Groq call (GROQ_TIER2_MODEL, 3s timeout,
-        cached by sha256 of `text`) asking for a direct scam verdict in
-        JSON. Returns the parsed {is_scam, confidence, scam_type, reason}
-        dict on success, or None on ANY failure (no/placeholder API key,
-        timeout, network error, unparseable reply) -- None is predict()'s
-        signal to fall through to TIER 2 OFFLINE, which is also how
-        predict() decides mode="online" vs "offline" for its response."""
+        """TIER 2 ONLINE: asks the Groq -> Gemini -> Nemotron -> Ollama
+        rotation chain (llm.client.generate_fast -- 8s per attempt, 20s
+        total budget, Groq skipped outright during its post-429 cooldown)
+        for a direct scam verdict in JSON. Cached by sha256 of `text`.
+        Returns the parsed {is_scam, confidence, scam_type, reason,
+        llm_engine} dict on success, or None if every engine in the chain
+        failed/timed out within budget -- None is predict()'s signal to
+        fall through to TIER 2 OFFLINE, which is also how predict()
+        decides mode="online" vs "offline" for its response.
+
+        `text` here is predict()'s `text_for_llm` -- the Sarvam
+        translation when one succeeded, not necessarily the original
+        message -- specifically because Groq measured live at 36.6s
+        end-to-end on a raw Bengali message (over 2x the Android client's
+        15s callTimeout), vs. single-digit seconds once translated to
+        English first (see predict()'s comment and this change's commit
+        message for the actual per-language numbers).
+
+        Only Groq's own JSON mode (response_format=json_object) is used
+        by generate_fast() internally; Gemini/Nemotron/Ollama have no
+        equivalent, so the reply is parsed leniently here -- a direct
+        json.loads() first, falling back to extracting the first
+        {...} block from the raw text -- rather than assuming every
+        engine in the rotation returns clean, unwrapped JSON."""
         key = hashlib.sha256(text.encode("utf-8")).hexdigest()
         cached = self._tier2_online_cache.get(key)
         if cached is not None:
             return cached
-
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key or api_key == "your_groq_api_key_here":
-            return None
 
         # Disambiguating context added 2026-09-11: the bare version of this
         # prompt was measured live against the full 72-case eval set at
@@ -828,24 +866,24 @@ class ScamDetector:
             '"scam_type": "string", "reason": "one sentence"}'
         )
         try:
-            from groq import Groq
-
-            client = Groq(api_key=api_key)
-            response = client.chat.completions.create(
-                model=GROQ_TIER2_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                timeout=TIER2_ONLINE_TIMEOUT_S,
-                response_format={"type": "json_object"},
-            )
-            parsed = json.loads(response.choices[0].message.content)
+            response = llm_generate_fast(prompt, timeout_per_attempt=TIER2_ONLINE_TIMEOUT_S, total_budget=TIER2_ONLINE_TOTAL_BUDGET_S)
+            raw = response.text or ""
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                match = re.search(r"\{.*\}", raw, re.DOTALL)
+                if not match:
+                    raise
+                parsed = json.loads(match.group(0))
             result = {
                 "is_scam": bool(parsed["is_scam"]),
                 "confidence": float(parsed["confidence"]),
                 "scam_type": str(parsed.get("scam_type") or ""),
                 "reason": str(parsed.get("reason") or ""),
+                "llm_engine": response.engine,
             }
         except Exception as e:
-            logger.warning("Tier 2 online (Groq) unavailable, falling back to offline tier: %s", e)
+            logger.warning("Tier 2 online (all LLM engines) unavailable, falling back to offline tier: %s", e)
             return None
 
         self._tier2_online_cache[key] = result
@@ -888,10 +926,25 @@ class ScamDetector:
         # This is unchanged from the prior multilingual upgrade -- still
         # "the existing rule layer" this redesign's Tier 1 refers to.
         score, rules, ml_fraud = self._score_text(text)
+        # text_for_llm: what Tier 2 online sends to Groq (see below) --
+        # defaults to the original text (English/Hindi/Hinglish, or any
+        # language if translation fails) and becomes the Sarvam
+        # translation when one succeeds. Rule matching above and the
+        # semantic check in Tier 2 offline still always see the original
+        # `text`, unaffected by this -- this only changes what Tier 2
+        # online is sent, added 2026-09-11 after a real live measurement:
+        # a Bengali message sent to Groq untranslated took 36.6s
+        # end-to-end (over 2x the Android client's 15s callTimeout,
+        # directly causing the "no internet" fallback), because Groq
+        # processes English input meaningfully faster than non-English
+        # script -- translating first cuts that dramatically (see the
+        # per-language latency numbers in this change's commit message).
+        text_for_llm = text
         source_lang = detect_native_script_lang(text)
         if source_lang and source_lang != "hi-IN":
             translated = translate_text_sarvam(text, source_lang, "en-IN")
             if translated:
+                text_for_llm = translated
                 t_score, t_rules, t_ml_fraud = self._score_text(translated)
                 if t_score > score:
                     score, rules, ml_fraud = t_score, t_rules, t_ml_fraud
@@ -914,7 +967,7 @@ class ScamDetector:
         # try TIER 2 ONLINE first; None (missing key, timeout, network
         # error, unparseable reply) means "no internet" for this purpose,
         # so fall through to TIER 2 OFFLINE.
-        tier2_online = self._tier2_online(text)
+        tier2_online = self._tier2_online(text_for_llm)
         if tier2_online is not None:
             llm_says_scam = tier2_online["is_scam"]
             llm_score = tier2_online["confidence"] if llm_says_scam else (1.0 - tier2_online["confidence"])
@@ -939,7 +992,8 @@ class ScamDetector:
             if llm_says_scam and tier2_online["scam_type"]:
                 signals = signals + [f"LLM-flagged scam type: {tier2_online['scam_type']}"]
             reason = tier2_online["reason"] or self.build_reason(level, rules, ml_fraud)
-            return self._format(level, round(final_score, 3), reason, signals, rules, mode="online", engine="llm")
+            return self._format(level, round(final_score, 3), reason, signals, rules, mode="online", engine="llm",
+                                 llm_engine=tier2_online.get("llm_engine"))
 
         # TIER 2 OFFLINE: double-gated semantic similarity (see
         # _tier2_offline) -- only ever raises score, never replaces it the
@@ -1003,7 +1057,7 @@ class ScamDetector:
         parts = self.build_signals(rules)
         return f"{level}: detected {len(parts)} risk signal(s) — " + "; ".join(parts) + "."
 
-    def _format(self, level, score, reason, signals, rules, mode="online", engine="rules"):
+    def _format(self, level, score, reason, signals, rules, mode="online", engine="rules", llm_engine=None):
         return {
             "risk_level": level,
             "score": score,
@@ -1013,6 +1067,10 @@ class ScamDetector:
             "rule_categories": list(rules.keys()),
             "mode": mode,
             "engine": engine,
+            # Which underlying provider in the Groq->Gemini->Nemotron->
+            # Ollama rotation actually answered, when engine=="llm" --
+            # None otherwise (rules/semantic tiers never touch an LLM).
+            "llm_engine": llm_engine,
         }
 
 
