@@ -17,7 +17,7 @@ _DETECTOR = ScamDetector()
 # Bounds how long we wait for the LLM explanation chain (Gemini -> Groq ->
 # Ollama) before falling back to the classifier's own built-in reason text —
 # mirrors ml/llm_explainer.py's timeout pattern for the phone-app pipeline.
-_LLM_TIMEOUT_SECONDS = 6.0
+_LLM_TIMEOUT_SECONDS = 30.0  # widened 2026-09-11 -- matches the live rag/retriever.py fix
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="rag-explainer")
 
 _REFUSAL_ANSWER = (

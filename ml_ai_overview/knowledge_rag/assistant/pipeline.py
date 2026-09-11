@@ -26,7 +26,7 @@ from assistant.hybrid_search import hybrid_retrieve
 
 logger = logging.getLogger(__name__)
 
-_LLM_TIMEOUT_SECONDS = 6.0
+_LLM_TIMEOUT_SECONDS = 30.0  # widened 2026-09-11 -- matches the live assistant/pipeline.py fix
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat-assistant")
 
 _KB_PATH = "kb/legal_info.json"
