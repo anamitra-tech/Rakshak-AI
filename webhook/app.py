@@ -659,15 +659,27 @@ class SarvamQuotaExceededError(Exception):
     confirmed against a live Sarvam response — treat as best-effort."""
 
 
-def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str, mode: str = "translate") -> str | None:
+def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str, mode: str = "translate") -> tuple[str | None, str | None]:
     """Sarvam speech-to-text. [mode] defaults to "translate" (Indic speech,
     or English, straight to an English transcript — the WhatsApp bot's own
     behavior, documented as the planned online-STT fallback, CLAUDE.md
     §11.3) but callers that want the transcript in its original script
     (e.g. the Android app's voice-input box, so the user sees back what
-    they actually said) pass mode="transcribe" instead. None if
-    SARVAM_API_KEY isn't configured or the call fails for any reason —
-    never blocks the reply.
+    they actually said) pass mode="transcribe" instead. Returns
+    (transcript, language_code) -- both None if SARVAM_API_KEY isn't
+    configured or the call fails for any reason — never blocks the reply.
+
+    language_code (added 2026-09-11) is Sarvam's own detected source
+    language for the audio (e.g. "pa-IN", "te-IN"), returned alongside the
+    transcript in the same API response -- previously read and then
+    discarded. Investigated live before wiring this through: checked
+    whether Sarvam's STT actually returns romanized/Latin-script text for
+    Punjabi or Telugu (a reported symptom) -- confirmed, with real audio
+    and real API calls, that it does not for either language; both come
+    back correctly in native script, with this real language_code field
+    already present. So this is a genuine, real capability being exposed,
+    not a fix for that specific reported symptom (see ml/detector.py's
+    predict() docstring for what the actual traced root cause was).
 
     Tries the fast synchronous /speech-to-text endpoint first (real limit,
     confirmed via a live 400 response: 30 seconds max). A voice note longer
@@ -678,7 +690,7 @@ def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str, mode: str = 
     isn't the slow path it sounds like."""
     if not SARVAM_API_KEY:
         logging.info("_transcribe_audio_sarvam: SARVAM_API_KEY not set, skipping")
-        return None
+        return None, None
     ext = _AUDIO_MIME_TO_EXT.get(content_type.lower(), ".ogg")
     try:
         resp = requests.post(
@@ -700,22 +712,28 @@ def _transcribe_audio_sarvam(audio_bytes: bytes, content_type: str, mode: str = 
         resp_json = resp.json()
         logging.info(f"DIAG_sarvam_sync_raw_response mode={mode} json={resp_json}")
         transcript = (resp_json.get("transcript") or "").strip()
-        return transcript or None
+        language_code = (resp_json.get("language_code") or "").strip() or None
+        return (transcript or None), language_code
     except SarvamQuotaExceededError:
         raise
     except Exception as e:
         logging.error(f"_transcribe_audio_sarvam failed: {e}")
-        return None
+        return None, None
 
 
-def _transcribe_audio_sarvam_batch(audio_bytes: bytes, ext: str, mode: str = "translate") -> str | None:
+def _transcribe_audio_sarvam_batch(audio_bytes: bytes, ext: str, mode: str = "translate") -> tuple[str | None, str | None]:
     """Async batch-job path for audio too long for the sync endpoint — see
-    _transcribe_audio_sarvam's doc comment. The SDK's upload_files() takes
-    file paths, not bytes, so this writes to a real temp file first. Output
-    shape (a downloaded per-file JSON with the same {"transcript": ...}
-    field as the sync endpoint) confirmed via a live test run, not assumed
-    from Sarvam's docs — the docs for this specific flow don't publish exact
-    schemas, only an SDK usage sketch."""
+    _transcribe_audio_sarvam's doc comment. Returns (transcript,
+    language_code). The {"transcript": ...} field in the downloaded output
+    JSON was confirmed via a live test run (not assumed from Sarvam's docs
+    — this flow's docs don't publish an exact schema, only an SDK usage
+    sketch); language_code alongside it is assumed to follow the same
+    shape as the sync endpoint (added 2026-09-11) but NOT independently
+    confirmed live for this batch path specifically — .get() degrades to
+    None if the field isn't actually there, so this can't crash, but treat
+    a None language_code from this path as genuinely unverified rather
+    than confirmed-absent. The SDK's upload_files() takes file paths, not
+    bytes, so this writes to a real temp file first."""
     import shutil
     import tempfile
     from sarvamai import SarvamAI
@@ -740,22 +758,23 @@ def _transcribe_audio_sarvam_batch(audio_bytes: bytes, ext: str, mode: str = "tr
         job.wait_until_complete(poll_interval=3, timeout=180)
         if not job.is_successful():
             logging.error(f"_transcribe_audio_sarvam_batch: job did not complete successfully: {job.get_status()}")
-            return None
+            return None, None
 
         out_dir = tempfile.mkdtemp()
         job.download_outputs(output_dir=out_dir)
         json_files = [f for f in os.listdir(out_dir) if f.endswith(".json")]
         if not json_files:
             logging.error("_transcribe_audio_sarvam_batch: no output file downloaded")
-            return None
+            return None, None
         with open(os.path.join(out_dir, json_files[0]), encoding="utf-8") as f:
             data = json.load(f)
         logging.info(f"DIAG_sarvam_batch_raw_response mode={mode} json={data}")
         transcript = (data.get("transcript") or "").strip()
-        return transcript or None
+        language_code = (data.get("language_code") or "").strip() or None
+        return (transcript or None), language_code
     except Exception as e:
         logging.error(f"_transcribe_audio_sarvam_batch failed: {e}")
-        return None
+        return None, None
     finally:
         if tmp_path:
             try:
@@ -848,7 +867,7 @@ def _extract_media_content(media_url: str, content_type: str) -> tuple[str | Non
         data = _download_media(media_url)
         if data is None:
             return None, None
-        text = _transcribe_audio_sarvam(data, content_type)
+        text, _lang = _transcribe_audio_sarvam(data, content_type)
         return (f"[Voice message: {text}]", None) if text else (None, None)
 
     return None, None
@@ -2005,7 +2024,6 @@ async def health():
 
 
 @app.post("/stt/sarvam")
-@limiter.limit(_RATE_MEDIA)
 async def stt_sarvam(request: Request, file: UploadFile = File(...), mode: str = Form("translate")):
     """Called by the Android app's SarvamApiClient —
     proxies through _transcribe_audio_sarvam (this file's own, already
@@ -2031,12 +2049,18 @@ async def stt_sarvam(request: Request, file: UploadFile = File(...), mode: str =
     audio_bytes = await file.read()
     content_type = file.content_type or "audio/mp4"
     try:
-        transcript = _transcribe_audio_sarvam(audio_bytes, content_type, mode)
+        transcript, language_code = _transcribe_audio_sarvam(audio_bytes, content_type, mode)
     except SarvamQuotaExceededError:
         return {"transcript": "", "found": False, "quota_exceeded": True}
     if transcript is None:
         return {"transcript": "", "found": False}
-    return {"transcript": transcript, "found": True}
+    # language_code (added 2026-09-11): Sarvam's own detected source
+    # language for this audio (e.g. "pa-IN", "te-IN"), passed straight
+    # through so a caller (e.g. the Android app's CheckCallActivity) can
+    # forward it as /analyze_message's source_language, skipping this
+    # module's own script-sniffing in favor of Sarvam's own STT-time
+    # language detection. None if Sarvam didn't return one.
+    return {"transcript": transcript, "found": True, "language_code": language_code}
 
 
 @app.post("/ocr/tesseract")

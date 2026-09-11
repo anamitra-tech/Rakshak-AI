@@ -9,7 +9,7 @@ that prefer ASGI.
 Endpoints
   GET  /                      -> serves the frontend
   GET  /health
-  POST /analyze_message       {text}
+  POST /analyze_message       {text, source_language?}
   POST /analyze_session       {session_id, text}
   POST /analyze_url           {url}
   POST /analyze_voice         {transcript}
@@ -164,7 +164,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if p == "/analyze_message":
-                return self._send(DETECTOR.predict(b.get("text", "")))
+                # source_language (optional, added 2026-09-11): a caller-
+                # known Sarvam/BCP-47 language code (e.g. from STT's own
+                # language_code field) -- see ml/detector.py's predict()
+                # docstring for why this takes priority over script
+                # sniffing when provided, and what it does and doesn't fix.
+                return self._send(DETECTOR.predict(b.get("text", ""), source_language=b.get("source_language")))
             if p == "/analyze_session":
                 session_id = b.get("session_id", "anon")
                 text = b.get("text", "")
