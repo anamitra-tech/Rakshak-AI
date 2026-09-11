@@ -72,7 +72,7 @@ HIGH_RISK_PATTERNS = {
         # Batch-expanded 2026-07-06: soft-signal category (only counts combined
         # with another category — see SOFT_SIGNAL_CATEGORIES), so covering
         # synonyms for otp/pin/cvv liberally here is low-risk.
-        r"(security|verification|authentication|transaction) (code|password|number|pin)",
+        r"(security|verification|authentication|transaction|confirmation) (code|password|number|pin)",
         r"one-?time (password|security number|key)",
         r"kyc.{0,20}(confirm|complete|karna|jaankari|details|प्रक्रिया|विवरण)",
         r"(सुरक्षा|सत्यापन|गोपनीय|गुप्त) (कोड|नंबर|संख्या)",
@@ -171,7 +171,21 @@ HIGH_RISK_PATTERNS = {
         # readout phrasing. Same near-deterministic confidence as the other
         # readout verbs here -- no legitimate caller asks you to spell out
         # a one-time code either.
-        r"(tell|share|say|speak|send|spell)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|one-?time code)",
+        #
+        # "confirmation code" added 2026-09-11: real miss reported live via
+        # a genuine Odia scam script ("...ଆପଣଙ୍କ ମୋବାଇଲକୁ ଆସିଥିବା
+        # ନିଶ୍ଚିତକରଣ କୋଡ୍ ଆମକୁ କୁହନ୍ତୁ" -- "please tell us the confirmation
+        # code sent to your mobile"). Sarvam's translation was accurate and
+        # detect_native_script_lang correctly identified od-IN -- the gap was
+        # purely lexical: "confirmation code" is an extremely common
+        # legitimate synonym for a one-time verification code (used by
+        # banks/e-commerce themselves), and neither this pattern nor the
+        # provide/give one below it covered it, so the message scored on ML
+        # alone (0.46, rules={}) with no deterministic rule backing it, on
+        # both the original Odia and the translated English text. Not
+        # Odia-specific -- any language's translation, or English/Hinglish
+        # input directly, can produce this exact common phrasing.
+        r"(tell|share|say|speak|send|spell)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|confirmation code|one-?time code)",
         r"(code|digits)\s+(that\s+)?(just\s+)?arrived",
         r"(code|digits)\s+you'?re\s+seeing",
         r"(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit",
@@ -188,7 +202,7 @@ HIGH_RISK_PATTERNS = {
         # request/reference verb (provide/give/showing/displaying/bataen),
         # not a bare code/number word, since this category overrides the
         # score to 0.95 on its own — see NEAR_DETERMINISTIC_RULES below.
-        r"(provide|give|share|state|relay|pass on) (us |me )?(the |your )?(otp|one-time password|verification code|security code|authentication code|one-time key)",
+        r"(provide|give|share|state|relay|pass on) (us |me )?(the |your )?(otp|one-time password|verification code|confirmation code|security code|authentication code|one-time key)",
         r"(code|digits|number|figures|password|key) (that |which )?(is |are )?(showing|displaying|received|got so far|came|mila)",
         r"what('s| is) the (code|number|digits|figures) (that |you )?(received|got|showing|displaying)",
         r"(aapke|aapka) (mobile|phone|number) par (aaya|aayi|mila) hua",

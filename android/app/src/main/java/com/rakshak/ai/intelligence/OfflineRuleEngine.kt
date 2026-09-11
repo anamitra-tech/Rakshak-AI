@@ -117,7 +117,10 @@ object OfflineRuleEngine {
         // wrongly tagged otp_readout_request via the bare "code" match).
         // "spell" added 2026-09-11, mirroring ml/detector.py's same-day fix —
         // see that file's comment for the real gap this closes.
-        """(tell|share|say|speak|send|spell)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|one-?time code)""",
+        // "confirmation code" added 2026-09-11, mirroring ml/detector.py's
+        // same-day fix (real miss on a genuine Odia scam script) — see that
+        // file's comment for the real gap this closes.
+        """(tell|share|say|speak|send|spell)\s+(me\s+|us\s+)?(the\s+|your\s+)?(otp|pin|cvv|verification code|confirmation code|one-?time code)""",
         """(code|digits)\s+(that\s+)?(just\s+)?arrived""",
         """(code|digits)\s+you'?re\s+seeing""",
         """(confirm|send|share|tell)\s+the\s+(six|four|\d+)[- ]?digit""",
@@ -126,7 +129,7 @@ object OfflineRuleEngine {
         // fix in ml/detector.py — see that file's comment for why.
         """((bata|bol|bhej)(o|iye|do)|de\s?do)\s+(mujhe\s+)?(the\s+)?(otp|pin|cvv|code)""",
         """(provide|give|share|state|relay|pass on) (us |me )?(the |your )?""" +
-            """(otp|one-time password|verification code|security code|authentication code|one-time key)""",
+            """(otp|one-time password|verification code|confirmation code|security code|authentication code|one-time key)""",
         """(code|digits|number|figures|password|key) (that |which )?(is |are )?""" +
             """(showing|displaying|received|got so far|came|mila)""",
         """what('s| is) the (code|number|digits|figures) (that |you )?(received|got|showing|displaying)""",
