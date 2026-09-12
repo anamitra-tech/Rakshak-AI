@@ -1,13 +1,8 @@
 package com.rakshak.ai.escalation
 
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.telephony.SmsManager
-import androidx.core.content.ContextCompat
-import android.Manifest
 import android.util.Log
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -28,6 +23,14 @@ private val TIER2_ACK_WINDOW_MINUTES = 2L
  *  caller can show/offer it even when no real SMS was sent. */
 sealed class NotifyResult {
     data class Sent(val contactName: String, val draft: String) : NotifyResult()
+    // Added 2026-09-11 alongside the switch to ACTION_SENDTO (see
+    // notifyTrustedContact): this is NOT a confirmed send like [Sent] used
+    // to mean for the old direct SmsManager path -- it only means the SMS
+    // app was successfully opened, pre-filled, with the user still needing
+    // to tap Send themselves. The draft is deliberately still carried here
+    // (unlike [Sent]) so the caller keeps offering the in-app copy/draft
+    // fallback in case the user never completes the send.
+    data class OpenedForUser(val contactName: String, val draft: String) : NotifyResult()
     data class NoContactConfigured(val draft: String) : NotifyResult()
     data class PermissionMissing(val draft: String) : NotifyResult()
     data class Failed(val draft: String, val error: String) : NotifyResult()
@@ -59,10 +62,13 @@ class EscalationOrchestrator(private val context: Context) {
 
     /**
      * Tier 2. Builds the NCRP-style complaint draft ([ComplaintDraft]) and
-     * attaches it to the trusted-contact SMS. If no trusted-contact phone is
-     * configured, or SEND_SMS isn't granted, or the send fails, the draft is
-     * still returned so the caller (WarningActivity) can show it in-app with
-     * a copy button instead — the draft is never silently dropped.
+     * opens the user's SMS app pre-filled with it, addressed to the trusted
+     * contact (ACTION_SENDTO — see the comment inside this function for why,
+     * as of 2026-09-11, this is no longer a silent, permission-gated direct
+     * send). If no trusted-contact phone is configured, no SMS app exists on
+     * the device, or opening it otherwise fails, the draft is still returned
+     * so the caller (WarningActivity) can show it in-app with a copy button
+     * instead — the draft is never silently dropped.
      *
      * [location], if provided, must already be resolved by the caller (see
      * VictimLocationProvider) — this function does not fetch it itself, so
@@ -88,50 +94,35 @@ class EscalationOrchestrator(private val context: Context) {
             return NotifyResult.NoContactConfigured(draft)
         }
 
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            Log.w(TAG, "SEND_SMS not granted — cannot notify $name. Draft available in-app instead.")
-            return NotifyResult.PermissionMissing(draft)
-        }
-
+        // Switched 2026-09-11 from a direct SmsManager.sendMultipartTextMessage()
+        // call to ACTION_SENDTO, on explicit request: this needs no SEND_SMS
+        // permission at all (that permission check that used to live here is
+        // gone) and works identically across every Android version, at the
+        // real cost of no longer being silent/automatic -- the user must
+        // still tap Send themselves in whichever SMS app opens. That also
+        // means there is no more carrier sent/delivery confirmation for this
+        // path: the old SmsSentReceiver/SmsDeliveryReceiver/
+        // scheduleTier2AckTimeout machinery below this function assumed a
+        // send WE controlled, and has no signal at all once the SMS app is
+        // just handed the pre-filled intent -- deliberately NOT called from
+        // here anymore (see the two Receiver classes' remaining use, if any,
+        // by MissedEscalationAgent's own separate direct-SmsManager fallback
+        // path, which this change does not touch).
+        val smsBody = "PraHARI-AI ALERT — possible scam detected.\n\n$draft"
         return try {
-            val smsBody = "PraHARI-AI ALERT — possible scam detected.\n\n$draft"
-            val smsManager = SmsManager.getDefault()
-            val parts = smsManager.divideMessage(smsBody)
-
-            val correlationId = UUID.randomUUID().toString()
-            // Explicit component, not just action+setPackage, for both receivers below:
-            // neither has a manifest <intent-filter>, so an implicit broadcast can't
-            // resolve to them and would silently match zero receivers — the report
-            // would vanish with no error anywhere.
-            val sentIntents = ArrayList(parts.indices.map { i ->
-                val intent = Intent(context, SmsSentReceiver::class.java).apply {
-                    action = SmsSentReceiver.ACTION_SMS_SENT
-                    putExtra(SmsSentReceiver.EXTRA_CORRELATION_ID, correlationId)
-                }
-                PendingIntent.getBroadcast(
-                    context, correlationId.hashCode() + i, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-            })
-            val deliveryIntents = ArrayList(parts.indices.map { i ->
-                val intent = Intent(context, SmsDeliveryReceiver::class.java).apply {
-                    action = SmsDeliveryReceiver.ACTION_SMS_DELIVERED
-                    putExtra(SmsDeliveryReceiver.EXTRA_CORRELATION_ID, correlationId)
-                }
-                PendingIntent.getBroadcast(
-                    context, correlationId.hashCode() + i, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-            })
-            smsManager.sendMultipartTextMessage(contactPhone, null, parts, sentIntents, deliveryIntents)
-            Log.i(TAG, "SMS submitted to carrier for $name ($contactPhone), correlationId=$correlationId — awaiting sent-confirmation.")
-
-            scheduleTier2AckTimeout(correlationId, phoneNumber, decision, transcript)
-            NotifyResult.Sent(name, draft)
+            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$contactPhone")).apply {
+                putExtra("sms_body", smsBody)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent.resolveActivity(context.packageManager) == null) {
+                Log.w(TAG, "No SMS app found to handle ACTION_SENDTO — draft available in-app instead.")
+                return NotifyResult.Failed(draft, "No SMS app available on this device")
+            }
+            context.startActivity(intent)
+            Log.i(TAG, "SMS app opened, pre-filled, for $name ($contactPhone) — awaiting user to tap Send.")
+            NotifyResult.OpenedForUser(name, draft)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send SMS to $name: ${e.message}")
+            Log.e(TAG, "Failed to open SMS app for $name: ${e.message}")
             NotifyResult.Failed(draft, e.message ?: "unknown error")
         }
     }
@@ -146,6 +137,16 @@ class EscalationOrchestrator(private val context: Context) {
      * success look like a miss. This runs alongside the SMS send above, never
      * blocking or replacing it.
      */
+    // UNREACHABLE as of 2026-09-11's switch to ACTION_SENDTO above -- kept,
+    // not deleted, since removing it cleanly would cascade into
+    // SmsSentReceiver/SmsDeliveryReceiver/EscalationDeliveryStore/
+    // Tier2AckTimeoutWorker/MissedEscalationAgent's missed-escalation
+    // trigger, none of which this change was scoped to touch or verify.
+    // notifyTrustedContact() no longer has any sent/delivery confirmation
+    // to schedule an ack-timeout against (see that function's comment) --
+    // if this whole missed-escalation-on-no-ack safety net still matters
+    // now that the SMS send is a user-completed hand-off, that's a
+    // separate, deliberate follow-up, not a byproduct of this change.
     private fun scheduleTier2AckTimeout(
         correlationId: String,
         phoneNumber: String,

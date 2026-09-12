@@ -228,6 +228,10 @@ class WarningActivity : AppCompatActivity() {
     private fun renderNotifyResult(result: NotifyResult) {
         val (statusText, draft) = when (result) {
             is NotifyResult.Sent -> getString(R.string.notify_status_sent, result.contactName) to null
+            // Unlike Sent, the draft is kept here (not null) -- opening the
+            // SMS app pre-filled is not a confirmed send, so the in-app
+            // fallback stays offered in case the user never taps Send.
+            is NotifyResult.OpenedForUser -> getString(R.string.notify_status_opened, result.contactName) to result.draft
             is NotifyResult.NoContactConfigured -> getString(R.string.notify_status_no_contact) to result.draft
             is NotifyResult.PermissionMissing -> getString(R.string.notify_status_permission_missing) to result.draft
             is NotifyResult.Failed -> getString(R.string.notify_status_failed) to result.draft
